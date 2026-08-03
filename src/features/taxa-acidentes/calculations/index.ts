@@ -1,0 +1,77 @@
+/** Cálculos puros da Taxa de Acidentes. */
+
+import { MONTH_NAMES_FULL } from "@/lib/dates";
+import {
+  type AccidentMonthlyInput,
+  type AccidentRateResult,
+  type AccidentUnitRecord,
+} from "@/features/taxa-acidentes/types";
+
+function monthLabel(year: number, month: number): string {
+  return `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`;
+}
+
+/**
+ * Regras do indicador:
+ * - o mesmo ano/mês é substituído pela última ocorrência;
+ * - resultado do período = média aritmética de todos os meses carregados;
+ * - acidentes CAF mensais = soma do período;
+ * - desempenho do mês = taxa do período cronologicamente mais recente;
+ * - quanto menor a taxa, melhor; atende quando resultado <= meta;
+ * - os registros por unidade guardam as quantidades de acidentes CAF e SAF
+ *   separadas por competência.
+ */
+export function computeAccidentRateResult(
+  monthlyRecords: readonly AccidentMonthlyInput[],
+  unitRecords: readonly AccidentUnitRecord[],
+  target: number,
+): AccidentRateResult {
+  const monthByKey = new Map<string, AccidentMonthlyInput>();
+  for (const record of monthlyRecords) {
+    monthByKey.set(
+      `${record.year}-${String(record.month).padStart(2, "0")}`,
+      record,
+    );
+  }
+
+  const monthly = Array.from(monthByKey.values())
+    .sort((a, b) => a.year - b.year || a.month - b.month)
+    .map((record) => ({
+      ...record,
+      label: monthLabel(record.year, record.month),
+      ok: record.rate <= target,
+    }));
+
+  const latest = monthly.at(-1) ?? null;
+  const result = monthly.length
+    ? monthly.reduce((sum, record) => sum + record.rate, 0) / monthly.length
+    : null;
+
+  const totalCaf = monthly.reduce((sum, record) => sum + record.caf, 0);
+
+  const units = [...unitRecords]
+    .sort(
+      (a, b) =>
+        a.year - b.year ||
+        a.month - b.month ||
+        a.unit.localeCompare(b.unit, "pt-BR"),
+    )
+    .map((record) => ({
+      ...record,
+      label: monthLabel(record.year, record.month),
+    }));
+
+  return {
+    target,
+    result,
+    totalCaf,
+    totalUnitCaf: units.reduce((sum, record) => sum + record.caf, 0),
+    totalSaf: units.reduce((sum, record) => sum + record.saf, 0),
+    latestRate: latest?.rate ?? null,
+    latestYear: latest?.year ?? null,
+    latestMonth: latest?.month ?? null,
+    monthsCount: monthly.length,
+    monthly,
+    units,
+  };
+}

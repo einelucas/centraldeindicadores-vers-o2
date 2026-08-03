@@ -1,0 +1,396 @@
+// Central de Indicadores — schema Prisma
+// PostgreSQL (Neon em homologação, corporativo no futuro).
+// Compatível com PostgreSQL convencional para facilitar migração.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// AUTENTICAÇÃO (Better Auth + perfis)
+// ---------------------------------------------------------------------------
+
+enum Role {
+  VIEWER
+  ANALYST
+  ADMIN
+}
+
+model User {
+  id             String    @id @default(uuid())
+  name           String
+  email          String    @unique
+  emailVerified  Boolean   @default(false)
+  image          String?
+  role           Role      @default(VIEWER)
+  active         Boolean   @default(true)
+  // Preparação para o Hub de Automação corporativo:
+  authProvider   String    @default("LOCAL") // LOCAL | HUB
+  externalUserId String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sessions   Session[]
+  accounts   Account[]
+  importJobs ImportJob[]
+  auditLogs    AuditLog[]
+  publications IndicatorPublication[]
+
+  @@index([email])
+  @@index([externalUserId])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String? // hash gerenciado pelo Better Auth (nunca texto puro)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// ---------------------------------------------------------------------------
+// IMPORTAÇÕES (idempotência, lotes, erros)
+// ---------------------------------------------------------------------------
+
+enum ImportStatus {
+  PENDING
+  PARSING
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+  CANCELLED
+}
+
+model ImportJob {
+  id             String       @id @default(uuid())
+  module         String // rdo | idp | rnc | cinco-s | taxa-acidentes | scorecard
+  fileName       String
+  referenceYear  Int?
+  referenceMonth Int?
+  status         ImportStatus @default(PENDING)
+  totalFound     Int          @default(0)
+  totalInserted  Int          @default(0)
+  totalIgnored   Int          @default(0)
+  totalUpdated   Int          @default(0)
+  totalRejected  Int          @default(0)
+  startedAt      DateTime     @default(now())
+  completedAt    DateTime?
+  userId         String
+  errorMessage   String?
+  user           User         @relation(fields: [userId], references: [id])
+
+  batches ImportBatch[]
+  errors  ImportError[]
+
+  @@index([module, referenceYear, referenceMonth])
+  @@index([userId])
+  @@index([status])
+}
+
+model ImportBatch {
+  id            String   @id @default(uuid())
+  importJobId   String
+  batchNumber   Int
+  totalReceived Int      @default(0)
+  totalInserted Int      @default(0)
+  totalIgnored  Int      @default(0)
+  totalUpdated  Int      @default(0)
+  totalRejected Int      @default(0)
+  processedAt   DateTime @default(now())
+  job           ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  // Impede reprocessar o mesmo lote duas vezes (idempotência).
+  @@unique([importJobId, batchNumber])
+}
+
+model ImportError {
+  id          String    @id @default(uuid())
+  importJobId String
+  batchNumber Int?
+  rowNumber   Int?
+  field       String?
+  message     String
+  rawData     Json?
+  createdAt   DateTime  @default(now())
+  job         ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+}
+
+// ---------------------------------------------------------------------------
+// INDICADORES CONSOLIDADOS
+// ---------------------------------------------------------------------------
+
+model IndicatorResult {
+  id        String   @id @default(uuid())
+  module    String
+  indicator String
+  unit      String   @default("__ALL__")
+  year      Int
+  month     Int // 0 = consolidado anual; 1..12 = mês
+  value     Float?
+  target    Float?
+  adherence Float?
+  status    String?
+  details   Json?
+  updatedAt DateTime @updatedAt
+
+  // Impede duplicidade do mesmo resultado consolidado.
+  @@unique([module, indicator, unit, year, month])
+  @@index([module, year, month])
+}
+
+// ---------------------------------------------------------------------------
+// PUBLICAÇÕES (snapshots imutáveis exibidos nos painéis)
+// ---------------------------------------------------------------------------
+
+model IndicatorPublication {
+  id            String   @id @default(uuid())
+  module        String
+  indicator     String
+  version       Int
+  target        Float?
+  result        Float?
+  status        String?
+  payload       Json
+  active        Boolean  @default(true)
+  publishedById String
+  publishedAt   DateTime @default(now())
+  publishedBy   User     @relation(fields: [publishedById], references: [id])
+
+  @@unique([module, indicator, version])
+  @@index([module, indicator, active, publishedAt])
+  @@index([publishedById])
+}
+
+// ---------------------------------------------------------------------------
+// AUDITORIA
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  action       String
+  entity       String
+  entityId     String?
+  previousData Json?
+  newData      Json?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// CONFIGURAÇÕES DA APLICAÇÃO (metas, exclusões, objetos de custo...)
+// ---------------------------------------------------------------------------
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// TABELAS DE REGISTROS IMPORTADOS (uma por módulo)
+// Campos de rastreio incremental comuns: businessKey, contentHash,
+// firstImportId, lastImportId, firstSeenAt, lastSeenAt.
+// ---------------------------------------------------------------------------
+
+model RdoRecord {
+  id            String   @id @default(uuid())
+  businessKey   String   @unique
+  contentHash   String
+  // Campos de negócio (fonte de verdade: HTML — módulo RDO)
+  dataReferencia DateTime
+  empresaNome    String
+  statusDescricao String
+  relatorioId    String?
+  grupo          String?
+  disciplina     String?
+  year           Int
+  month          Int
+  raw            Json
+  // Rastreamento de edição manual (só ADMIN edita pela tela).
+  editedManually Boolean  @default(false)
+  editedBy       String?
+  editedAt       DateTime?
+  firstImportId String
+  lastImportId  String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([empresaNome])
+  @@index([statusDescricao])
+}
+
+model IdpRecord {
+  id            String   @id @default(uuid())
+  businessKey   String   @unique
+  contentHash   String
+  // Campos de negócio (fonte de verdade: HTML — módulo IDP)
+  unit           String
+  year           Int
+  month          Int
+  disciplina     String
+  custoLinhaBase Float
+  custoReal      Float
+  raw            Json
+  firstImportId String
+  lastImportId  String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([unit])
+}
+
+model RncRecord {
+  id            String   @id @default(uuid())
+  businessKey   String   @unique
+  contentHash   String
+  // Campos de negócio (fonte de verdade: HTML — módulo RNC)
+  statusRnc      String
+  unidade        String
+  dataCriacao    DateTime
+  dataSolucao    DateTime?
+  tempoTratativa Float?
+  ofensor        String
+  year           Int
+  month          Int
+  raw            Json
+  // Rastreamento de edição manual (só ADMIN edita pela tela).
+  editedManually Boolean  @default(false)
+  editedBy       String?
+  editedAt       DateTime?
+  firstImportId String
+  lastImportId  String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([unidade])
+}
+
+model FiveSRecord {
+  id            String   @id @default(uuid())
+  businessKey   String   @unique
+  contentHash   String
+  // Campos de negócio (fonte de verdade: HTML — módulo 5S)
+  unit       String
+  year       Int
+  month      Int
+  aderencia  Float // média das aderências de área (0-1)
+  areasCount Int
+  raw        Json // inclui as áreas (divisao/area/meta/nota)
+  firstImportId String
+  lastImportId  String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+  @@index([unit])
+}
+
+model AccidentMonthlyRecord {
+  id        String   @id @default(uuid())
+  year      Int
+  month     Int
+  rate      Float
+  caf       Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month])
+  @@index([year, month])
+}
+
+model AccidentUnitRecord {
+  id        String   @id @default(uuid())
+  year      Int
+  month     Int
+  unit      String
+  unitKey   String
+  saf       Int
+  caf       Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month, unitKey])
+  @@index([year, month])
+  @@index([unit])
+}
+
+model ScorecardSnapshot {
+  id            String   @id @default(uuid())
+  businessKey   String   @unique
+  contentHash   String
+  year          Int
+  month         Int
+  raw           Json
+  firstImportId String
+  lastImportId  String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([year, month])
+}
