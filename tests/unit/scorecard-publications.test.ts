@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildGeneralPanelData,
+  latestPublishedValueForPeriod,
   monthLabelToKey,
   percentOfTarget,
   SCORECARD_MONTHLY_POOL,
@@ -160,6 +161,70 @@ describe("Painel Geral por publicações", () => {
     const rdo = data.indicators.find((indicator) => indicator.key === "rdo");
     expect(rdo?.result).toBe(82);
     expect(rdo?.months.map((month) => month.pass)).toEqual([false, true]);
+  });
+
+  it("recupera um mês em publicação anterior quando a versão mais nova não o contém", () => {
+    const olderCompletePublication = {
+      ...rdoPublication,
+      active: false,
+    };
+    const newerPartialPublication = {
+      ...rdoPublication,
+      active: true,
+      id: "pub-rdo-v2",
+      version: 2,
+      payload: {
+        ...rdoPublication.payload,
+        mensal: [{ label: "Jul/2026", v: 85 }],
+      },
+      publishedAt: new Date("2026-08-10T12:00:00.000Z"),
+    };
+
+    expect(
+      latestPublishedValueForPeriod(
+        "rdo",
+        [newerPartialPublication, olderCompletePublication],
+        2026,
+        6,
+      ),
+    ).toBe(79);
+    expect(
+      latestPublishedValueForPeriod(
+        "rdo",
+        [olderCompletePublication, newerPartialPublication],
+        2026,
+        7,
+      ),
+    ).toBe(85);
+  });
+
+  it("ignora mês do IDP sem linha de base em vez de publicar 0%", () => {
+    const publicationWithoutBaseline = {
+      ...idpPublication,
+      payload: {
+        ...idpPublication.payload,
+        totalLinhaBase: 0,
+        totalReal: 0,
+        resultado: 0,
+        mensal: [
+          {
+            label: "Junho/2026",
+            v: 0,
+            linhaBase: 0,
+            real: 0,
+          },
+        ],
+      },
+    };
+
+    expect(
+      latestPublishedValueForPeriod(
+        "cronograma",
+        [publicationWithoutBaseline],
+        2026,
+        6,
+      ),
+    ).toBeNull();
   });
 
   it("trata o IDP como Aderência Cronograma com meta de 90%", () => {

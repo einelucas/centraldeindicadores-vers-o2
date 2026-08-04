@@ -10,7 +10,10 @@ type LoadedIdpRow = {
   custoReal: number;
   raw: unknown;
 };
-import { computeIdpDetailedResult } from "@/features/idp/calculations";
+import {
+  computeIdpDetailedResult,
+  computeIdpSemesterDisciplineDetails,
+} from "@/features/idp/calculations";
 import {
   filterIdpExcludedDisciplines,
   isIdpDisciplineExcluded,
@@ -103,15 +106,24 @@ export async function GET(req: NextRequest) {
       ? Math.max(0, Math.min(2, thresholdRaw / 100))
       : IDP_DEFAULT_TARGET;
 
-    const rows = await prisma.idpRecord.findMany({
+    const calculationRows = await prisma.idpRecord.findMany({
       where: {
-        year: selectedYear,
-        month: { gte: monthStart, lte: monthEnd },
+        OR: [
+          { year: selectedYear },
+          { year: selectedYear - 1, month: 12 },
+        ],
       },
-      orderBy: [{ unit: "asc" }, { disciplina: "asc" }, { month: "asc" }],
+      orderBy: [
+        { year: "asc" },
+        { month: "asc" },
+        { unit: "asc" },
+        { disciplina: "asc" },
+      ],
     });
 
-    const allRecords: IdpNormalizedRecord[] = (rows as LoadedIdpRow[]).map((row) => ({
+    const allCalculationRecords: IdpNormalizedRecord[] = (
+      calculationRows as LoadedIdpRow[]
+    ).map((row) => ({
       unit: row.unit,
       year: row.year,
       month: row.month,
@@ -120,7 +132,22 @@ export async function GET(req: NextRequest) {
       custoReal: row.custoReal,
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
-    const records = filterIdpExcludedDisciplines(allRecords, excludedDisciplines);
+    const calculationRecords = filterIdpExcludedDisciplines(
+      allCalculationRecords,
+      excludedDisciplines,
+    );
+    const periodRows = (calculationRows as LoadedIdpRow[]).filter(
+      (row) =>
+        row.year === selectedYear &&
+        row.month >= monthStart &&
+        row.month <= monthEnd,
+    );
+    const records = calculationRecords.filter(
+      (record) =>
+        record.year === selectedYear &&
+        record.month >= monthStart &&
+        record.month <= monthEnd,
+    );
 
     const result = computeIdpDetailedResult(records, {
       year: selectedYear,
@@ -128,11 +155,15 @@ export async function GET(req: NextRequest) {
       monthEnd,
       threshold,
     });
+    const semesterDisciplineDetails = computeIdpSemesterDisciplineDetails(
+      calculationRecords,
+      selectedYear,
+    );
 
     return NextResponse.json({
       total: records.length,
-      totalImportedInPeriod: rows.length,
-      excludedTotal: rows.length - records.length,
+      totalImportedInPeriod: periodRows.length,
+      excludedTotal: periodRows.length - records.length,
       excludedDisciplines,
       years,
       defaultYear,
@@ -141,6 +172,7 @@ export async function GET(req: NextRequest) {
       monthEnd,
       threshold,
       result,
+      semesterDisciplineDetails,
       lastImport,
     });
   } catch (error) {

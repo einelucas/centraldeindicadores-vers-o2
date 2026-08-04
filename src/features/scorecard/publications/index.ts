@@ -21,6 +21,7 @@ export interface GeneralPanelPublicationInput {
   target: number | null;
   result: number | null;
   status: string | null;
+  active?: boolean;
   payload: unknown;
   publishedAt: Date;
   publishedBy: { id: string; name: string; email: string };
@@ -174,6 +175,26 @@ function monthlyFromValueRows(
   return monthly;
 }
 
+function monthlyFromIdpRows(
+  rows: ReadonlyArray<IdpPublishedPayload["mensal"][number]>,
+): Record<string, number> {
+  const monthly: Record<string, number> = {};
+  for (const month of rows) {
+    const monthKey = monthLabelToKey(month.label);
+    const hasValidBaseline =
+      typeof month.linhaBase !== "number" || month.linhaBase > 0;
+    if (
+      monthKey &&
+      hasValidBaseline &&
+      month.v !== null &&
+      Number.isFinite(month.v)
+    ) {
+      monthly[monthKey] = month.v;
+    }
+  }
+  return monthly;
+}
+
 function adaptPublication(
   key: string,
   publication: GeneralPanelPublicationInput,
@@ -181,14 +202,20 @@ function adaptPublication(
   if (key === "rdo") {
     const payload = readRdoPayload(publication.payload);
     return payload
-      ? { current: payload.resultado, monthly: monthlyFromValueRows(payload.mensal) }
+      ? {
+          current: payload.emitidos > 0 ? payload.resultado : null,
+          monthly: monthlyFromValueRows(payload.mensal),
+        }
       : { current: null, monthly: {} };
   }
 
   if (key === "cronograma") {
     const payload = readIdpPayload(publication.payload);
     return payload
-      ? { current: payload.resultado, monthly: monthlyFromValueRows(payload.mensal) }
+      ? {
+          current: payload.totalLinhaBase > 0 ? payload.resultado : null,
+          monthly: monthlyFromIdpRows(payload.mensal),
+        }
       : { current: null, monthly: {} };
   }
 
@@ -229,7 +256,37 @@ export function publishedValueForPeriod(
 ): number | null {
   const adapted = adaptPublication(key, publication);
   const monthKey = `${year}-${String(month).padStart(2, "0")}`;
-  return adapted.monthly[monthKey] ?? null;
+  const value = adapted.monthly[monthKey];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Seleciona a publicação mais recente que realmente contém o mês solicitado.
+ *
+ * Uma nova publicação pode abranger apenas parte do ciclo e desativar a versão
+ * anterior. Por isso, o Scorecard não pode consultar somente a publicação ativa:
+ * ele precisa percorrer o histórico, da versão mais nova para a mais antiga, até
+ * encontrar um valor válido para o período.
+ */
+export function latestPublishedValueForPeriod(
+  key: string,
+  publications: readonly GeneralPanelPublicationInput[],
+  year: number,
+  month: number,
+): number | null {
+  const ordered = publications.slice().sort(
+    (a, b) =>
+      Number(b.active === true) - Number(a.active === true) ||
+      b.publishedAt.getTime() - a.publishedAt.getTime() ||
+      b.version - a.version,
+  );
+
+  for (const publication of ordered) {
+    const value = publishedValueForPeriod(key, publication, year, month);
+    if (value !== null) return value;
+  }
+
+  return null;
 }
 
 function publicationForIndicator(

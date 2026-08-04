@@ -135,6 +135,17 @@ export async function POST(req: NextRequest) {
       monthEnd,
       threshold: thresholdFraction,
     });
+
+    if (result.totalLinhaBase <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            "O período selecionado não possui custo de linha de base válido para calcular a aderência.",
+        },
+        { status: 400 },
+      );
+    }
+
     const payload = toIdpPublishedPayload(result, input.threshold);
     const status = payload.resultado >= input.threshold ? "OK" : "ABAIXO";
 

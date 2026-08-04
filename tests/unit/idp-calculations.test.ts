@@ -3,6 +3,7 @@ import {
   calculateIdpAdherence,
   computeIdpDetailedResult,
   computeIdpResult,
+  computeIdpSemesterDisciplineDetails,
   disciplineSortKey,
   meetsTarget,
 } from "@/features/idp/calculations";
@@ -70,6 +71,64 @@ describe("IDP cálculos", () => {
     expect(result.groups.mecanica.aderencia).toBeCloseTo(0.9);
     expect(result.groups.eia.aderencia).toBeCloseTo(1);
     expect(result.unitDetails.find((unit) => unit.unit === "P1")?.months.map((month) => month.month)).toEqual([6, 7]);
+  });
+
+  it("consolida as disciplinas de todas as unidades nos semestres ligados ao ano de referência", () => {
+    const semesters = computeIdpSemesterDisciplineDetails(
+      [
+        rec({
+          unit: "P1",
+          year: 2026,
+          month: 12,
+          disciplina: "01 Civil",
+          custoLinhaBase: 100,
+          custoReal: 80,
+        }),
+        rec({
+          unit: "P2",
+          year: 2027,
+          month: 1,
+          disciplina: "01 Civil",
+          custoLinhaBase: 200,
+          custoReal: 190,
+        }),
+        rec({
+          unit: "P3",
+          year: 2027,
+          month: 1,
+          disciplina: "01 Civil",
+          custoLinhaBase: 300,
+          custoReal: 270,
+        }),
+        rec({
+          unit: "P1",
+          year: 2027,
+          month: 6,
+          disciplina: "02 Mecânica",
+          custoLinhaBase: 500,
+          custoReal: 400,
+        }),
+      ],
+      2027,
+    );
+
+    const decMay = semesters.find((semester) => semester.key === "dec-may")!;
+    const junNov = semesters.find((semester) => semester.key === "jun-nov")!;
+    const civil = decMay.rows.find((row) => row.disciplina === "01 Civil")!;
+
+    expect(decMay.months.map((month) => [month.year, month.month])).toEqual([
+      [2026, 12],
+      [2027, 1],
+      [2027, 2],
+      [2027, 3],
+      [2027, 4],
+      [2027, 5],
+    ]);
+    expect(civil.values[1]?.custoLinhaBase).toBe(500);
+    expect(civil.totalLinhaBase).toBe(600);
+    expect(civil.totalReal).toBe(540);
+    expect(civil.aderencia).toBeCloseTo(0.9);
+    expect(junNov.rows[0]?.disciplina).toBe("02 Mecânica");
   });
 
   it("meetsTarget compara com a meta", () => {

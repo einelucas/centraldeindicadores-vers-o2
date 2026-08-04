@@ -19,6 +19,7 @@ import { MONTH_NAMES } from "@/lib/dates";
 interface Computation {
   year: number;
   month: number;
+  sourceValues?: Record<string, number | null>;
   values: Record<string, number | null>;
   result: ScorecardResult;
 }
@@ -339,7 +340,7 @@ export function ScorecardView() {
   }
 
   function restoreSourceValue(key: string) {
-    const sourceValue = data?.values[key] ?? null;
+    const sourceValue = data?.sourceValues?.[key] ?? data?.values[key] ?? null;
     setInputs((current) => ({
       ...current,
       [key]: sourceValue === null ? "" : String(sourceValue),
@@ -591,7 +592,10 @@ export function ScorecardView() {
                   <td className="px-3 py-3 text-right font-semibold">{row.peso.toFixed(2)}%</td>
                   <td className="px-3 py-3 text-right font-semibold">{targetLabel(row)}</td>
                   <td className="px-3 py-3 text-right text-neutralbrand">
-                    {formatValue(data?.values[row.key] ?? null, row.unit)}
+                    {formatValue(
+                      data?.sourceValues?.[row.key] ?? data?.values[row.key] ?? null,
+                      row.unit,
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex min-w-48 items-center gap-2">

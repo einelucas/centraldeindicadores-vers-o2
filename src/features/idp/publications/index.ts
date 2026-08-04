@@ -11,7 +11,10 @@ export interface IdpPublishedUnit {
 
 export interface IdpPublishedMonth {
   label: string;
-  v: number;
+  v: number | null;
+  /** Disponível nas publicações novas; versões antigas podem não possuir. */
+  linhaBase?: number;
+  real?: number;
 }
 
 export interface IdpPublishedPayload {
@@ -31,33 +34,49 @@ export interface IdpPublishedPayload {
   mensal: IdpPublishedMonth[];
 }
 
+function roundPercent(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /** Converte somente resultados calculados a partir do banco em snapshot publicado. */
 export function toIdpPublishedPayload(
   result: IdpDetailedResult,
   targetPercent: number,
 ): IdpPublishedPayload {
+  if (result.totalLinhaBase <= 0) {
+    throw new Error(
+      "Não há custo de linha de base válido no período selecionado para publicar.",
+    );
+  }
+
   return {
     pontos: IDP_SCORECARD_POINTS,
     peso: IDP_SCORECARD_WEIGHT,
     meta: targetPercent,
-    resultado: result.aderenciaGeral * 100,
-    civil: result.groups.civil.aderencia * 100,
-    mecanica: result.groups.mecanica.aderencia * 100,
-    eia: result.groups.eia.aderencia * 100,
+    resultado: roundPercent(result.aderenciaGeral * 100),
+    civil: roundPercent(result.groups.civil.aderencia * 100),
+    mecanica: roundPercent(result.groups.mecanica.aderencia * 100),
+    eia: roundPercent(result.groups.eia.aderencia * 100),
     selectedYear: result.selectedYear,
     monthStart: result.monthStart,
     monthEnd: result.monthEnd,
     totalLinhaBase: result.totalLinhaBase,
     totalReal: result.totalReal,
     unidades: result.units
+      .filter((unit) => unit.custoLinhaBase > 0)
       .map((unit) => ({
         n: unit.name.replace(/^INPASA\s*/i, "").trim(),
-        v: Math.round(unit.aderencia * 100),
+        v: roundPercent(unit.aderencia * 100),
       }))
       .sort((a, b) => b.v - a.v),
     mensal: result.monthly.map((month) => ({
       label: month.label,
-      v: Math.round(month.aderencia * 100),
+      v:
+        month.custoLinhaBase > 0
+          ? roundPercent(month.aderencia * 100)
+          : null,
+      linhaBase: month.custoLinhaBase,
+      real: month.custoReal,
     })),
   };
 }

@@ -29,4 +29,39 @@ describe("toRdoPublishedPayload", () => {
     expect(payload.unidades[0]).toEqual({ n: "Sinop", v: 83 });
     expect(payload.mensal).toEqual([{ label: "Jan/2026", v: 80 }]);
   });
+
+  it("mantém a precisão mensal e marca período sem emitidos como sem dados", () => {
+    const payload = toRdoPublishedPayload(
+      {
+        ...result,
+        totalEmitidos: 250,
+        totalAprovados: 199,
+        months: [
+          {
+            label: "Jun/2026",
+            year: 2026,
+            month: 5,
+            emitidos: 250,
+            aprovados: 199,
+            aderencia: 199 / 250,
+          },
+          {
+            label: "Jul/2026",
+            year: 2026,
+            month: 6,
+            emitidos: 0,
+            aprovados: 0,
+            aderencia: 0,
+          },
+        ],
+      },
+      80,
+    );
+
+    expect(payload.resultado).toBe(79.6);
+    expect(payload.mensal).toEqual([
+      { label: "Jun/2026", v: 79.6 },
+      { label: "Jul/2026", v: null },
+    ]);
+  });
 });

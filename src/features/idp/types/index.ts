@@ -76,6 +76,27 @@ export interface IdpUnitDetail {
   rows: IdpUnitDetailRow[];
 }
 
+export type IdpSemesterKey = "dec-may" | "jun-nov";
+
+/**
+ * Quebra mensal consolidada por disciplina, somando todas as unidades.
+ *
+ * O ano de referência é sempre o ano escolhido no filtro geral do módulo:
+ *  - dec-may: Dezembro do ano anterior até Maio do ano selecionado;
+ *  - jun-nov: Junho até Novembro do ano selecionado.
+ */
+export interface IdpSemesterDisciplineDetail {
+  key: IdpSemesterKey;
+  label: string;
+  periodLabel: string;
+  referenceYear: number;
+  months: IdpUnitDetailMonth[];
+  rows: IdpUnitDetailRow[];
+  totalLinhaBase: number;
+  totalReal: number;
+  aderencia: number;
+}
+
 /** Resultado completo usado pela Administração e pela publicação. */
 export interface IdpDetailedResult extends IdpResult {
   selectedYear: number;

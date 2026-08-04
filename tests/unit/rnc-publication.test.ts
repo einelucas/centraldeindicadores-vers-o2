@@ -53,6 +53,21 @@ describe("toRncPublishedPayload", () => {
     expect(payload.ofensores.at(-1)).toEqual({ n: "Outros", pct: 10 });
   });
 
+  it("não arredonda um valor acima da meta para dentro da meta", () => {
+    const payload = toRncPublishedPayload({
+      ...result,
+      months: [
+        {
+          ...result.months[0]!,
+          diasMedios: 15.04,
+          dentroMeta: false,
+        },
+      ],
+    });
+
+    expect(payload.mensal).toEqual([{ label: "Jun/2026", v: 15.04 }]);
+  });
+
   it("não permite publicação sem tempo de tratativa real", () => {
     expect(() =>
       toRncPublishedPayload({ ...result, resultadoDias: null }),

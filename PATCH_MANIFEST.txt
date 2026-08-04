@@ -1,36 +1,40 @@
-PATCH_MANIFEST.txt
-backend/.env.example
-backend/.pytest_cache/.gitignore
-backend/.pytest_cache/CACHEDIR.TAG
-backend/.pytest_cache/README.md
-backend/.pytest_cache/v/cache/lastfailed
-backend/.pytest_cache/v/cache/nodeids
-backend/README.md
-backend/app/__init__.py
-backend/app/api/__init__.py
-backend/app/api/router.py
-backend/app/api/routes/__init__.py
-backend/app/api/routes/health.py
-backend/app/api/routes/migration.py
-backend/app/core/__init__.py
-backend/app/core/config.py
-backend/app/db/__init__.py
-backend/app/db/session.py
-backend/app/main.py
-backend/app/schemas/__init__.py
-backend/app/schemas/health.py
-backend/app/schemas/migration.py
-backend/pyproject.toml
-backend/tests/test_health.py
-docs/migration-fastapi-nuxt.md
-frontend/.env.example
-frontend/README.md
-frontend/app/app.vue
-frontend/app/assets/css/main.css
-frontend/app/composables/useApiBase.ts
-frontend/app/layouts/default.vue
-frontend/app/pages/dashboard/index.vue
-frontend/app/pages/index.vue
-frontend/nuxt.config.ts
-frontend/package.json
-frontend/tsconfig.json
+PATCH — SCORECARD / PONTOS REALIZADOS
+====================================
+
+Objetivo
+--------
+Corrigir a origem dos valores mensais e o cálculo/exibição dos pontos realizados
+no Scorecard administrativo.
+
+Principais correções
+--------------------
+1. O Scorecard passa a procurar a publicação mais recente que realmente contém
+   o mês solicitado. Caso a publicação ativa seja parcial, o sistema recupera o
+   valor válido de uma versão anterior.
+2. A API agora devolve separadamente os valores publicados (sourceValues) e os
+   valores efetivos após ajustes manuais. O botão "Puxar" restaura de verdade o
+   valor do módulo, inclusive após salvar um snapshot manual.
+3. IDP não publica mais 0% quando não existe linha de base no mês. Esses períodos
+   passam a ser tratados como "Sem dados".
+4. IDP e RDO preservam duas casas decimais, evitando que 89,55% vire 90% ou que
+   79,60% vire 80% antes da comparação com a meta.
+5. RDO sem relatórios emitidos não é convertido em resultado 0%.
+6. RNC preserva duas casas decimais no tempo médio, evitando arredondamento
+   indevido junto à meta de 15 dias.
+7. Foram adicionados testes unitários para publicação histórica, precisão e
+   tratamento de ausência de dados.
+
+Instalação
+----------
+1. Extraia este ZIP na raiz do projeto.
+2. Confirme a substituição dos arquivos existentes.
+3. Execute:
+
+   pnpm test
+   pnpm build
+
+Após o deploy
+-------------
+Publique novamente os módulos IDP, RDO e RNC para gerar novos snapshots com a
+precisão e o tratamento de ausência de dados corrigidos. Não é necessária
+migração de banco de dados.

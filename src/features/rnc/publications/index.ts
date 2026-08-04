@@ -61,7 +61,7 @@ export function toRncPublishedPayload(result: RncResult): RncPublishedPayload {
       v:
         month.diasMedios === null
           ? null
-          : Math.round(month.diasMedios * 10) / 10,
+          : Math.round(month.diasMedios * 100) / 100,
     })),
     ofensores: [
       ...top.map((offender) => ({

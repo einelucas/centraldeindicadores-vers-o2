@@ -15,6 +15,10 @@ import {
   IDP_DEFAULT_MONTH_START,
   type IdpDetailedResult,
   type IdpNormalizedRecord,
+  type IdpSemesterDisciplineDetail,
+  type IdpSemesterKey,
+  type IdpUnitDetailMonth,
+  type IdpUnitDetailRow,
 } from "@/features/idp/types";
 
 interface ApiResponse {
@@ -29,6 +33,7 @@ interface ApiResponse {
   monthEnd: number;
   threshold: number;
   result: IdpDetailedResult;
+  semesterDisciplineDetails: IdpSemesterDisciplineDetail[];
   lastImport: null | {
     id: string;
     fileName: string;
@@ -82,6 +87,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [monthEnd, setMonthEnd] = useState(IDP_DEFAULT_MONTH_END);
   const [threshold, setThreshold] = useState(90);
   const [selectedUnit, setSelectedUnit] = useState("");
+  const [selectedSemester, setSelectedSemester] = useState<IdpSemesterKey>("jun-nov");
   const [excludedDisciplinesDraft, setExcludedDisciplinesDraft] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -117,7 +123,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     setSelectedUnit((current) =>
       body.result.unitDetails.some((item) => item.unit === current)
         ? current
-        : body.result.unitDetails[0]?.unit ?? "",
+        : (body.result.unitDetails[0]?.unit ?? ""),
     );
   }
 
@@ -147,31 +153,21 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         }),
       });
       if (!response.ok) {
-        throw await responseError(
-          response,
-          "Falha ao salvar as disciplinas excluídas.",
-        );
+        throw await responseError(response, "Falha ao salvar as disciplinas excluídas.");
       }
       await load({ year: selectedYear, monthStart, monthEnd, threshold });
       setMessage(
         "Disciplinas excluídas atualizadas. Os cálculos e a próxima publicação já usam a nova regra.",
       );
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Falha ao salvar as disciplinas excluídas.",
-      );
+      setError(err instanceof Error ? err.message : "Falha ao salvar as disciplinas excluídas.");
     } finally {
       setBusy(false);
     }
   }
 
   useEffect(() => {
-    void Promise.all([
-      load().catch((err: Error) => setError(err.message)),
-      loadPublication(),
-    ]);
+    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
     // A primeira leitura deixa a API escolher o ano real padrão da base.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -196,7 +192,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       }
       setPendingFiles((current) => [...current, ...parsed]);
       if (parsed.some((file) => !file.error)) {
-        setMessage("Arquivos lidos. Confira o nome de cada unidade e clique em “Importar arquivos”.");
+        setMessage(
+          "Arquivos lidos. Confira o nome de cada unidade e clique em “Importar arquivos”.",
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao ler os arquivos.");
@@ -322,7 +320,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   }
 
   async function clearAll() {
-    if (!window.confirm("Excluir todos os registros administrativos do IDP? O painel publicado continuará preservado.")) return;
+    if (
+      !window.confirm(
+        "Excluir todos os registros administrativos do IDP? O painel publicado continuará preservado.",
+      )
+    )
+      return;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -353,7 +356,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       <div
         className={`upload-zone${dragging ? " drag" : ""}`}
         onClick={() => !busy && inputRef.current?.click()}
-        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={(event) => {
           event.preventDefault();
@@ -368,7 +374,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       >
         <div className="icon">↑</div>
         <h4>Arraste os arquivos “Uso de Atribuições” aqui, ou clique para escolher</h4>
-        <p>Um arquivo por unidade (.xlsx, .xls, .xltx ou .csv). O nome do projeto é detectado pelo arquivo e pode ser corrigido antes da importação.</p>
+        <p>
+          Um arquivo por unidade (.xlsx, .xls, .xltx ou .csv). O nome do projeto é detectado pelo
+          arquivo e pode ser corrigido antes da importação.
+        </p>
         <input
           ref={inputRef}
           type="file"
@@ -379,7 +388,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       </div>
 
       {busy && !progress ? (
-        <div className="progress-item"><span className="spinner" /> Lendo arquivos…</div>
+        <div className="progress-item">
+          <span className="spinner" /> Lendo arquivos…
+        </div>
       ) : null}
 
       {pendingFiles.length ? (
@@ -387,7 +398,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           {pendingFiles.map((file) => (
             <span className={`file-pill${file.error ? " error" : ""}`} key={file.id}>
               {file.error ? (
-                <>{file.fileName} · erro: {file.error}</>
+                <>
+                  {file.fileName} · erro: {file.error}
+                </>
               ) : (
                 <>
                   <input
@@ -398,7 +411,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                     onChange={(event) => {
                       const projectName = event.target.value;
                       setPendingFiles((current) =>
-                        current.map((item) => item.id === file.id ? { ...item, projectName } : item),
+                        current.map((item) =>
+                          item.id === file.id ? { ...item, projectName } : item,
+                        ),
                       );
                     }}
                   />
@@ -412,7 +427,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   event.stopPropagation();
                   setPendingFiles((current) => current.filter((item) => item.id !== file.id));
                 }}
-              >✕</button>
+              >
+                ✕
+              </button>
             </span>
           ))}
         </div>
@@ -420,7 +437,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {validPendingCount ? (
         <div className="controls-row" style={{ marginTop: 12 }}>
-          <button className="btn" type="button" disabled={busy} onClick={() => void importPendingFiles()}>
+          <button
+            className="btn"
+            type="button"
+            disabled={busy}
+            onClick={() => void importPendingFiles()}
+          >
             Importar {validPendingCount} arquivo(s)
           </button>
           <span style={{ fontSize: 12.5, color: "var(--texto-suave)" }}>
@@ -431,7 +453,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {progress ? (
         <div className="info-box">
-          Processando lote {progress.currentBatch}/{progress.totalBatches} — {progressPct}% · Inseridos: {progress.inserted} · Atualizados: {progress.updated} · Ignorados: {progress.ignored} · Rejeitados: {progress.rejected}
+          Processando lote {progress.currentBatch}/{progress.totalBatches} — {progressPct}% ·
+          Inseridos: {progress.inserted} · Atualizados: {progress.updated} · Ignorados:{" "}
+          {progress.ignored} · Rejeitados: {progress.rejected}
         </div>
       ) : null}
 
@@ -440,13 +464,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {canPublish ? (
         <div className="info-box" style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>
-            Disciplinas desconsideradas no IDP
-          </div>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Disciplinas desconsideradas no IDP</div>
           <p style={{ margin: "0 0 10px", fontSize: 12.5 }}>
-            Informe uma disciplina por linha. Elas permanecem importadas no
-            banco, mas não entram nos cálculos, detalhamentos, PDF ou publicação
-            do painel.
+            Informe uma disciplina por linha. Elas permanecem importadas no banco, mas não entram
+            nos cálculos, detalhamentos, PDF ou publicação do painel.
           </p>
           <div
             style={{
@@ -493,8 +514,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </div>
           {data?.excludedTotal ? (
             <div style={{ marginTop: 8, fontSize: 12.5 }}>
-              {data.excludedTotal.toLocaleString("pt-BR")} registro(s) do
-              período atual foram desconsiderados por essa regra.
+              {data.excludedTotal.toLocaleString("pt-BR")} registro(s) do período atual foram
+              desconsiderados por essa regra.
             </div>
           ) : null}
         </div>
@@ -504,23 +525,91 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         <div>
           <div className="controls-row">
             <label htmlFor="idpYear">Ano</label>
-            <select id="idpYear" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
-              {data.years.map((year) => <option value={year} key={year}>{year}</option>)}
+            <select
+              id="idpYear"
+              value={selectedYear}
+              onChange={(event) => setSelectedYear(Number(event.target.value))}
+            >
+              {data.years.map((year) => (
+                <option value={year} key={year}>
+                  {year}
+                </option>
+              ))}
             </select>
             <label htmlFor="idpMonthStart">De</label>
-            <select id="idpMonthStart" value={monthStart} onChange={(event) => setMonthStart(Number(event.target.value))}>
-              {MONTH_NAMES_FULL.map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
+            <select
+              id="idpMonthStart"
+              value={monthStart}
+              onChange={(event) => setMonthStart(Number(event.target.value))}
+            >
+              {MONTH_NAMES_FULL.map((month, index) => (
+                <option value={index + 1} key={month}>
+                  {month}
+                </option>
+              ))}
             </select>
             <label htmlFor="idpMonthEnd">Até</label>
-            <select id="idpMonthEnd" value={monthEnd} onChange={(event) => setMonthEnd(Number(event.target.value))}>
-              {MONTH_NAMES_FULL.map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
+            <select
+              id="idpMonthEnd"
+              value={monthEnd}
+              onChange={(event) => setMonthEnd(Number(event.target.value))}
+            >
+              {MONTH_NAMES_FULL.map((month, index) => (
+                <option value={index + 1} key={month}>
+                  {month}
+                </option>
+              ))}
             </select>
             <label htmlFor="idpTolerance">Meta de aderência (%)</label>
-            <input id="idpTolerance" type="number" min={0} max={200} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-            <button className="btn secondary" type="button" disabled={busy} onClick={() => void load({ year: selectedYear, monthStart, monthEnd, threshold }).catch((err: Error) => setError(err.message))}>Recalcular</button>
-            <button className="btn" type="button" disabled={busy} onClick={() => exportIdpPdf(result)}>Baixar PDF</button>
-            {canClear ? <button className="btn secondary" type="button" disabled={busy} onClick={() => void clearAll()}>Limpar tudo</button> : null}
-            {canPublish ? <button className="btn" style={{ background: "var(--verde)" }} type="button" disabled={busy} onClick={() => void publish()}>Publicar no Painel</button> : null}
+            <input
+              id="idpTolerance"
+              type="number"
+              min={0}
+              max={200}
+              value={threshold}
+              onChange={(event) => setThreshold(Number(event.target.value))}
+            />
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void load({ year: selectedYear, monthStart, monthEnd, threshold }).catch(
+                  (err: Error) => setError(err.message),
+                )
+              }
+            >
+              Recalcular
+            </button>
+            <button
+              className="btn"
+              type="button"
+              disabled={busy}
+              onClick={() => exportIdpPdf(result)}
+            >
+              Baixar PDF
+            </button>
+            {canClear ? (
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => void clearAll()}
+              >
+                Limpar tudo
+              </button>
+            ) : null}
+            {canPublish ? (
+              <button
+                className="btn"
+                style={{ background: "var(--verde)" }}
+                type="button"
+                disabled={busy}
+                onClick={() => void publish()}
+              >
+                Publicar no Painel
+              </button>
+            ) : null}
           </div>
 
           <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 10 }}>
@@ -530,27 +619,71 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </div>
           {data.lastImport ? (
             <div className="info-box">
-              Última importação: {data.lastImport.fileName} · {data.lastImport.totalFound.toLocaleString("pt-BR")} registro(s) encontrados · {data.lastImport.totalInserted} inserido(s) · {data.lastImport.totalUpdated} atualizado(s) · {data.lastImport.totalIgnored} ignorado(s).
+              Última importação: {data.lastImport.fileName} ·{" "}
+              {data.lastImport.totalFound.toLocaleString("pt-BR")} registro(s) encontrados ·{" "}
+              {data.lastImport.totalInserted} inserido(s) · {data.lastImport.totalUpdated}{" "}
+              atualizado(s) · {data.lastImport.totalIgnored} ignorado(s).
             </div>
           ) : null}
 
           <div className="cards">
-            <div className="card"><div className="lbl">Custo Linha de Base</div><div className="val" style={{ fontSize: 20 }}>{formatMoney(result.totalLinhaBase)}</div></div>
-            <div className="card"><div className="lbl">Custo Real</div><div className="val" style={{ fontSize: 20 }}>{formatMoney(result.totalReal)}</div></div>
-            <div className="card accent"><div className="lbl">Aderência geral</div><div className="val">{fmtPct(result.aderenciaGeral)}</div></div>
-            <div className="card"><div className="lbl">Unidades carregadas</div><div className="val">{result.units.length}</div></div>
-            <GroupCard label="Civil" adherence={result.groups.civil.aderencia} hasData={result.groups.civil.hasData} threshold={result.threshold} />
-            <GroupCard label="Mecânica" adherence={result.groups.mecanica.aderencia} hasData={result.groups.mecanica.hasData} threshold={result.threshold} />
-            <GroupCard label="EIA" adherence={result.groups.eia.aderencia} hasData={result.groups.eia.hasData} threshold={result.threshold} />
+            <div className="card">
+              <div className="lbl">Custo Linha de Base</div>
+              <div className="val" style={{ fontSize: 20 }}>
+                {formatMoney(result.totalLinhaBase)}
+              </div>
+            </div>
+            <div className="card">
+              <div className="lbl">Custo Real</div>
+              <div className="val" style={{ fontSize: 20 }}>
+                {formatMoney(result.totalReal)}
+              </div>
+            </div>
+            <div className="card accent">
+              <div className="lbl">Aderência geral</div>
+              <div className="val">{fmtPct(result.aderenciaGeral)}</div>
+            </div>
+            <div className="card">
+              <div className="lbl">Unidades carregadas</div>
+              <div className="val">{result.units.length}</div>
+            </div>
+            <GroupCard
+              label="Civil"
+              adherence={result.groups.civil.aderencia}
+              hasData={result.groups.civil.hasData}
+              threshold={result.threshold}
+            />
+            <GroupCard
+              label="Mecânica"
+              adherence={result.groups.mecanica.aderencia}
+              hasData={result.groups.mecanica.hasData}
+              threshold={result.threshold}
+            />
+            <GroupCard
+              label="EIA"
+              adherence={result.groups.eia.aderencia}
+              hasData={result.groups.eia.hasData}
+              threshold={result.threshold}
+            />
           </div>
 
           <div className="subtitle-block">
             <h3>Aderência por unidade</h3>
-            <p>Custo Linha de Base x Custo Real, somando todas as disciplinas no período selecionado.</p>
+            <p>
+              Custo Linha de Base x Custo Real, somando todas as disciplinas no período selecionado.
+            </p>
           </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead><tr><th>Unidade</th><th>Custo Linha de Base</th><th>Custo Real</th><th>Aderência</th><th>Situação</th></tr></thead>
+          <div className="table-scroll idp-summary-table-wrap">
+            <table className="data idp-summary-table">
+              <thead>
+                <tr>
+                  <th>Unidade</th>
+                  <th>Custo Linha de Base</th>
+                  <th>Custo Real</th>
+                  <th>Aderência</th>
+                  <th>Situação</th>
+                </tr>
+              </thead>
               <tbody>
                 {result.units.map((unit) => {
                   const ok = unit.aderencia >= result.threshold;
@@ -560,7 +693,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                       <td className="num">{fmtCurrency(unit.custoLinhaBase)}</td>
                       <td className="num">{fmtCurrency(unit.custoReal)}</td>
                       <td className="num">{fmtPct(unit.aderencia)}</td>
-                      <td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Fora da meta"}</span></td>
+                      <td>
+                        <span className={`badge ${ok ? "ok" : "fail"}`}>
+                          {ok ? "Dentro da meta" : "Fora da meta"}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -571,9 +708,17 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           <div className="subtitle-block">
             <h3>Aderência por disciplina (consolidado de todas as unidades)</h3>
           </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead><tr><th>Disciplina</th><th>Custo Linha de Base</th><th>Custo Real</th><th>Aderência</th><th>Situação</th></tr></thead>
+          <div className="table-scroll idp-summary-table-wrap">
+            <table className="data idp-summary-table">
+              <thead>
+                <tr>
+                  <th>Disciplina</th>
+                  <th>Custo Linha de Base</th>
+                  <th>Custo Real</th>
+                  <th>Aderência</th>
+                  <th>Situação</th>
+                </tr>
+              </thead>
               <tbody>
                 {result.disciplinas.map((disciplina) => {
                   const ok = disciplina.aderencia >= result.threshold;
@@ -583,7 +728,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                       <td className="num">{fmtCurrency(disciplina.custoLinhaBase)}</td>
                       <td className="num">{fmtCurrency(disciplina.custoReal)}</td>
                       <td className="num">{fmtPct(disciplina.aderencia)}</td>
-                      <td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Fora da meta"}</span></td>
+                      <td>
+                        <span className={`badge ${ok ? "ok" : "fail"}`}>
+                          {ok ? "Dentro da meta" : "Fora da meta"}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })}
@@ -591,51 +740,37 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
             </table>
           </div>
 
+          <SemesterDisciplineSection
+            details={data.semesterDisciplineDetails}
+            selectedSemester={selectedSemester}
+            onSemesterChange={setSelectedSemester}
+          />
+
           <div className="subtitle-block">
             <h3>Detalhamento por unidade</h3>
             <p>Selecione uma unidade para ver a quebra mensal por disciplina.</p>
           </div>
           <div className="controls-row">
             <label htmlFor="idpUnitDetailSelect">Unidade</label>
-            <select id="idpUnitDetailSelect" value={selectedUnit} onChange={(event) => setSelectedUnit(event.target.value)}>
-              {result.unitDetails.map((unit) => <option value={unit.unit} key={unit.unit}>{unit.unit}</option>)}
+            <select
+              id="idpUnitDetailSelect"
+              value={selectedUnit}
+              onChange={(event) => setSelectedUnit(event.target.value)}
+            >
+              {result.unitDetails.map((unit) => (
+                <option value={unit.unit} key={unit.unit}>
+                  {unit.unit}
+                </option>
+              ))}
             </select>
           </div>
           {detail ? (
-            <div className="table-scroll">
-              <table className="data" style={{ minWidth: 900 }}>
-                <thead>
-                  <tr>
-                    <th rowSpan={2}>Disciplina</th>
-                    {detail.months.map((month) => <th colSpan={3} key={month.month}>{month.label}</th>)}
-                    <th colSpan={3}>Total do período</th>
-                  </tr>
-                  <tr>
-                    {detail.months.flatMap((month) => [
-                      <th key={`${month.month}-lb`}>LB</th>,
-                      <th key={`${month.month}-real`}>Real</th>,
-                      <th key={`${month.month}-ad`}>Ader.</th>,
-                    ])}
-                    <th>LB</th><th>Real</th><th>Ader.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.rows.map((row) => (
-                    <tr key={row.disciplina}>
-                      <td>{row.disciplina}</td>
-                      {row.values.flatMap((value) => [
-                        <td className="num" key={`${value.month}-lb`}>{fmtCurrency(value.custoLinhaBase)}</td>,
-                        <td className="num" key={`${value.month}-real`}>{fmtCurrency(value.custoReal)}</td>,
-                        <td className="num" key={`${value.month}-ad`}>{fmtPct(value.aderencia)}</td>,
-                      ])}
-                      <td className="num">{fmtCurrency(row.totalLinhaBase)}</td>
-                      <td className="num">{fmtCurrency(row.totalReal)}</td>
-                      <td className="num">{fmtPct(row.aderencia)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <MonthlyDisciplineTable
+              months={detail.months}
+              rows={detail.rows}
+              totalLabel="Total do período"
+              emptyMessage="Nenhum detalhamento encontrado para esta unidade."
+            />
           ) : null}
         </div>
       ) : data && data.total === 0 ? (
@@ -643,22 +778,80 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           {data.years.length ? (
             <div className="controls-row">
               <label htmlFor="idpYearEmpty">Ano</label>
-              <select id="idpYearEmpty" value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
-                {data.years.map((year) => <option value={year} key={year}>{year}</option>)}
+              <select
+                id="idpYearEmpty"
+                value={selectedYear}
+                onChange={(event) => setSelectedYear(Number(event.target.value))}
+              >
+                {data.years.map((year) => (
+                  <option value={year} key={year}>
+                    {year}
+                  </option>
+                ))}
               </select>
               <label htmlFor="idpMonthStartEmpty">De</label>
-              <select id="idpMonthStartEmpty" value={monthStart} onChange={(event) => setMonthStart(Number(event.target.value))}>
-                {MONTH_NAMES_FULL.map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
+              <select
+                id="idpMonthStartEmpty"
+                value={monthStart}
+                onChange={(event) => setMonthStart(Number(event.target.value))}
+              >
+                {MONTH_NAMES_FULL.map((month, index) => (
+                  <option value={index + 1} key={month}>
+                    {month}
+                  </option>
+                ))}
               </select>
               <label htmlFor="idpMonthEndEmpty">Até</label>
-              <select id="idpMonthEndEmpty" value={monthEnd} onChange={(event) => setMonthEnd(Number(event.target.value))}>
-                {MONTH_NAMES_FULL.map((month, index) => <option value={index + 1} key={month}>{month}</option>)}
+              <select
+                id="idpMonthEndEmpty"
+                value={monthEnd}
+                onChange={(event) => setMonthEnd(Number(event.target.value))}
+              >
+                {MONTH_NAMES_FULL.map((month, index) => (
+                  <option value={index + 1} key={month}>
+                    {month}
+                  </option>
+                ))}
               </select>
               <label htmlFor="idpToleranceEmpty">Meta de aderência (%)</label>
-              <input id="idpToleranceEmpty" type="number" min={0} max={200} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-              <button className="btn secondary" type="button" disabled={busy} onClick={() => void load({ year: selectedYear, monthStart, monthEnd, threshold }).catch((err: Error) => setError(err.message))}>Recalcular</button>
-              {canClear ? <button className="btn secondary" type="button" disabled={busy} onClick={() => void clearAll()}>Limpar tudo</button> : null}
+              <input
+                id="idpToleranceEmpty"
+                type="number"
+                min={0}
+                max={200}
+                value={threshold}
+                onChange={(event) => setThreshold(Number(event.target.value))}
+              />
+              <button
+                className="btn secondary"
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  void load({ year: selectedYear, monthStart, monthEnd, threshold }).catch(
+                    (err: Error) => setError(err.message),
+                  )
+                }
+              >
+                Recalcular
+              </button>
+              {canClear ? (
+                <button
+                  className="btn secondary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void clearAll()}
+                >
+                  Limpar tudo
+                </button>
+              ) : null}
             </div>
+          ) : null}
+          {data.years.length ? (
+            <SemesterDisciplineSection
+              details={data.semesterDisciplineDetails}
+              selectedSemester={selectedSemester}
+              onSemesterChange={setSelectedSemester}
+            />
           ) : null}
           <div className="placeholder" style={{ marginTop: 18 }}>
             <span className="tag">Aguardando dados</span>
@@ -677,7 +870,162 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   );
 }
 
-function GroupCard({ label, adherence, hasData, threshold }: {
+function SemesterDisciplineSection({
+  details,
+  selectedSemester,
+  onSemesterChange,
+}: {
+  details: IdpSemesterDisciplineDetail[];
+  selectedSemester: IdpSemesterKey;
+  onSemesterChange: (value: IdpSemesterKey) => void;
+}) {
+  const detail = details.find((item) => item.key === selectedSemester) ?? details[0] ?? null;
+
+  if (!detail) return null;
+
+  return (
+    <>
+      <div className="subtitle-block">
+        <h3>Detalhamento semestral por disciplina — todas as unidades</h3>
+        <p>
+          Cada LB e Real é a soma da disciplina em todas as unidades. O ano de referência é o mesmo
+          selecionado no filtro geral do módulo.
+        </p>
+      </div>
+      <div className="controls-row">
+        <label htmlFor="idpSemesterDetailSelect">Semestre</label>
+        <select
+          id="idpSemesterDetailSelect"
+          value={detail.key}
+          onChange={(event) => onSemesterChange(event.target.value as IdpSemesterKey)}
+        >
+          {details.map((semester) => (
+            <option value={semester.key} key={semester.key}>
+              {semester.label}
+            </option>
+          ))}
+        </select>
+        <span style={{ fontSize: 12.5, color: "var(--texto-suave)" }}>
+          Período efetivo: {detail.periodLabel} · LB total: {fmtCurrency(detail.totalLinhaBase)} ·
+          Real total: {fmtCurrency(detail.totalReal)} · Aderência: {fmtPct(detail.aderencia)}
+        </span>
+      </div>
+      <MonthlyDisciplineTable
+        months={detail.months}
+        rows={detail.rows}
+        totalLabel="Total do semestre"
+        emptyMessage={`Nenhum lançamento encontrado em ${detail.periodLabel}.`}
+      />
+    </>
+  );
+}
+
+function MonthlyDisciplineTable({
+  months,
+  rows,
+  totalLabel,
+  emptyMessage,
+}: {
+  months: IdpUnitDetailMonth[];
+  rows: IdpUnitDetailRow[];
+  totalLabel: string;
+  emptyMessage: string;
+}) {
+  const totalColumns = 1 + months.length * 3 + 3;
+
+  return (
+    <div className="table-scroll idp-monthly-table-wrap">
+      <table
+        className="data idp-monthly-table"
+        style={{
+          minWidth: Math.max(1100, 220 + (months.length + 1) * 420),
+        }}
+      >
+        <thead>
+          <tr>
+            <th rowSpan={2} className="idp-sticky-column idp-discipline-head">
+              Disciplina
+            </th>
+            {months.map((month) => (
+              <th colSpan={3} className="idp-month-group" key={`${month.year}-${month.month}`}>
+                {month.label}
+              </th>
+            ))}
+            <th colSpan={3} className="idp-total-group">
+              {totalLabel}
+            </th>
+          </tr>
+          <tr>
+            {months.flatMap((month) => {
+              const key = `${month.year}-${month.month}`;
+              return [
+                <th className="idp-subhead idp-month-start" key={`${key}-lb`}>
+                  LB
+                </th>,
+                <th className="idp-subhead" key={`${key}-real`}>
+                  Real
+                </th>,
+                <th className="idp-subhead idp-month-end" key={`${key}-ad`}>
+                  Ader.
+                </th>,
+              ];
+            })}
+            <th className="idp-subhead idp-total-start">LB</th>
+            <th className="idp-subhead idp-total-cell">Real</th>
+            <th className="idp-subhead idp-total-cell">Ader.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((row) => (
+              <tr key={row.disciplina}>
+                <td className="idp-sticky-column idp-discipline-cell">{row.disciplina}</td>
+                {row.values.flatMap((value) => {
+                  const key = `${value.year}-${value.month}`;
+                  return [
+                    <td className="num idp-value-cell idp-month-start" key={`${key}-lb`}>
+                      {fmtCurrency(value.custoLinhaBase)}
+                    </td>,
+                    <td className="num idp-value-cell" key={`${key}-real`}>
+                      {fmtCurrency(value.custoReal)}
+                    </td>,
+                    <td className="num idp-value-cell idp-month-end" key={`${key}-ad`}>
+                      <span
+                        className={`idp-adherence ${value.aderencia > 0 ? "is-value" : "is-empty"}`}
+                      >
+                        {fmtPct(value.aderencia)}
+                      </span>
+                    </td>,
+                  ];
+                })}
+                <td className="num idp-total-cell idp-total-start">
+                  {fmtCurrency(row.totalLinhaBase)}
+                </td>
+                <td className="num idp-total-cell">{fmtCurrency(row.totalReal)}</td>
+                <td className="num idp-total-cell">
+                  <span className={`idp-adherence ${row.aderencia > 0 ? "is-value" : "is-empty"}`}>
+                    {fmtPct(row.aderencia)}
+                  </span>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={totalColumns}>{emptyMessage}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function GroupCard({
+  label,
+  adherence,
+  hasData,
+  threshold,
+}: {
   label: string;
   adherence: number;
   hasData: boolean;
@@ -687,7 +1035,9 @@ function GroupCard({ label, adherence, hasData, threshold }: {
   return (
     <div className="card">
       <div className="lbl">{label}</div>
-      <div className="val" style={{ fontSize: 20 }}>{hasData ? fmtPct(adherence) : "—"}</div>
+      <div className="val" style={{ fontSize: 20 }}>
+        {hasData ? fmtPct(adherence) : "—"}
+      </div>
       <div className="sub">
         <span className={`badge ${hasData ? (ok ? "ok" : "fail") : "info"}`}>
           {hasData ? (ok ? "Dentro da meta" : "Fora da meta") : "Sem dados"}

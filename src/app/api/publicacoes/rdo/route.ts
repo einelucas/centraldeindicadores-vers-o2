@@ -101,6 +101,14 @@ export async function POST(req: NextRequest) {
     }));
 
     const result = computeRdoResult(records, thresholdFraction);
+
+    if (result.totalEmitidos <= 0) {
+      return NextResponse.json(
+        { error: "Não há RDO emitido para calcular e publicar a aprovação." },
+        { status: 400 },
+      );
+    }
+
     const payload = toRdoPublishedPayload(result, input.threshold);
     const status = payload.resultado >= input.threshold ? "OK" : "ABAIXO";
 

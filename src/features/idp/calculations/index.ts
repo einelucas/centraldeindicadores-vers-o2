@@ -16,6 +16,7 @@ import {
   type IdpDisciplineGroupAggregate,
   type IdpNormalizedRecord,
   type IdpResult,
+  type IdpSemesterDisciplineDetail,
   type IdpUnitDetail,
 } from "@/features/idp/types";
 
@@ -251,6 +252,132 @@ export function computeIdpDetailedResult(
     },
     unitDetails,
   };
+}
+
+/**
+ * Consolida, por disciplina e mês, os dois semestres operacionais do IDP.
+ *
+ * O ano informado é o ano de referência do filtro geral:
+ *  - Dezembro do ano anterior a Maio do ano selecionado;
+ *  - Junho a Novembro do ano selecionado.
+ *
+ * Cada célula soma Linha de Base e Real de todas as unidades antes de calcular
+ * a aderência. Os seis meses são mantidos na tabela mesmo quando não há dados,
+ * evitando que a estrutura mude durante o semestre.
+ */
+export function computeIdpSemesterDisciplineDetails(
+  records: readonly IdpNormalizedRecord[],
+  referenceYear: number,
+): IdpSemesterDisciplineDetail[] {
+  const definitions: Array<{
+    key: IdpSemesterDisciplineDetail["key"];
+    label: string;
+    months: Array<{ year: number; month: number }>;
+  }> = [
+    {
+      key: "dec-may",
+      label: "Dezembro a maio",
+      months: [
+        { year: referenceYear - 1, month: 12 },
+        ...Array.from({ length: 5 }, (_, index) => ({
+          year: referenceYear,
+          month: index + 1,
+        })),
+      ],
+    },
+    {
+      key: "jun-nov",
+      label: "Junho a novembro",
+      months: Array.from({ length: 6 }, (_, index) => ({
+        year: referenceYear,
+        month: index + 6,
+      })),
+    },
+  ];
+
+  return definitions.map((definition) => {
+    const monthKeys = new Set(
+      definition.months.map(({ year, month }) => `${year}-${month}`),
+    );
+    const byDiscipline = new Map<
+      string,
+      Map<string, { lb: number; real: number }>
+    >();
+
+    for (const record of records) {
+      const disciplina = String(record.disciplina ?? "").trim();
+      const key = `${record.year}-${record.month}`;
+      if (!disciplina || !monthKeys.has(key)) continue;
+
+      let monthMap = byDiscipline.get(disciplina);
+      if (!monthMap) {
+        monthMap = new Map();
+        byDiscipline.set(disciplina, monthMap);
+      }
+
+      const current = monthMap.get(key) ?? { lb: 0, real: 0 };
+      current.lb += Number(record.custoLinhaBase) || 0;
+      current.real += Number(record.custoReal) || 0;
+      monthMap.set(key, current);
+    }
+
+    const months = definition.months.map(({ year, month }) => ({
+      year,
+      month,
+      label: `${MONTH_NAMES_FULL[month - 1] ?? String(month)}/${year}`,
+    }));
+
+    let totalLinhaBase = 0;
+    let totalReal = 0;
+    const rows = Array.from(byDiscipline.entries())
+      .sort(
+        (a, b) =>
+          disciplineSortKey(a[0]) - disciplineSortKey(b[0]) ||
+          a[0].localeCompare(b[0], "pt-BR"),
+      )
+      .map(([disciplina, monthMap]) => {
+        let rowLinhaBase = 0;
+        let rowReal = 0;
+        const values = months.map(({ year, month }) => {
+          const value = monthMap.get(`${year}-${month}`) ?? { lb: 0, real: 0 };
+          rowLinhaBase += value.lb;
+          rowReal += value.real;
+          return {
+            year,
+            month,
+            custoLinhaBase: value.lb,
+            custoReal: value.real,
+            aderencia: calculateIdpAdherence(value.real, value.lb),
+          };
+        });
+
+        totalLinhaBase += rowLinhaBase;
+        totalReal += rowReal;
+
+        return {
+          disciplina,
+          values,
+          totalLinhaBase: rowLinhaBase,
+          totalReal: rowReal,
+          aderencia: calculateIdpAdherence(rowReal, rowLinhaBase),
+        };
+      });
+
+    const firstMonth = months[0]!;
+    const lastMonth = months.at(-1)!;
+
+    return {
+      key: definition.key,
+      label: definition.label,
+      periodLabel: `${MONTH_NAMES_FULL[firstMonth.month - 1]}/${firstMonth.year} a ${MONTH_NAMES_FULL[lastMonth.month - 1]}/${lastMonth.year}`,
+      referenceYear,
+      months,
+      rows,
+      totalLinhaBase,
+      totalReal,
+      aderencia: calculateIdpAdherence(totalReal, totalLinhaBase),
+    };
+  });
 }
 
 /** true se a aderência atinge a meta. */
