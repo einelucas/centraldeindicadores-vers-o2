@@ -163,8 +163,8 @@ function isoDate(year: number, month: number, day: number): string | null {
 export function parseRsoReferenceDate(text: string, fallback: Date = new Date()): string {
   const normalized = normalizeText(text);
   const labelledPatterns = [
-    /(?:data\s+(?:de\s+)?(?:refer[eê]ncia|emiss[aã]o|medi[cç][aã]o|atualiza[cç][aã]o)|compet[eê]ncia|data\s*base|per[ií]odo\s+de\s+refer[eê]ncia)\s*:?\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/i,
-    /(?:refer[eê]ncia|compet[eê]ncia)\s*:?\s*(\d{1,2})[\/.\-](\d{4})/i,
+    /(?:data\s+(?:de\s+)?(?:refer[eê]ncia|emiss[aã]o|medi[cç][aã]o|atualiza[cç][aã]o)|compet[eê]ncia|data\s*base|per[ií]odo\s+de\s+refer[eê]ncia)\s*:?\s*(\d{1,2})[./-](\d{1,2})[./-](\d{4})/i,
+    /(?:refer[eê]ncia|compet[eê]ncia)\s*:?\s*(\d{1,2})[./-](\d{4})/i,
   ];
 
   for (const pattern of labelledPatterns) {
