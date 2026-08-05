@@ -1,386 +1,292 @@
 /**
- * Cálculos do IDP. Funções puras, migradas de combineAndRenderIdp() do HTML.
+ * Cálculos do IDP baseados nos PDFs RSO.
  *
- * Regras preservadas:
- *  - Aderência = custo real / custo da linha de base (0 se LB = 0).
- *  - Agrega por unidade, disciplina e mês.
- *  - Meta = mínimo para pontuar (comparação >= meta), padrão 90%.
- *  - Civil = código 01; Mecânica = 02; EIA = 04 + 05 + 06.
+ * Regras:
+ *  - Um documento ativo por unidade: o maior número de RSO disponível até a
+ *    competência consultada.
+ *  - Execução geral da unidade: média das fases encontradas no documento.
+ *  - Aderência da unidade: realizado acumulado / previsto acumulado.
+ *  - Consolidado por disciplina: média simples de todas as áreas disponíveis
+ *    em todas as unidades ativas.
+ *  - Aderência geral: média simples das aderências das unidades ativas.
+ *  - Série mensal: posição acumulada no fechamento de cada mês selecionado.
  */
 
-import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { isIdpDisciplineExcluded } from "@/features/idp/configuration";
 import {
+  IDP_DEFAULT_MONTH_END,
+  IDP_DEFAULT_MONTH_START,
   IDP_DEFAULT_TARGET,
-  type IdpAggregate,
+  IDP_DISC_NAMES,
   type IdpDetailedResult,
-  type IdpDisciplineGroupAggregate,
+  type IdpDisciplineAggregate,
+  type IdpDisciplineUnitGroup,
+  type IdpMonthlyAggregate,
   type IdpNormalizedRecord,
-  type IdpResult,
-  type IdpSemesterDisciplineDetail,
+  type IdpRsoAreaValue,
   type IdpUnitDetail,
 } from "@/features/idp/types";
+import { MONTH_NAMES } from "@/lib/dates";
 
-/** Aderência de custo. Retorna 0 quando não há linha de base. */
-export function calculateIdpAdherence(real: number, linhaBase: number): number {
-  if (linhaBase === 0) return 0;
-  return real / linhaBase;
+export interface IdpPeriodOptions {
+  selectedYear?: number;
+  monthStart?: number;
+  monthEnd?: number;
+}
+
+export function calculateIdpAdherence(real: number, previsto: number): number {
+  if (!Number.isFinite(previsto) || previsto === 0) return 0;
+  return (Number(real) || 0) / previsto;
 }
 
 /** Extrai o código numérico prefixado no nome da disciplina. */
 export function disciplineSortKey(name: string): number {
-  const m = String(name ?? "").match(/^(\d+)/);
-  return m ? parseInt(m[1]!, 10) : 999;
+  const match = String(name ?? "").match(/^(\d+)/);
+  return match ? Number.parseInt(match[1]!, 10) : 999;
 }
 
-function toAggregate(
-  name: string,
-  value: { lb: number; real: number },
-): IdpAggregate {
-  return {
-    name,
-    custoLinhaBase: value.lb,
-    custoReal: value.real,
-    aderencia: calculateIdpAdherence(value.real, value.lb),
-  };
+function referenceTime(record: IdpNormalizedRecord): number {
+  const parsed = new Date(`${record.referenceDate}T12:00:00Z`).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** Consolida os registros do IDP por unidade e disciplina. */
-export function computeIdpResult(
-  records: readonly IdpNormalizedRecord[],
-  threshold: number = IDP_DEFAULT_TARGET,
-): IdpResult {
-  const byUnit = new Map<string, { lb: number; real: number }>();
-  const byDisc = new Map<string, { lb: number; real: number }>();
+/** Seleciona o RSO vigente de cada unidade dentro dos documentos recebidos. */
+export function selectLatestRsoByUnit(
+  entries: readonly IdpNormalizedRecord[],
+): IdpNormalizedRecord[] {
+  const latestByUnit = new Map<string, IdpNormalizedRecord>();
 
-  let totalLinhaBase = 0;
-  let totalReal = 0;
+  for (const entry of entries) {
+    const unit = String(entry.unit ?? "").trim();
+    if (!unit) continue;
 
-  for (const r of records) {
-    const unit = String(r.unit ?? "").trim();
-    const disc = String(r.disciplina ?? "").trim();
-    if (!unit || !disc) continue;
+    const current = latestByUnit.get(unit);
+    if (!current) {
+      latestByUnit.set(unit, entry);
+      continue;
+    }
 
-    const lb = Number(r.custoLinhaBase) || 0;
-    const real = Number(r.custoReal) || 0;
+    const currentNumber = current.rsoNumero ?? Number.NEGATIVE_INFINITY;
+    const nextNumber = entry.rsoNumero ?? Number.NEGATIVE_INFINITY;
+    const isNewerNumber = nextNumber > currentNumber;
+    const isSameNumberAndNewerDate =
+      nextNumber === currentNumber && referenceTime(entry) > referenceTime(current);
 
-    totalLinhaBase += lb;
-    totalReal += real;
-
-    const u = byUnit.get(unit) ?? { lb: 0, real: 0 };
-    u.lb += lb;
-    u.real += real;
-    byUnit.set(unit, u);
-
-    const d = byDisc.get(disc) ?? { lb: 0, real: 0 };
-    d.lb += lb;
-    d.real += real;
-    byDisc.set(disc, d);
+    if (isNewerNumber || isSameNumberAndNewerDate) latestByUnit.set(unit, entry);
   }
 
-  const units = Array.from(byUnit.entries())
-    .map(([name, value]) => toAggregate(name, value))
-    .sort((a, b) => b.custoReal - a.custoReal || a.name.localeCompare(b.name, "pt-BR"));
-
-  const disciplinas = Array.from(byDisc.entries())
-    .map(([name, value]) => toAggregate(name, value))
-    .sort(
-      (a, b) =>
-        disciplineSortKey(a.name) - disciplineSortKey(b.name) ||
-        a.name.localeCompare(b.name, "pt-BR"),
-    );
-
-  return {
-    threshold,
-    totalLinhaBase,
-    totalReal,
-    aderenciaGeral: calculateIdpAdherence(totalReal, totalLinhaBase),
-    units,
-    disciplinas,
-  };
+  return Array.from(latestByUnit.values()).sort((a, b) =>
+    a.unit.localeCompare(b.unit, "pt-BR"),
+  );
 }
 
-function disciplineGroup(
-  key: IdpDisciplineGroupAggregate["key"],
-  label: string,
-  codes: number[],
-  disciplinas: readonly IdpAggregate[],
-): IdpDisciplineGroupAggregate {
-  let custoLinhaBase = 0;
-  let custoReal = 0;
-
-  for (const disciplina of disciplinas) {
-    if (!codes.includes(disciplineSortKey(disciplina.name))) continue;
-    custoLinhaBase += disciplina.custoLinhaBase;
-    custoReal += disciplina.custoReal;
-  }
-
-  return {
-    key,
-    label,
-    codes,
-    custoLinhaBase,
-    custoReal,
-    aderencia: calculateIdpAdherence(custoReal, custoLinhaBase),
-    hasData: custoLinhaBase !== 0 || custoReal !== 0,
-  };
+function average(values: readonly number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/**
- * Calcula a visão completa do IDP para um ano e intervalo de meses.
- * Todos os valores vêm dos registros recebidos; não há preenchimento artificial.
- */
-export function computeIdpDetailedResult(
-  records: readonly IdpNormalizedRecord[],
-  options: {
-    year: number;
-    monthStart: number;
-    monthEnd: number;
-    threshold?: number;
-  },
-): IdpDetailedResult {
-  const threshold = options.threshold ?? IDP_DEFAULT_TARGET;
-  const monthStart = Math.max(1, Math.min(12, Math.min(options.monthStart, options.monthEnd)));
-  const monthEnd = Math.max(1, Math.min(12, Math.max(options.monthStart, options.monthEnd)));
-  const selected = records.filter(
-    (record) =>
-      record.year === options.year &&
-      record.month >= monthStart &&
-      record.month <= monthEnd,
+function buildDisciplineRows(
+  activeEntries: readonly IdpNormalizedRecord[],
+  excludedDisciplines: readonly string[],
+): IdpDisciplineAggregate[] {
+  const disciplineNames = IDP_DISC_NAMES.filter(
+    (name) => !isIdpDisciplineExcluded(name, excludedDisciplines),
   );
 
-  const base = computeIdpResult(selected, threshold);
+  return disciplineNames.map((discipline) => {
+    const entries: Array<IdpRsoAreaValue & { unit: string }> = [];
 
-  const byMonth = new Map<number, { lb: number; real: number }>();
-  const byUnitDetail = new Map<
-    string,
-    Map<string, Map<number, { lb: number; real: number }>>
-  >();
-
-  for (const record of selected) {
-    const monthValue = byMonth.get(record.month) ?? { lb: 0, real: 0 };
-    monthValue.lb += Number(record.custoLinhaBase) || 0;
-    monthValue.real += Number(record.custoReal) || 0;
-    byMonth.set(record.month, monthValue);
-
-    let discMap = byUnitDetail.get(record.unit);
-    if (!discMap) {
-      discMap = new Map();
-      byUnitDetail.set(record.unit, discMap);
-    }
-    let monthMap = discMap.get(record.disciplina);
-    if (!monthMap) {
-      monthMap = new Map();
-      discMap.set(record.disciplina, monthMap);
-    }
-    const current = monthMap.get(record.month) ?? { lb: 0, real: 0 };
-    current.lb += Number(record.custoLinhaBase) || 0;
-    current.real += Number(record.custoReal) || 0;
-    monthMap.set(record.month, current);
-  }
-
-  const monthly = Array.from(byMonth.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([month, value]) => ({
-      year: options.year,
-      month,
-      label: `${MONTH_NAMES_FULL[month - 1]}/${options.year}`,
-      custoLinhaBase: value.lb,
-      custoReal: value.real,
-      aderencia: calculateIdpAdherence(value.real, value.lb),
-    }));
-
-  const unitDetails: IdpUnitDetail[] = Array.from(byUnitDetail.entries())
-    .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
-    .map(([unit, discMap]) => {
-      const months = Array.from(
-        new Set(
-          Array.from(discMap.values()).flatMap((monthMap) =>
-            Array.from(monthMap.keys()),
-          ),
-        ),
-      )
-        .sort((a, b) => a - b)
-        .map((month) => ({
-          year: options.year,
-          month,
-          label: MONTH_NAMES_FULL[month - 1] ?? String(month),
-        }));
-
-      const rows = Array.from(discMap.entries())
-        .sort(
-          (a, b) =>
-            disciplineSortKey(a[0]) - disciplineSortKey(b[0]) ||
-            a[0].localeCompare(b[0], "pt-BR"),
-        )
-        .map(([disciplina, monthMap]) => {
-          let totalLinhaBase = 0;
-          let totalReal = 0;
-          const values = months.map(({ month }) => {
-            const value = monthMap.get(month) ?? { lb: 0, real: 0 };
-            totalLinhaBase += value.lb;
-            totalReal += value.real;
-            return {
-              year: options.year,
-              month,
-              custoLinhaBase: value.lb,
-              custoReal: value.real,
-              aderencia: calculateIdpAdherence(value.real, value.lb),
-            };
-          });
-          return {
-            disciplina,
-            values,
-            totalLinhaBase,
-            totalReal,
-            aderencia: calculateIdpAdherence(totalReal, totalLinhaBase),
-          };
-        });
-
-      return { unit, months, rows };
-    });
-
-  return {
-    ...base,
-    selectedYear: options.year,
-    monthStart,
-    monthEnd,
-    monthly,
-    groups: {
-      civil: disciplineGroup("civil", "Civil", [1], base.disciplinas),
-      mecanica: disciplineGroup("mecanica", "Mecânica", [2], base.disciplinas),
-      eia: disciplineGroup("eia", "EIA", [4, 5, 6], base.disciplinas),
-    },
-    unitDetails,
-  };
-}
-
-/**
- * Consolida, por disciplina e mês, os dois semestres operacionais do IDP.
- *
- * O ano informado é o ano de referência do filtro geral:
- *  - Dezembro do ano anterior a Maio do ano selecionado;
- *  - Junho a Novembro do ano selecionado.
- *
- * Cada célula soma Linha de Base e Real de todas as unidades antes de calcular
- * a aderência. Os seis meses são mantidos na tabela mesmo quando não há dados,
- * evitando que a estrutura mude durante o semestre.
- */
-export function computeIdpSemesterDisciplineDetails(
-  records: readonly IdpNormalizedRecord[],
-  referenceYear: number,
-): IdpSemesterDisciplineDetail[] {
-  const definitions: Array<{
-    key: IdpSemesterDisciplineDetail["key"];
-    label: string;
-    months: Array<{ year: number; month: number }>;
-  }> = [
-    {
-      key: "dec-may",
-      label: "Dezembro a maio",
-      months: [
-        { year: referenceYear - 1, month: 12 },
-        ...Array.from({ length: 5 }, (_, index) => ({
-          year: referenceYear,
-          month: index + 1,
-        })),
-      ],
-    },
-    {
-      key: "jun-nov",
-      label: "Junho a novembro",
-      months: Array.from({ length: 6 }, (_, index) => ({
-        year: referenceYear,
-        month: index + 6,
-      })),
-    },
-  ];
-
-  return definitions.map((definition) => {
-    const monthKeys = new Set(
-      definition.months.map(({ year, month }) => `${year}-${month}`),
-    );
-    const byDiscipline = new Map<
-      string,
-      Map<string, { lb: number; real: number }>
-    >();
-
-    for (const record of records) {
-      const disciplina = String(record.disciplina ?? "").trim();
-      const key = `${record.year}-${record.month}`;
-      if (!disciplina || !monthKeys.has(key)) continue;
-
-      let monthMap = byDiscipline.get(disciplina);
-      if (!monthMap) {
-        monthMap = new Map();
-        byDiscipline.set(disciplina, monthMap);
+    for (const entry of activeEntries) {
+      for (const area of entry.discData?.[discipline] ?? []) {
+        entries.push({ ...area, unit: entry.unit });
       }
-
-      const current = monthMap.get(key) ?? { lb: 0, real: 0 };
-      current.lb += Number(record.custoLinhaBase) || 0;
-      current.real += Number(record.custoReal) || 0;
-      monthMap.set(key, current);
     }
 
-    const months = definition.months.map(({ year, month }) => ({
-      year,
-      month,
-      label: `${MONTH_NAMES_FULL[month - 1] ?? String(month)}/${year}`,
-    }));
+    if (!entries.length) {
+      return {
+        discipline,
+        entries: [],
+        prevAvg: null,
+        realAvg: null,
+        aderencia: null,
+        unitGroups: [],
+      };
+    }
 
-    let totalLinhaBase = 0;
-    let totalReal = 0;
-    const rows = Array.from(byDiscipline.entries())
-      .sort(
-        (a, b) =>
-          disciplineSortKey(a[0]) - disciplineSortKey(b[0]) ||
-          a[0].localeCompare(b[0], "pt-BR"),
-      )
-      .map(([disciplina, monthMap]) => {
-        let rowLinhaBase = 0;
-        let rowReal = 0;
-        const values = months.map(({ year, month }) => {
-          const value = monthMap.get(`${year}-${month}`) ?? { lb: 0, real: 0 };
-          rowLinhaBase += value.lb;
-          rowReal += value.real;
-          return {
-            year,
-            month,
-            custoLinhaBase: value.lb,
-            custoReal: value.real,
-            aderencia: calculateIdpAdherence(value.real, value.lb),
-          };
-        });
+    const prevAvg = average(entries.map((item) => item.prevAcum));
+    const realAvg = average(entries.map((item) => item.realAcum));
+    const grouped = new Map<string, IdpRsoAreaValue[]>();
 
-        totalLinhaBase += rowLinhaBase;
-        totalReal += rowReal;
+    for (const item of entries) {
+      const values = grouped.get(item.unit) ?? [];
+      values.push({ area: item.area, prevAcum: item.prevAcum, realAcum: item.realAcum });
+      grouped.set(item.unit, values);
+    }
 
+    const unitGroups: IdpDisciplineUnitGroup[] = Array.from(grouped.entries())
+      .map(([unit, unitEntries]) => {
+        const unitPrevAvg = average(unitEntries.map((item) => item.prevAcum));
+        const unitRealAvg = average(unitEntries.map((item) => item.realAcum));
         return {
-          disciplina,
-          values,
-          totalLinhaBase: rowLinhaBase,
-          totalReal: rowReal,
-          aderencia: calculateIdpAdherence(rowReal, rowLinhaBase),
+          unit,
+          entries: unitEntries,
+          prevAvg: unitPrevAvg,
+          realAvg: unitRealAvg,
+          aderencia: calculateIdpAdherence(unitRealAvg, unitPrevAvg),
         };
-      });
-
-    const firstMonth = months[0]!;
-    const lastMonth = months.at(-1)!;
+      })
+      .sort((a, b) => a.unit.localeCompare(b.unit, "pt-BR"));
 
     return {
-      key: definition.key,
-      label: definition.label,
-      periodLabel: `${MONTH_NAMES_FULL[firstMonth.month - 1]}/${firstMonth.year} a ${MONTH_NAMES_FULL[lastMonth.month - 1]}/${lastMonth.year}`,
-      referenceYear,
-      months,
-      rows,
-      totalLinhaBase,
-      totalReal,
-      aderencia: calculateIdpAdherence(totalReal, totalLinhaBase),
+      discipline,
+      entries,
+      prevAvg,
+      realAvg,
+      aderencia: calculateIdpAdherence(realAvg, prevAvg),
+      unitGroups,
     };
   });
 }
 
-/** true se a aderência atinge a meta. */
+function buildUnitDetails(
+  activeEntries: readonly IdpNormalizedRecord[],
+  excludedDisciplines: readonly string[],
+): IdpUnitDetail[] {
+  return activeEntries.map((entry) => ({
+    unit: entry.unit,
+    disciplines: IDP_DISC_NAMES.filter(
+      (discipline) => !isIdpDisciplineExcluded(discipline, excludedDisciplines),
+    )
+      .map((discipline) => {
+        const areas = entry.discData?.[discipline] ?? [];
+        if (!areas.length) return null;
+        const prevAvg = average(areas.map((item) => item.prevAcum));
+        const realAvg = average(areas.map((item) => item.realAcum));
+        return {
+          discipline,
+          n: areas.length,
+          prevAvg,
+          realAvg,
+          aderencia: calculateIdpAdherence(realAvg, prevAvg),
+          areas,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null),
+  }));
+}
+
+function buildUnitRows(activeEntries: readonly IdpNormalizedRecord[]) {
+  return activeEntries.map((entry) => {
+    const fases = entry.execucaoFases ?? [];
+    const prevAcum = average(fases.map((phase) => Number(phase.prevAcum) || 0));
+    const realAcum = average(fases.map((phase) => Number(phase.realAcum) || 0));
+
+    return {
+      sourceId: entry.id,
+      unit: entry.unit,
+      rsoNumero: entry.rsoNumero,
+      referenceDate: entry.referenceDate,
+      fileName: entry.fileName,
+      prevAcum,
+      realAcum,
+      aderencia: calculateIdpAdherence(realAcum, prevAcum),
+      nFases: fases.length,
+      fases,
+    };
+  });
+}
+
+function endOfMonthUtc(year: number, month: number): number {
+  return Date.UTC(year, month, 0, 23, 59, 59, 999);
+}
+
+function recordsAvailableAt(
+  entries: readonly IdpNormalizedRecord[],
+  year: number,
+  month: number,
+): IdpNormalizedRecord[] {
+  const limit = endOfMonthUtc(year, month);
+  return entries.filter((entry) => referenceTime(entry) <= limit);
+}
+
+function monthlyResult(
+  entries: readonly IdpNormalizedRecord[],
+  selectedYear: number,
+  monthStart: number,
+  monthEnd: number,
+): IdpMonthlyAggregate[] {
+  const rows: IdpMonthlyAggregate[] = [];
+
+  for (let month = monthStart; month <= monthEnd; month += 1) {
+    const activeEntries = selectLatestRsoByUnit(recordsAvailableAt(entries, selectedYear, month));
+    const unitRows = buildUnitRows(activeEntries);
+    rows.push({
+      year: selectedYear,
+      month,
+      label: `${MONTH_NAMES[month - 1] ?? month}/${selectedYear}`,
+      aderencia: unitRows.length ? average(unitRows.map((unit) => unit.aderencia)) : null,
+      activeDocuments: unitRows.length,
+      totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
+      totalRealMedio: unitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
+    });
+  }
+
+  return rows;
+}
+
+function boundedMonth(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(12, Math.trunc(value ?? fallback)));
+}
+
+function resolveYear(entries: readonly IdpNormalizedRecord[], requested?: number): number {
+  if (Number.isInteger(requested) && (requested ?? 0) >= 2000 && (requested ?? 0) <= 2100) {
+    return requested!;
+  }
+  const years = entries
+    .map((entry) => Number(entry.referenceDate.slice(0, 4)))
+    .filter((year) => Number.isInteger(year) && year >= 2000 && year <= 2100);
+  return years.length ? Math.max(...years) : new Date().getFullYear();
+}
+
+export function computeIdpResult(
+  entries: readonly IdpNormalizedRecord[],
+  threshold: number = IDP_DEFAULT_TARGET,
+  excludedDisciplines: readonly string[] = [],
+  options: IdpPeriodOptions = {},
+): IdpDetailedResult {
+  const selectedYear = resolveYear(entries, options.selectedYear);
+  let monthStart = boundedMonth(options.monthStart, IDP_DEFAULT_MONTH_START);
+  let monthEnd = boundedMonth(options.monthEnd, IDP_DEFAULT_MONTH_END);
+  if (monthEnd < monthStart) [monthStart, monthEnd] = [monthEnd, monthStart];
+
+  const availableEntries = recordsAvailableAt(entries, selectedYear, monthEnd);
+  const activeEntries = selectLatestRsoByUnit(availableEntries);
+  const unitRows = buildUnitRows(activeEntries);
+  const disciplineRows = buildDisciplineRows(activeEntries, excludedDisciplines);
+  const unitDetails = buildUnitDetails(activeEntries, excludedDisciplines);
+  const aderenciaGeral = average(unitRows.map((unit) => unit.aderencia));
+
+  return {
+    threshold,
+    selectedYear,
+    monthStart,
+    monthEnd,
+    aderenciaGeral,
+    unitRows,
+    disciplineRows,
+    unitDetails,
+    unitNames: activeEntries.map((entry) => entry.unit),
+    activeDocuments: activeEntries.length,
+    totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
+    totalRealMedio: unitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
+    monthly: monthlyResult(entries, selectedYear, monthStart, monthEnd),
+  };
+}
+
+/** Alias mantido para integrações que importavam o nome antigo. */
+export const computeIdpDetailedResult = computeIdpResult;
+
 export function meetsTarget(adherence: number, threshold: number): boolean {
   return adherence >= threshold;
 }

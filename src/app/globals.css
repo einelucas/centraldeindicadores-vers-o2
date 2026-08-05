@@ -2521,3 +2521,443 @@ table.data,
     padding-right: 12px;
   }
 }
+
+/* ===== IDP RSO: administração e tabelas hierárquicas ===== */
+.idp-admin-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.idp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid #dfe5ee;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(35, 55, 86, 0.05);
+}
+
+.idp-toolbar label {
+  color: var(--texto-suave);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.idp-toolbar input {
+  width: 88px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  background: #fff;
+  font-weight: 650;
+}
+
+.idp-publish-button {
+  margin-left: auto;
+  border-color: var(--verde) !important;
+  background: var(--verde) !important;
+}
+
+.idp-publication-status,
+.idp-help-text {
+  color: var(--texto-suave);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.idp-section-card {
+  padding: 18px;
+  border: 1px solid #dfe5ee;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(35, 55, 86, 0.055);
+}
+
+.idp-config-card {
+  background: #f8fafc;
+}
+
+.idp-config-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.idp-config-row textarea {
+  min-height: 92px;
+  flex: 1 1 520px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.idp-pending-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.idp-pending-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(320px, 2fr) 34px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.idp-pending-card.is-error {
+  border-color: #efc6c1;
+  background: #fff6f5;
+}
+
+.idp-pending-file {
+  overflow: hidden;
+  color: #24456d;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.idp-pending-error {
+  color: var(--vermelho);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.idp-pending-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.45fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.idp-pending-fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--texto-suave);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.idp-pending-fields input {
+  min-height: 36px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #cfd9e6;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--texto);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.idp-pending-fields > span {
+  align-self: center;
+  color: var(--texto-suave);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.idp-remove-file {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #7d8898;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.idp-remove-file:hover {
+  background: #edf2f7;
+  color: var(--vermelho);
+}
+
+.idp-metric-grid {
+  margin: 0;
+}
+
+.idp-expandable-row {
+  cursor: pointer;
+}
+
+.idp-expandable-row:hover td {
+  background: #eef5ff !important;
+}
+
+.idp-detail-row td {
+  background: #f5f7fa !important;
+  color: #58667a !important;
+  font-size: 11px !important;
+}
+
+.idp-detail-row td:nth-child(2) {
+  padding-left: 26px !important;
+  font-weight: 600;
+}
+
+.idp-chevron {
+  display: inline-block;
+  color: #304f7e;
+  font-size: 13px;
+  font-weight: 900;
+  transition: transform 0.16s ease;
+}
+
+.idp-chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.idp-empty-state {
+  margin-top: 0 !important;
+  border: 1px dashed #cbd6e4;
+  border-radius: 16px;
+  background: #fbfcfe;
+}
+
+.idp-panel-rso {
+  display: block;
+  margin-top: 2px;
+  color: #a2a9b3;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+@media (max-width: 920px) {
+  .idp-publish-button {
+    margin-left: 0;
+  }
+
+  .idp-pending-card {
+    grid-template-columns: 1fr 34px;
+  }
+
+  .idp-pending-fields {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .idp-remove-file {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 680px) {
+  .idp-toolbar > * {
+    flex: 1 1 auto;
+  }
+
+  .idp-toolbar label {
+    flex-basis: 100%;
+  }
+
+  .idp-toolbar input {
+    flex: 0 0 88px;
+  }
+
+  .idp-section-card {
+    padding: 13px;
+    border-radius: 13px;
+  }
+
+  .idp-config-row,
+  .idp-pending-fields {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .idp-pending-fields > span {
+    white-space: normal;
+  }
+}
+
+/* IDP RSO — filtros de competência e série mensal publicada */
+.idp-toolbar select,
+.idp-toolbar input {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--texto);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.idp-toolbar select {
+  min-width: 118px;
+}
+
+.idp-toolbar #idpYear {
+  min-width: 88px;
+}
+
+.idp-period-hint {
+  margin-top: -8px;
+  padding: 0 4px;
+  color: var(--texto-suave);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.idp-pending-fields {
+  grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.42fr) minmax(145px, 0.55fr) auto;
+}
+
+/* Painel publicado do IDP — disciplina à esquerda e coluna compacta à direita */
+.idp-published-analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(340px, 0.86fr) minmax(520px, 1.4fr);
+  gap: 11px;
+  align-items: stretch;
+  margin-bottom: 11px;
+}
+
+.idp-published-discipline-card,
+.idp-published-side-stack > .card {
+  margin-bottom: 0 !important;
+}
+
+.idp-published-discipline-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.idp-published-discipline-chart {
+  flex: 1 1 auto;
+  height: auto !important;
+  min-height: 330px !important;
+}
+
+.idp-published-side-stack {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 11px;
+}
+
+.idp-published-units-card {
+  align-self: start;
+  padding-bottom: 12px !important;
+}
+
+.idp-published-units-card .ct {
+  margin-bottom: 8px;
+}
+
+.idp-published-units-list {
+  max-height: 156px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.idp-published-units-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.idp-published-units-list::-webkit-scrollbar-thumb {
+  background: #d8dde5;
+  border-radius: 999px;
+}
+
+.idp-published-units-list .urow:last-child {
+  margin-bottom: 0;
+}
+
+.idp-published-monthly-card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  margin-top: 0;
+}
+
+.idp-published-monthly-chart {
+  height: 250px !important;
+  min-height: 250px !important;
+}
+
+@media (max-width: 980px) {
+  .idp-published-analysis-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .idp-published-discipline-chart {
+    flex: none;
+    height: 310px !important;
+    min-height: 310px !important;
+  }
+
+  .idp-published-units-list {
+    max-height: 210px;
+  }
+
+  .idp-published-monthly-chart {
+    height: 290px !important;
+    min-height: 290px !important;
+  }
+}
+
+@media (max-width: 1080px) {
+  .idp-pending-fields {
+    grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.5fr) minmax(145px, 0.6fr);
+  }
+
+  .idp-pending-fields > span {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .idp-toolbar select,
+  .idp-toolbar input {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .idp-pending-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .idp-published-analysis-grid,
+  .idp-published-side-stack {
+    gap: 9px;
+  }
+
+  .idp-published-discipline-chart,
+  .idp-published-monthly-chart {
+    height: 260px !important;
+    min-height: 260px !important;
+  }
+
+  .idp-published-units-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+}

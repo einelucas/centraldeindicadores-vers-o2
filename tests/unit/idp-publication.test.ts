@@ -1,59 +1,39 @@
 import { describe, expect, it } from "vitest";
-
-import { computeIdpDetailedResult } from "@/features/idp/calculations";
+import { computeIdpResult } from "@/features/idp/calculations";
 import { toIdpPublishedPayload } from "@/features/idp/publications";
 import type { IdpNormalizedRecord } from "@/features/idp/types";
 
-function record(
-  month: number,
-  custoLinhaBase: number,
-  custoReal: number,
-): IdpNormalizedRecord {
+function record(): IdpNormalizedRecord {
   return {
     unit: "INPASA Sinop",
-    year: 2026,
-    month,
-    disciplina: "01 Civil",
-    custoLinhaBase,
-    custoReal,
+    rsoNumero: 12,
+    referenceDate: "2026-08-05",
+    fileName: "rso-12.pdf",
+    areas: ["Área 1"],
+    execucaoFases: [{ prevAcum: 100, realAcum: 95.5 }],
+    discData: {
+      "01 - Civil": [{ area: "Área 1", prevAcum: 100, realAcum: 95.5 }],
+      "04 - Elétrica": [{ area: "Área 1", prevAcum: 100, realAcum: 99 }],
+    },
     raw: {},
   };
 }
 
-describe("toIdpPublishedPayload", () => {
-  it("preserva duas casas decimais e não transforma mês sem linha de base em zero", () => {
-    const result = computeIdpDetailedResult(
-      [record(6, 300, 268.65), record(7, 0, 0)],
-      { year: 2026, monthStart: 6, monthEnd: 7, threshold: 0.9 },
-    );
+describe("toIdpPublishedPayload — RSO", () => {
+  it("publica unidades, disciplinas e competência da publicação", () => {
+    const result = computeIdpResult([record()], 0.98, [], { selectedYear: 2026, monthStart: 8, monthEnd: 8 });
+    const payload = toIdpPublishedPayload(result, 98);
 
-    const payload = toIdpPublishedPayload(result, 90);
-
-    expect(payload.resultado).toBe(89.55);
-    expect(payload.mensal).toEqual([
-      {
-        label: "Junho/2026",
-        v: 89.55,
-        linhaBase: 300,
-        real: 268.65,
-      },
-      {
-        label: "Julho/2026",
-        v: null,
-        linhaBase: 0,
-        real: 0,
-      },
-    ]);
+    expect(payload.resultado).toBe(95.5);
+    expect(payload.documentosAtivos).toBe(1);
+    expect(payload.civil).toBe(95.5);
+    expect(payload.eletrica).toBe(99);
+    expect(payload.unidades[0]).toEqual({ n: "Sinop", v: 95.5, rsoNumero: 12, referenceDate: "2026-08-05" });
+    expect(payload.mensal[0]?.label).toBe("Ago/2026");
   });
 
-  it("impede publicação quando o período inteiro não possui linha de base", () => {
-    const result = computeIdpDetailedResult(
-      [record(6, 0, 0)],
-      { year: 2026, monthStart: 6, monthEnd: 6, threshold: 0.9 },
-    );
-
-    expect(() => toIdpPublishedPayload(result, 90)).toThrow(
-      "Não há custo de linha de base válido",
-    );
+  it("impede publicação sem RSO ativo", () => {
+    const result = computeIdpResult([], 0.98);
+    expect(() => toIdpPublishedPayload(result, 98)).toThrow("Não há documentos RSO ativos");
   });
 });

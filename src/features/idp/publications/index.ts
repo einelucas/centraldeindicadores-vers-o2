@@ -1,10 +1,15 @@
 import type { IdpDetailedResult } from "@/features/idp/types";
-import {
-  IDP_SCORECARD_POINTS,
-  IDP_SCORECARD_WEIGHT,
-} from "@/features/idp/types";
+import { IDP_SCORECARD_POINTS, IDP_SCORECARD_WEIGHT } from "@/features/idp/types";
 
 export interface IdpPublishedUnit {
+  n: string;
+  v: number;
+  /** Ausente em snapshots anteriores à migração para RSO. */
+  rsoNumero?: number | null;
+  referenceDate?: string;
+}
+
+export interface IdpPublishedDiscipline {
   n: string;
   v: number;
 }
@@ -12,9 +17,9 @@ export interface IdpPublishedUnit {
 export interface IdpPublishedMonth {
   label: string;
   v: number | null;
-  /** Disponível nas publicações novas; versões antigas podem não possuir. */
   linhaBase?: number;
   real?: number;
+  activeDocuments?: number;
 }
 
 export interface IdpPublishedPayload {
@@ -22,61 +27,83 @@ export interface IdpPublishedPayload {
   peso: number;
   meta: number;
   resultado: number;
-  civil: number;
-  mecanica: number;
-  eia: number;
+  civil: number | null;
+  mecanica: number | null;
+  /** Campos RSO podem não existir em snapshots antigos do IDP. */
+  eletrica?: number | null;
+  /** Alias de compatibilidade com snapshots antigos. */
+  eia: number | null;
+  documentosAtivos?: number;
+  totalPrevistoMedio?: number;
+  totalRealMedio?: number;
+  /** Campos legados mantidos para o scorecard já existente. */
+  totalLinhaBase: number;
+  totalReal: number;
   selectedYear: number;
   monthStart: number;
   monthEnd: number;
-  totalLinhaBase: number;
-  totalReal: number;
   unidades: IdpPublishedUnit[];
+  disciplinas?: IdpPublishedDiscipline[];
   mensal: IdpPublishedMonth[];
 }
 
 function roundPercent(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.round(value * 10_000) / 100;
 }
 
-/** Converte somente resultados calculados a partir do banco em snapshot publicado. */
+function disciplinePercent(result: IdpDetailedResult, name: string): number | null {
+  const row = result.disciplineRows.find((item) => item.discipline === name);
+  return row?.aderencia === null || row?.aderencia === undefined
+    ? null
+    : roundPercent(row.aderencia);
+}
+
+/** Converte o cálculo RSO em snapshot imutável do painel. */
 export function toIdpPublishedPayload(
   result: IdpDetailedResult,
   targetPercent: number,
 ): IdpPublishedPayload {
-  if (result.totalLinhaBase <= 0) {
-    throw new Error(
-      "Não há custo de linha de base válido no período selecionado para publicar.",
-    );
+  if (!result.activeDocuments) {
+    throw new Error("Não há documentos RSO ativos para publicar.");
   }
+
+  const resultado = roundPercent(result.aderenciaGeral);
+  const eletrica = disciplinePercent(result, "04 - Elétrica");
 
   return {
     pontos: IDP_SCORECARD_POINTS,
     peso: IDP_SCORECARD_WEIGHT,
     meta: targetPercent,
-    resultado: roundPercent(result.aderenciaGeral * 100),
-    civil: roundPercent(result.groups.civil.aderencia * 100),
-    mecanica: roundPercent(result.groups.mecanica.aderencia * 100),
-    eia: roundPercent(result.groups.eia.aderencia * 100),
+    resultado,
+    civil: disciplinePercent(result, "01 - Civil"),
+    mecanica: disciplinePercent(result, "02 - Mecânica"),
+    eletrica,
+    eia: eletrica,
+    documentosAtivos: result.activeDocuments,
+    totalPrevistoMedio: result.totalPrevistoMedio,
+    totalRealMedio: result.totalRealMedio,
+    totalLinhaBase: result.totalPrevistoMedio,
+    totalReal: result.totalRealMedio,
     selectedYear: result.selectedYear,
     monthStart: result.monthStart,
     monthEnd: result.monthEnd,
-    totalLinhaBase: result.totalLinhaBase,
-    totalReal: result.totalReal,
-    unidades: result.units
-      .filter((unit) => unit.custoLinhaBase > 0)
+    unidades: result.unitRows
       .map((unit) => ({
-        n: unit.name.replace(/^INPASA\s*/i, "").trim(),
-        v: roundPercent(unit.aderencia * 100),
+        n: unit.unit.replace(/^INPASA\s*/i, "").trim(),
+        v: roundPercent(unit.aderencia),
+        rsoNumero: unit.rsoNumero,
+        referenceDate: unit.referenceDate,
       }))
       .sort((a, b) => b.v - a.v),
+    disciplinas: result.disciplineRows
+      .filter((row) => row.aderencia !== null)
+      .map((row) => ({ n: row.discipline, v: roundPercent(row.aderencia ?? 0) })),
     mensal: result.monthly.map((month) => ({
       label: month.label,
-      v:
-        month.custoLinhaBase > 0
-          ? roundPercent(month.aderencia * 100)
-          : null,
-      linhaBase: month.custoLinhaBase,
-      real: month.custoReal,
+      v: month.aderencia === null ? null : roundPercent(month.aderencia),
+      linhaBase: month.totalPrevistoMedio,
+      real: month.totalRealMedio,
+      activeDocuments: month.activeDocuments,
     })),
   };
 }

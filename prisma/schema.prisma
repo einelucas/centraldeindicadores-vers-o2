@@ -298,6 +298,32 @@ model IdpRecord {
   @@index([unit])
 }
 
+model IdpRsoRecord {
+  id             String   @id @default(uuid())
+  businessKey    String   @unique
+  contentHash    String
+  // Documento RSO normalizado. O maior rsoNumero de cada unidade é o ativo.
+  unit            String
+  rsoNumero       Int?
+  referenceDate   DateTime @default(now())
+  fileName        String
+  areas           Json
+  discData        Json
+  execucaoFases   Json
+  raw              Json
+  firstImportId   String
+  lastImportId    String
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([unit])
+  @@index([unit, rsoNumero])
+  @@index([referenceDate])
+  @@index([updatedAt])
+}
+
 model RncRecord {
   id            String   @id @default(uuid())
   businessKey   String   @unique

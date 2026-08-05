@@ -1,49 +1,35 @@
-/**
- * Repositório do IDP. Isola o Prisma e implementa o RecordDelegate do motor
- * de importação incremental. Roda dentro de uma transação passada pelo serviço.
- */
+/** Repositório dos documentos RSO do IDP. */
 
 import type { Prisma } from "@prisma/client";
 import { toJsonValue } from "@/server/database/json";
-import type {
-  IncrementalRecord,
-  RecordDelegate,
-} from "@/importers/shared/incremental-upsert";
+import type { IncrementalRecord, RecordDelegate } from "@/importers/shared/incremental-upsert";
+import type { IdpNormalizedRecord } from "@/features/idp/types";
 
 type Tx = Prisma.TransactionClient;
-
-interface IdpData {
-  unit: string;
-  year: number;
-  month: number;
-  disciplina: string;
-  custoLinhaBase: number;
-  custoReal: number;
-  raw: Record<string, unknown>;
-}
 
 export function createIdpDelegate(tx: Tx): RecordDelegate {
   return {
     async findByBusinessKey(businessKey: string) {
-      return tx.idpRecord.findUnique({
+      return tx.idpRsoRecord.findUnique({
         where: { businessKey },
         select: { contentHash: true },
       });
     },
 
     async insert(record: IncrementalRecord, importId: string) {
-      const d = record.data as unknown as IdpData;
-      await tx.idpRecord.create({
+      const data = record.data as unknown as IdpNormalizedRecord;
+      await tx.idpRsoRecord.create({
         data: {
           businessKey: record.businessKey,
           contentHash: record.contentHash,
-          unit: d.unit,
-          year: d.year,
-          month: d.month,
-          disciplina: d.disciplina,
-          custoLinhaBase: d.custoLinhaBase,
-          custoReal: d.custoReal,
-          raw: toJsonValue(d.raw),
+          unit: data.unit,
+          rsoNumero: data.rsoNumero,
+          referenceDate: new Date(`${data.referenceDate}T12:00:00Z`),
+          fileName: data.fileName,
+          areas: toJsonValue(data.areas),
+          discData: toJsonValue(data.discData),
+          execucaoFases: toJsonValue(data.execucaoFases),
+          raw: toJsonValue(data.raw),
           firstImportId: importId,
           lastImportId: importId,
         },
@@ -51,14 +37,19 @@ export function createIdpDelegate(tx: Tx): RecordDelegate {
     },
 
     async update(record: IncrementalRecord, importId: string) {
-      const d = record.data as unknown as IdpData;
-      await tx.idpRecord.update({
+      const data = record.data as unknown as IdpNormalizedRecord;
+      await tx.idpRsoRecord.update({
         where: { businessKey: record.businessKey },
         data: {
           contentHash: record.contentHash,
-          custoLinhaBase: d.custoLinhaBase,
-          custoReal: d.custoReal,
-          raw: toJsonValue(d.raw),
+          unit: data.unit,
+          rsoNumero: data.rsoNumero,
+          referenceDate: new Date(`${data.referenceDate}T12:00:00Z`),
+          fileName: data.fileName,
+          areas: toJsonValue(data.areas),
+          discData: toJsonValue(data.discData),
+          execucaoFases: toJsonValue(data.execucaoFases),
+          raw: toJsonValue(data.raw),
           lastImportId: importId,
           lastSeenAt: new Date(),
         },
@@ -67,13 +58,8 @@ export function createIdpDelegate(tx: Tx): RecordDelegate {
   };
 }
 
-/** Lê registros IDP (opcionalmente de um período) para recálculo. */
-export async function loadIdpRecords(
-  tx: Tx,
-  filter?: { year?: number; month?: number },
-) {
-  return tx.idpRecord.findMany({
-    where: { year: filter?.year, month: filter?.month },
-    orderBy: [{ unit: "asc" }, { disciplina: "asc" }],
+export async function loadIdpRecords(tx: Tx) {
+  return tx.idpRsoRecord.findMany({
+    orderBy: [{ referenceDate: "desc" }, { unit: "asc" }, { rsoNumero: "desc" }],
   });
 }
