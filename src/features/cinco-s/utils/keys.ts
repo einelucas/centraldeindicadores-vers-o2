@@ -11,10 +11,11 @@
 
 import { makeBusinessKey, makeContentHash } from "@/lib/hashing";
 import type { FiveSNormalizedRecord } from "@/features/cinco-s/types";
+import { normalizeFiveSUnitCode } from "@/features/cinco-s/utils/units";
 
 export function fiveSBusinessKey(record: FiveSNormalizedRecord): string {
   return makeBusinessKey("5S", [
-    record.unit,
+    normalizeFiveSUnitCode(record.unit),
     String(record.year),
     String(record.month),
   ]);

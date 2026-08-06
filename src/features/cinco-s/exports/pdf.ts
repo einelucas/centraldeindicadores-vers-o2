@@ -1,6 +1,10 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { FiveSResult } from "@/features/cinco-s/types";
+import {
+  compareFiveSUnits,
+  formatFiveSUnitLabel,
+} from "@/features/cinco-s/utils/units";
 
 function pct(value: number | null): string {
   return value === null ? "—" : `${(value * 100).toFixed(1).replace(".", ",")}%`;
@@ -18,7 +22,7 @@ export function exportFiveSPdf(result: FiveSResult): void {
   doc.setFontSize(9);
   doc.setTextColor(110, 110, 110);
   doc.text(
-    `Gerado em ${today} · meta global: ${(result.threshold * 100).toFixed(0)}% · excluídas do GERAL: ${result.excludedUnits.join(", ") || "nenhuma"}`,
+    `Gerado em ${today} · meta global: ${(result.threshold * 100).toFixed(0)}% · excluídas do GERAL: ${result.excludedUnits.map(formatFiveSUnitLabel).join(", ") || "nenhuma"}`,
     40,
     60,
   );
@@ -29,16 +33,16 @@ export function exportFiveSPdf(result: FiveSResult): void {
   doc.text(`GERAL (${result.periodLabel}): ${pct(result.geral)}`, 40, 82);
 
   const monthKeys = result.months.map((month) => `${month.year}-${month.month}`);
-  const units = Array.from(new Set(result.unitMonths.map((item) => item.unit))).sort(
-    (a, b) => a.localeCompare(b, "pt-BR"),
-  );
+  const units = Array.from(
+    new Set(result.unitMonths.map((item) => item.unit)),
+  ).sort(compareFiveSUnits);
 
   autoTable(doc, {
     startY: 96,
     head: [["Unidade", ...result.months.map((month) => month.label)]],
     body: [
       ...units.map((unit) => [
-        `${unit}${result.excludedUnits.includes(unit.toUpperCase()) ? " (excluída)" : ""}`,
+        `${formatFiveSUnitLabel(unit)}${result.excludedUnits.includes(unit) ? " (excluída)" : ""}`,
         ...monthKeys.map((key) => {
           const [year, month] = key.split("-").map(Number);
           const item = result.unitMonths.find(

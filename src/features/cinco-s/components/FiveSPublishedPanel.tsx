@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
 import type { FiveSPublishedPayload } from "@/features/cinco-s/publications";
+import { formatFiveSUnitLabel } from "@/features/cinco-s/utils/units";
 
 interface PublicationResponse {
   publication: null | {
@@ -275,7 +276,7 @@ export function FiveSPublishedPanel() {
 
                 return (
                   <div className="urow" key={unit.n}>
-                    <div className="uname">{unit.n}</div>
+                    <div className="uname">{formatFiveSUnitLabel(unit.n)}</div>
 
                     <div className="utrack">
                       <div
@@ -313,7 +314,7 @@ export function FiveSPublishedPanel() {
             </div>
 
             <p className="ps">
-              {data.excludedUnits.join(", ")}
+              {data.excludedUnits.map(formatFiveSUnitLabel).join(", ")}
             </p>
           </div>
         ) : null}

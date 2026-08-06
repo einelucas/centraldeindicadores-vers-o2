@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
+import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { importRncFiles } from "@/features/rnc/importers";
 import { exportRncPdf } from "@/features/rnc/exports/pdf";
 import {
@@ -10,6 +11,10 @@ import {
   type RncNormalizedRecord,
   type RncResult,
 } from "@/features/rnc/types";
+import {
+  formatRncUnitLabel,
+  RNC_UNITS,
+} from "@/features/rnc/utils/units";
 
 interface ApiResponse {
   total: number;
@@ -78,6 +83,9 @@ export function RncView({
   const [data, setData] = useState<ApiResponse | null>(null);
   const [metaDias, setMetaDias] = useState(RNC_DEFAULT_MAX_DIAS);
   const [selectedMonth, setSelectedMonth] = useState("");
+  const [unitFilter, setUnitFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [publication, setPublication] =
@@ -330,6 +338,64 @@ export function RncView({
   const progressPct = progress?.totalBatches
     ? Math.round((progress.currentBatch / progress.totalBatches) * 100)
     : 0;
+  const orderedUnits = useMemo(() => {
+    if (!result) return [];
+    const order = new Map(RNC_UNITS.map((unit, index) => [unit.code, index]));
+    return [...result.units].sort((a, b) => {
+      const aOrder = order.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+      const bOrder = order.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+      return aOrder - bOrder || a.name.localeCompare(b.name, "pt-BR");
+    });
+  }, [result]);
+  const filteredUnits = useMemo(() => {
+    return unitFilter === "all"
+      ? orderedUnits
+      : orderedUnits.filter((unit) => unit.name === unitFilter);
+  }, [orderedUnits, unitFilter]);
+  const availableYears = useMemo(() => {
+    if (!result) return [];
+    return Array.from(new Set(result.months.map((month) => month.year))).sort(
+      (a, b) => b - a,
+    );
+  }, [result]);
+  const availableMonths = useMemo(() => {
+    if (!result) return [];
+    return Array.from(new Set(result.months.map((month) => month.month))).sort(
+      (a, b) => a - b,
+    );
+  }, [result]);
+  const filteredMonths = useMemo(() => {
+    if (!result) return [];
+    return result.months.filter((month) => {
+      const matchesYear =
+        yearFilter === "all" || month.year === Number(yearFilter);
+      const matchesMonth =
+        monthFilter === "all" || month.month === Number(monthFilter);
+      return matchesYear && matchesMonth;
+    });
+  }, [monthFilter, result, yearFilter]);
+
+  useEffect(() => {
+    if (!result) return;
+    if (
+      unitFilter !== "all" &&
+      !result.units.some((unit) => unit.name === unitFilter)
+    ) {
+      setUnitFilter("all");
+    }
+    if (
+      yearFilter !== "all" &&
+      !result.months.some((month) => month.year === Number(yearFilter))
+    ) {
+      setYearFilter("all");
+    }
+    if (
+      monthFilter !== "all" &&
+      !result.months.some((month) => month.month === Number(monthFilter))
+    ) {
+      setMonthFilter("all");
+    }
+  }, [monthFilter, result, unitFilter, yearFilter]);
 
   return (
     <>
@@ -544,102 +610,194 @@ export function RncView({
             </div>
           </div>
 
-          <div className="subtitle-block">
-            <h3>Por mês</h3>
-            <p>
-              RNC elaboradas, RNC tratadas e prazo médio de resolução pela data
-              de criação.
-            </p>
-          </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Mês</th>
-                  <th>RNC Elaboradas</th>
-                  <th>RNC Tratadas</th>
-                  <th>Dias de resolução</th>
-                  <th>Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.months.map((month) => (
-                  <tr key={monthKey(month.year, month.month)}>
-                    <td>{month.label}</td>
-                    <td className="num">{month.chamados}</td>
-                    <td className="num">{month.solucionados}</td>
-                    <td className="num">{formatDays(month.diasMedios)}</td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          month.diasMedios === null
-                            ? "info"
-                            : month.dentroMeta
-                              ? "ok"
-                              : "fail"
-                        }`}
-                      >
-                        {month.diasMedios === null
-                          ? "Sem tratativa"
-                          : month.dentroMeta
-                            ? "Dentro da meta"
-                            : "Fora da meta"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <div className="rdo-tables-stack">
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Por mês</h3>
+                  <p>
+                    RNC elaboradas, RNC tratadas e prazo médio de resolução pela
+                    data de criação.
+                  </p>
+                </div>
+                <div className="rdo-section-filters rdo-month-filters">
+                  <label htmlFor="rncMonthTableFilter">
+                    <span>Mês</span>
+                    <select
+                      id="rncMonthTableFilter"
+                      value={monthFilter}
+                      onChange={(event) => setMonthFilter(event.target.value)}
+                    >
+                      <option value="all">Todos os meses</option>
+                      {availableMonths.map((month) => (
+                        <option value={month} key={month}>
+                          {MONTH_NAMES_FULL[month] ?? `Mês ${month + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="rncYearTableFilter">
+                    <span>Ano</span>
+                    <select
+                      id="rncYearTableFilter"
+                      value={yearFilter}
+                      onChange={(event) => setYearFilter(event.target.value)}
+                    >
+                      <option value="all">Todos os anos</option>
+                      {availableYears.map((year) => (
+                        <option value={year} key={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Mês</th>
+                      <th>RNC Elaboradas</th>
+                      <th>RNC Tratadas</th>
+                      <th>Dias de resolução</th>
+                      <th>Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMonths.length ? (
+                      filteredMonths.map((month) => (
+                        <tr key={monthKey(month.year, month.month)}>
+                          <td>{month.label}</td>
+                          <td className="num">
+                            {month.chamados.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">
+                            {month.solucionados.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">{formatDays(month.diasMedios)}</td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                month.diasMedios === null
+                                  ? "info"
+                                  : month.dentroMeta
+                                    ? "ok"
+                                    : "fail"
+                              }`}
+                            >
+                              {month.diasMedios === null
+                                ? "Sem tratativa"
+                                : month.dentroMeta
+                                  ? "Dentro da meta"
+                                  : "Fora da meta"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="rdo-empty-row" colSpan={5}>
+                          Nenhum mês encontrado para os filtros selecionados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-          <div className="subtitle-block">
-            <h3>Por unidade</h3>
-          </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Unidade</th>
-                  <th>Criadas</th>
-                  <th>Tratadas</th>
-                  <th>Aderência</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.units.map((unit) => (
-                  <tr key={unit.name}>
-                    <td>{unit.name}</td>
-                    <td className="num">{unit.criadas}</td>
-                    <td className="num">{unit.tratadas}</td>
-                    <td className="num">{fmtPct(unit.aderencia)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="subtitle-block">
-            <h3>Por Ofensor (causa raiz)</h3>
-          </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Ofensor</th>
-                  <th>Qtd</th>
-                  <th>%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.ofensores.map((offender) => (
-                  <tr key={offender.name}>
-                    <td>{offender.name}</td>
-                    <td className="num">{offender.count}</td>
-                    <td className="num">{fmtPct(offender.pct)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Por unidade</h3>
+                  <p>
+                    RNC criadas, tratadas e aderência consolidada por unidade.
+                  </p>
+                </div>
+                <div className="rdo-section-filters">
+                  <label htmlFor="rncUnitFilter">
+                    <span>Unidade</span>
+                    <select
+                      id="rncUnitFilter"
+                      value={unitFilter}
+                      onChange={(event) => setUnitFilter(event.target.value)}
+                    >
+                      <option value="all">Todas as unidades</option>
+                      {orderedUnits.map((unit) => (
+                        <option value={unit.name} key={unit.name}>
+                          {formatRncUnitLabel(unit.name)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Unidade</th>
+                      <th>Criadas</th>
+                      <th>Tratadas</th>
+                      <th>Aderência</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUnits.length ? (
+                      filteredUnits.map((unit) => (
+                        <tr key={unit.name}>
+                          <td>{formatRncUnitLabel(unit.name)}</td>
+                          <td className="num">
+                            {unit.criadas.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">
+                            {unit.tratadas.toLocaleString("pt-BR")}
+                          </td>
+                          <td className="num">{fmtPct(unit.aderencia)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="rdo-empty-row" colSpan={4}>
+                          Nenhuma unidade encontrada para o filtro selecionado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Por Ofensor (causa raiz)</h3>
+                  <p>Distribuição das não conformidades por origem identificada.</p>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Ofensor</th>
+                      <th>Qtd</th>
+                      <th>%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.ofensores.map((offender) => (
+                      <tr key={offender.name}>
+                        <td>{offender.name}</td>
+                        <td className="num">
+                          {offender.count.toLocaleString("pt-BR")}
+                        </td>
+                        <td className="num">{fmtPct(offender.pct)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </div>
       ) : (

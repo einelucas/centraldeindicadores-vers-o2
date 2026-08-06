@@ -19,13 +19,14 @@ import {
   type FiveSNormalizedRecord,
 } from "@/features/cinco-s/types";
 import type { IncrementalRecord } from "@/importers/shared/incremental-upsert";
+import { normalizeFiveSUnitCode } from "@/features/cinco-s/utils/units";
 
 export const FIVES_EXCLUDED_SETTING = "fiveS.excludedUnits";
 export const FIVES_TARGET_SETTING = "fiveS.target";
 
 export function normalizeExcludedUnits(values: readonly string[]): string[] {
   return Array.from(
-    new Set(values.map((value) => value.trim().toUpperCase()).filter(Boolean)),
+    new Set(values.map(normalizeFiveSUnitCode).filter(Boolean)),
   );
 }
 
@@ -43,7 +44,7 @@ export function toIncrementalRecords(rawRecords: unknown[]): {
     }
     const input: FiveSRecordInput = parsed.data;
     const record: FiveSNormalizedRecord = {
-      unit: input.unit,
+      unit: normalizeFiveSUnitCode(input.unit),
       year: input.year,
       month: input.month,
       areas: input.areas as FiveSArea[],

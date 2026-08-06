@@ -2,6 +2,10 @@
 
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import {
+  compareAccidentUnits,
+  normalizeAccidentUnitCode,
+} from "@/features/taxa-acidentes/utils/units";
+import {
   type AccidentMonthlyInput,
   type AccidentRateResult,
   type AccidentUnitRecord,
@@ -50,11 +54,15 @@ export function computeAccidentRateResult(
   const totalCaf = monthly.reduce((sum, record) => sum + record.caf, 0);
 
   const units = [...unitRecords]
+    .map((record) => ({
+      ...record,
+      unit: normalizeAccidentUnitCode(record.unit),
+    }))
     .sort(
       (a, b) =>
         a.year - b.year ||
         a.month - b.month ||
-        a.unit.localeCompare(b.unit, "pt-BR"),
+        compareAccidentUnits(a.unit, b.unit),
     )
     .map((record) => ({
       ...record,

@@ -6,12 +6,16 @@ import {
   type AccidentUnitRecord,
 } from "@/features/taxa-acidentes/types";
 import { normalizeForMatch } from "@/lib/normalization";
+import {
+  compareAccidentUnits,
+  normalizeAccidentUnitCode,
+} from "@/features/taxa-acidentes/utils/units";
 import { toJsonValue } from "@/server/database/json";
 
 export const ACCIDENT_TARGET_SETTING_KEY = "taxa-acidentes.target";
 
 export function accidentUnitKey(unit: string): string {
-  return normalizeForMatch(unit);
+  return normalizeForMatch(normalizeAccidentUnitCode(unit));
 }
 
 export async function loadAccidentTarget(
@@ -61,7 +65,17 @@ export function unitRowsToRecords(
     caf: number;
   }[],
 ): AccidentUnitRecord[] {
-  return rows.map((row) => ({ ...row }));
+  return rows
+    .map((row) => {
+      const unit = normalizeAccidentUnitCode(row.unit || row.unitKey);
+      return { ...row, unit, unitKey: accidentUnitKey(unit) };
+    })
+    .sort(
+      (a, b) =>
+        a.year - b.year ||
+        a.month - b.month ||
+        compareAccidentUnits(a.unit, b.unit),
+    );
 }
 
 export async function loadAccidentRateData(tx: Prisma.TransactionClient) {

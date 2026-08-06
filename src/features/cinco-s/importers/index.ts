@@ -9,6 +9,7 @@ import type {
   FiveSArea,
   FiveSNormalizedRecord,
 } from "@/features/cinco-s/types";
+import { normalizeFiveSUnitCode } from "@/features/cinco-s/utils/units";
 
 export interface FiveSFileParseResult {
   fileName: string;
@@ -115,7 +116,7 @@ export async function parseFiveSFile(file: File): Promise<FiveSFileParseResult> 
       const parsed = parseFsWorkbookMatrix(sheet);
       if (!parsed) continue;
       result.records.push({
-        unit: sheetName.trim(),
+        unit: normalizeFiveSUnitCode(sheetName),
         year: parsed.auditDate.getFullYear(),
         month: parsed.auditDate.getMonth() + 1,
         areas: parsed.areas,
@@ -145,7 +146,7 @@ export async function importFiveSFiles(files: File[]): Promise<{
     const parsed = await parseFiveSFile(file);
     perFile.push(parsed);
     for (const record of parsed.records) {
-      const key = `${record.unit.trim().toUpperCase()}|||${record.year}-${record.month}`;
+      const key = `${normalizeFiveSUnitCode(record.unit)}|||${record.year}-${record.month}`;
       if (byKey.has(key)) duplicates++;
       byKey.set(key, record);
     }

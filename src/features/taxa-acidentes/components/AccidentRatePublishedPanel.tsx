@@ -17,6 +17,10 @@ import {
 } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
 import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/publications";
+import {
+  compareAccidentUnits,
+  normalizeAccidentUnitCode,
+} from "@/features/taxa-acidentes/utils/units";
 
 interface PublicationResponse {
   publication: null | {
@@ -102,10 +106,11 @@ export function AccidentRatePublishedPanel() {
     return units
       .filter((item) => periodKey(item.year, item.month) === activePeriod)
       .map((item) => ({
-        unidade: item.unidade,
+        unidade: normalizeAccidentUnitCode(item.unidade),
         caf: item.caf,
         saf: item.saf,
-      }));
+      }))
+      .sort((a, b) => compareAccidentUnits(a.unidade, b.unidade));
   }, [response, selectedPeriod, unitPeriods]);
 
   if (error) {
@@ -547,7 +552,7 @@ export function AccidentRatePublishedPanel() {
                     marginBottom: 6,
                   }}
                   itemStyle={{
-                    color: GOLD,
+                    color: BLUE,
                     fontWeight: 600,
                   }}
                 />
@@ -555,7 +560,7 @@ export function AccidentRatePublishedPanel() {
                 <Bar
                   dataKey="caf"
                   name="Acidentes CAF"
-                  fill={GOLD}
+                  fill={BLUE}
                   radius={[0, 8, 8, 0]}
                   maxBarSize={34}
                 >

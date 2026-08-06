@@ -3,6 +3,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
+import { MONTH_NAMES_FULL } from "@/lib/dates";
+import styles from "./FiveSView.module.css";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
 import {
@@ -13,6 +15,11 @@ import {
   type FiveSUnitMonth,
 } from "@/features/cinco-s/types";
 import { aderenciaArea } from "@/features/cinco-s/calculations";
+import {
+  compareFiveSUnits,
+  formatFiveSUnitLabel,
+  normalizeFiveSUnitCode,
+} from "@/features/cinco-s/utils/units";
 
 interface FiveSApiResponse {
   total: number;
@@ -67,7 +74,7 @@ function parseExcluded(value: string): string[] {
     new Set(
       value
         .split(",")
-        .map((item) => item.trim().toUpperCase())
+        .map(normalizeFiveSUnitCode)
         .filter(Boolean),
     ),
   );
@@ -106,6 +113,9 @@ export function FiveSView({
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [publication, setPublication] = useState<PublicationSummary | null>(null);
+  const [matrixUnitFilter, setMatrixUnitFilter] = useState("all");
+  const [matrixMonthFilter, setMatrixMonthFilter] = useState("all");
+  const [matrixYearFilter, setMatrixYearFilter] = useState("all");
   const [detailUnit, setDetailUnit] = useState("");
   const [detailPeriod, setDetailPeriod] = useState("");
   const [busy, setBusy] = useState(false);
@@ -149,9 +159,9 @@ export function FiveSView({
 
   const units = useMemo(() => {
     if (!data) return [];
-    return Array.from(new Set(data.result.unitMonths.map((item) => item.unit))).sort(
-      (a, b) => a.localeCompare(b, "pt-BR"),
-    );
+    return Array.from(
+      new Set(data.result.unitMonths.map((item) => normalizeFiveSUnitCode(item.unit))),
+    ).sort(compareFiveSUnits);
   }, [data]);
 
   const periods = useMemo(() => {
@@ -163,6 +173,61 @@ export function FiveSView({
       month: month.month,
     }));
   }, [data]);
+
+  const availableYears = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.result.months.map((month) => month.year))).sort(
+      (a, b) => b - a,
+    );
+  }, [data]);
+
+  const availableMonths = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.result.months.map((month) => month.month))).sort(
+      (a, b) => a - b,
+    );
+  }, [data]);
+
+  const filteredMatrixUnits = useMemo(() => {
+    if (matrixUnitFilter === "all") return units;
+    return units.filter((unit) => unit === matrixUnitFilter);
+  }, [matrixUnitFilter, units]);
+
+  const filteredMatrixPeriods = useMemo(() => {
+    if (!data) return [];
+    return data.result.months.filter((period) => {
+      const matchesYear =
+        matrixYearFilter === "all" || period.year === Number(matrixYearFilter);
+      const matchesMonth =
+        matrixMonthFilter === "all" || period.month === Number(matrixMonthFilter);
+      return matchesYear && matchesMonth;
+    });
+  }, [data, matrixMonthFilter, matrixYearFilter]);
+
+  useEffect(() => {
+    if (matrixUnitFilter !== "all" && !units.includes(matrixUnitFilter)) {
+      setMatrixUnitFilter("all");
+    }
+    if (
+      matrixYearFilter !== "all" &&
+      !availableYears.includes(Number(matrixYearFilter))
+    ) {
+      setMatrixYearFilter("all");
+    }
+    if (
+      matrixMonthFilter !== "all" &&
+      !availableMonths.includes(Number(matrixMonthFilter))
+    ) {
+      setMatrixMonthFilter("all");
+    }
+  }, [
+    availableMonths,
+    availableYears,
+    matrixMonthFilter,
+    matrixUnitFilter,
+    matrixYearFilter,
+    units,
+  ]);
 
   useEffect(() => {
     if (!units.length) {
@@ -578,97 +643,239 @@ export function FiveSView({
             </div>
           </div>
 
-          <div className="subtitle-block">
-            <h3>Por unidade e mês</h3>
-            <p>Aderência média de todas as áreas de cada unidade.</p>
-          </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Unidade</th>
-                  {result.months.map((month) => <th key={month.label}>{month.label}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {units.map((unit) => {
-                  const excluded = result.excludedUnits.includes(unit.toUpperCase());
-                  return (
-                    <tr key={unit}>
-                      <td>
-                        {unit}{" "}
-                        {excluded ? <span className="badge info">excluída</span> : null}
-                      </td>
-                      {result.months.map((month) => {
-                        const item = result.unitMonths.find(
-                          (row) =>
-                            row.unit === unit &&
-                            row.year === month.year &&
-                            row.month === month.month,
-                        );
-                        return <td key={month.label} className="num">{item ? fmtPct(item.aderencia) : "—"}</td>;
-                      })}
+          <div className="rdo-tables-stack">
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Por unidade e mês</h3>
+                  <p>
+                    Aderência média das áreas, com filtros independentes por
+                    unidade, mês e ano.
+                  </p>
+                </div>
+                <div className="rdo-section-filters rdo-month-filters">
+                  <label htmlFor="fiveSMatrixUnitFilter">
+                    <span>Unidade</span>
+                    <select
+                      id="fiveSMatrixUnitFilter"
+                      value={matrixUnitFilter}
+                      onChange={(event) => setMatrixUnitFilter(event.target.value)}
+                    >
+                      <option value="all">Todas as unidades</option>
+                      {units.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {formatFiveSUnitLabel(unit)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="fiveSMatrixMonthFilter">
+                    <span>Mês</span>
+                    <select
+                      id="fiveSMatrixMonthFilter"
+                      value={matrixMonthFilter}
+                      onChange={(event) => setMatrixMonthFilter(event.target.value)}
+                    >
+                      <option value="all">Todos os meses</option>
+                      {availableMonths.map((month) => (
+                        <option key={month} value={month}>
+                          {MONTH_NAMES_FULL[month - 1] ?? month}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="fiveSMatrixYearFilter">
+                    <span>Ano</span>
+                    <select
+                      id="fiveSMatrixYearFilter"
+                      value={matrixYearFilter}
+                      onChange={(event) => setMatrixYearFilter(event.target.value)}
+                    >
+                      <option value="all">Todos os anos</option>
+                      {availableYears.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {(matrixUnitFilter !== "all" ||
+                    matrixMonthFilter !== "all" ||
+                    matrixYearFilter !== "all") && (
+                    <button
+                      type="button"
+                      className={`btn secondary ${styles.filterReset}`}
+                      onClick={() => {
+                        setMatrixUnitFilter("all");
+                        setMatrixMonthFilter("all");
+                        setMatrixYearFilter("all");
+                      }}
+                    >
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className={`data rdo-summary-table ${styles.matrixTable}`}>
+                  <thead>
+                    <tr>
+                      <th>Unidade</th>
+                      {filteredMatrixPeriods.map((month) => (
+                        <th key={periodKey(month.year, month.month)}>
+                          {month.label}
+                        </th>
+                      ))}
                     </tr>
-                  );
-                })}
-                <tr className="total">
-                  <td>GERAL</td>
-                  {result.months.map((month) => (
-                    <td key={month.label} className="num">{fmtPct(month.geral)}</td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="subtitle-block">
-            <h3>Detalhamento por unidade</h3>
-            <p>Divisão, área, meta, nota e aderência do período selecionado.</p>
-          </div>
-          <div className="controls-row">
-            <label htmlFor="fiveSDetailUnit">Unidade</label>
-            <select id="fiveSDetailUnit" value={detailUnit} onChange={(event) => setDetailUnit(event.target.value)}>
-              {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-            </select>
-            <label htmlFor="fiveSDetailPeriod">Mês</label>
-            <select id="fiveSDetailPeriod" value={detailPeriod} onChange={(event) => setDetailPeriod(event.target.value)}>
-              {periods.map((period) => <option key={period.key} value={period.key}>{period.label}</option>)}
-            </select>
-          </div>
-          <div className="table-scroll">
-            <table className="data">
-              <thead>
-                <tr><th>Divisão</th><th>Área</th><th>Meta</th><th>Nota</th><th>Aderência</th></tr>
-              </thead>
-              <tbody>
-                {detailGroups.length ? (
-                  detailGroups.map(([division, areas]) => {
-                    const average =
-                      areas.reduce((sum, area) => sum + aderenciaArea(area), 0) /
-                      areas.length;
-                    return (
-                      <Fragment key={division}>
-                        {areas.map((area, index) => (
-                          <tr key={`${division}-${area.area}-${index}`}>
-                            <td>{division}</td>
-                            <td>{area.area}</td>
-                            <td className="num">{numberText(area.meta)}</td>
-                            <td className="num">{numberText(area.nota)}</td>
-                            <td className="num">{fmtPct(aderenciaArea(area))}</td>
-                          </tr>
-                        ))}
+                  </thead>
+                  <tbody>
+                    {filteredMatrixUnits.length && filteredMatrixPeriods.length ? (
+                      <>
+                        {filteredMatrixUnits.map((unit) => {
+                          const excluded = result.excludedUnits.includes(unit);
+                          return (
+                            <tr key={unit}>
+                              <td>
+                                {formatFiveSUnitLabel(unit)}{" "}
+                                {excluded ? (
+                                  <span className="badge info">excluída</span>
+                                ) : null}
+                              </td>
+                              {filteredMatrixPeriods.map((month) => {
+                                const item = result.unitMonths.find(
+                                  (row) =>
+                                    row.unit === unit &&
+                                    row.year === month.year &&
+                                    row.month === month.month,
+                                );
+                                return (
+                                  <td
+                                    key={periodKey(month.year, month.month)}
+                                    className="num"
+                                  >
+                                    {item ? fmtPct(item.aderencia) : "—"}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                         <tr className="total">
-                          <td colSpan={4}>Média {division}</td>
-                          <td className="num">{fmtPct(average)}</td>
+                          <td>GERAL</td>
+                          {filteredMatrixPeriods.map((month) => (
+                            <td
+                              key={periodKey(month.year, month.month)}
+                              className="num"
+                            >
+                              {fmtPct(month.geral)}
+                            </td>
+                          ))}
                         </tr>
-                      </Fragment>
-                    );
-                  })
-                ) : (
-                  <tr><td colSpan={5}>Sem dados reais para esta unidade e mês.</td></tr>
-                )}
-              </tbody>
-            </table>
+                      </>
+                    ) : (
+                      <tr>
+                        <td
+                          className="rdo-empty-row"
+                          colSpan={Math.max(filteredMatrixPeriods.length + 1, 1)}
+                        >
+                          Nenhum resultado encontrado para os filtros selecionados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Detalhamento por unidade</h3>
+                  <p>
+                    Divisão, área, meta, nota e aderência do período selecionado.
+                  </p>
+                </div>
+                <div className="rdo-section-filters">
+                  <label htmlFor="fiveSDetailUnit">
+                    <span>Unidade</span>
+                    <select
+                      id="fiveSDetailUnit"
+                      value={detailUnit}
+                      onChange={(event) => setDetailUnit(event.target.value)}
+                    >
+                      {units.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {formatFiveSUnitLabel(unit)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="fiveSDetailPeriod">
+                    <span>Mês</span>
+                    <select
+                      id="fiveSDetailPeriod"
+                      value={detailPeriod}
+                      onChange={(event) => setDetailPeriod(event.target.value)}
+                    >
+                      {periods.map((period) => (
+                        <option key={period.key} value={period.key}>
+                          {period.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Divisão</th>
+                      <th>Área</th>
+                      <th>Meta</th>
+                      <th>Nota</th>
+                      <th>Aderência</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detailGroups.length ? (
+                      detailGroups.map(([division, areas]) => {
+                        const average =
+                          areas.reduce(
+                            (sum, area) => sum + aderenciaArea(area),
+                            0,
+                          ) / areas.length;
+                        return (
+                          <Fragment key={division}>
+                            {areas.map((area, index) => (
+                              <tr key={`${division}-${area.area}-${index}`}>
+                                <td>{division}</td>
+                                <td>{area.area}</td>
+                                <td className="num">{numberText(area.meta)}</td>
+                                <td className="num">{numberText(area.nota)}</td>
+                                <td className="num">
+                                  {fmtPct(aderenciaArea(area))}
+                                </td>
+                              </tr>
+                            ))}
+                            <tr className="total">
+                              <td colSpan={4}>Média {division}</td>
+                              <td className="num">{fmtPct(average)}</td>
+                            </tr>
+                          </Fragment>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td className="rdo-empty-row" colSpan={5}>
+                          Sem dados reais para esta unidade e mês.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
 
           {data?.lastImport ? (

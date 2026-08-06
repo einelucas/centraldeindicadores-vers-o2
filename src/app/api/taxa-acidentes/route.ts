@@ -6,6 +6,7 @@ import {
   loadAccidentRateData,
   saveAccidentTarget,
 } from "@/features/taxa-acidentes/services";
+import { normalizeAccidentUnitCode } from "@/features/taxa-acidentes/utils/units";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
@@ -13,6 +14,7 @@ import { handleApiError } from "@/server/http";
 
 const monthlySchema = z.object({
   type: z.literal("month"),
+  id: z.string().trim().min(1).optional(),
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
   rate: z.number().min(0),
@@ -21,6 +23,7 @@ const monthlySchema = z.object({
 
 const unitSchema = z.object({
   type: z.literal("unit"),
+  id: z.string().trim().min(1).optional(),
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
   unit: z.string().trim().min(1).max(120),
@@ -38,6 +41,24 @@ const inputSchema = z.discriminatedUnion("type", [
   unitSchema,
   settingsSchema,
 ]);
+
+const monthlySelect = {
+  id: true,
+  year: true,
+  month: true,
+  rate: true,
+  caf: true,
+} as const;
+
+const unitSelect = {
+  id: true,
+  year: true,
+  month: true,
+  unit: true,
+  unitKey: true,
+  saf: true,
+  caf: true,
+} as const;
 
 function missingTables(error: unknown): boolean {
   return (
@@ -71,21 +92,55 @@ export async function POST(req: NextRequest) {
     const input = inputSchema.parse(await req.json());
 
     if (input.type === "month") {
-      const previous = await prisma.accidentMonthlyRecord.findUnique({
+      const previous = input.id
+        ? await prisma.accidentMonthlyRecord.findUnique({
+            where: { id: input.id },
+            select: monthlySelect,
+          })
+        : await prisma.accidentMonthlyRecord.findUnique({
+            where: { year_month: { year: input.year, month: input.month } },
+            select: monthlySelect,
+          });
+
+      if (input.id && !previous) {
+        return NextResponse.json(
+          { error: "O lançamento mensal selecionado não foi encontrado." },
+          { status: 404 },
+        );
+      }
+
+      const conflict = await prisma.accidentMonthlyRecord.findUnique({
         where: { year_month: { year: input.year, month: input.month } },
-        select: { id: true, year: true, month: true, rate: true, caf: true },
+        select: { id: true },
       });
-      const saved = await prisma.accidentMonthlyRecord.upsert({
-        where: { year_month: { year: input.year, month: input.month } },
-        create: {
-          year: input.year,
-          month: input.month,
-          rate: input.rate,
-          caf: input.caf,
-        },
-        update: { rate: input.rate, caf: input.caf },
-        select: { id: true, year: true, month: true, rate: true, caf: true },
-      });
+
+      if (conflict && conflict.id !== previous?.id) {
+        return NextResponse.json(
+          { error: "Já existe um lançamento mensal para essa competência." },
+          { status: 409 },
+        );
+      }
+
+      const saved = previous
+        ? await prisma.accidentMonthlyRecord.update({
+            where: { id: previous.id },
+            data: {
+              year: input.year,
+              month: input.month,
+              rate: input.rate,
+              caf: input.caf,
+            },
+            select: monthlySelect,
+          })
+        : await prisma.accidentMonthlyRecord.create({
+            data: {
+              year: input.year,
+              month: input.month,
+              rate: input.rate,
+              caf: input.caf,
+            },
+            select: monthlySelect,
+          });
 
       await recordAudit({
         userId: user.id,
@@ -100,53 +155,74 @@ export async function POST(req: NextRequest) {
     }
 
     if (input.type === "unit") {
-      const unitKey = accidentUnitKey(input.unit);
+      const normalizedUnit = normalizeAccidentUnitCode(input.unit);
+      const unitKey = accidentUnitKey(normalizedUnit);
       if (!unitKey) {
         return NextResponse.json(
           { error: "Informe uma unidade válida." },
           { status: 400 },
         );
       }
-      const where = {
-        year_month_unitKey: {
-          year: input.year,
-          month: input.month,
-          unitKey,
-        },
-      } as const;
-      const previous = await prisma.accidentUnitRecord.findUnique({
-        where,
-        select: {
-          id: true,
-          year: true,
-          month: true,
-          unit: true,
-          unitKey: true,
-          saf: true,
-          caf: true,
-        },
+
+      const previousById = input.id
+        ? await prisma.accidentUnitRecord.findUnique({
+            where: { id: input.id },
+            select: unitSelect,
+          })
+        : null;
+
+      if (input.id && !previousById) {
+        return NextResponse.json(
+          { error: "O lançamento da unidade selecionada não foi encontrado." },
+          { status: 404 },
+        );
+      }
+
+      const targetPeriodRows = await prisma.accidentUnitRecord.findMany({
+        where: { year: input.year, month: input.month },
+        select: unitSelect,
       });
-      const saved = await prisma.accidentUnitRecord.upsert({
-        where,
-        create: {
-          year: input.year,
-          month: input.month,
-          unit: input.unit,
-          unitKey,
-          saf: input.saf,
-          caf: input.caf,
-        },
-        update: { unit: input.unit, saf: input.saf, caf: input.caf },
-        select: {
-          id: true,
-          year: true,
-          month: true,
-          unit: true,
-          unitKey: true,
-          saf: true,
-          caf: true,
-        },
-      });
+      const equivalentRows = targetPeriodRows.filter(
+        (row) =>
+          row.id !== input.id &&
+          accidentUnitKey(row.unit || row.unitKey) === unitKey,
+      );
+      const equivalentRow =
+        equivalentRows.find((row) => row.unitKey === unitKey) ??
+        equivalentRows[0];
+
+      if (input.id && equivalentRow) {
+        return NextResponse.json(
+          { error: "Já existe um lançamento dessa unidade para a competência selecionada." },
+          { status: 409 },
+        );
+      }
+
+      const previous = previousById ?? equivalentRow ?? null;
+      const saved = previous
+        ? await prisma.accidentUnitRecord.update({
+            where: { id: previous.id },
+            data: {
+              year: input.year,
+              month: input.month,
+              unit: normalizedUnit,
+              unitKey,
+              saf: input.saf,
+              caf: input.caf,
+            },
+            select: unitSelect,
+          })
+        : await prisma.accidentUnitRecord.create({
+            data: {
+              year: input.year,
+              month: input.month,
+              unit: normalizedUnit,
+              unitKey,
+              saf: input.saf,
+              caf: input.caf,
+            },
+            select: unitSelect,
+          });
 
       await recordAudit({
         userId: user.id,
@@ -205,7 +281,7 @@ export async function DELETE(req: NextRequest) {
       }
       const previous = await prisma.accidentMonthlyRecord.findUnique({
         where: { year_month: { year, month } },
-        select: { id: true, year: true, month: true, rate: true, caf: true },
+        select: monthlySelect,
       });
       if (previous) {
         await prisma.accidentMonthlyRecord.delete({ where: { id: previous.id } });
@@ -228,15 +304,7 @@ export async function DELETE(req: NextRequest) {
       }
       const previous = await prisma.accidentUnitRecord.findUnique({
         where: { id },
-        select: {
-          id: true,
-          year: true,
-          month: true,
-          unit: true,
-          unitKey: true,
-          saf: true,
-          caf: true,
-        },
+        select: unitSelect,
       });
       if (previous) {
         await prisma.accidentUnitRecord.delete({ where: { id } });

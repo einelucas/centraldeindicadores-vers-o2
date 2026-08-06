@@ -8,6 +8,7 @@ import { readWorkbookMatrix } from "@/importers/shared/workbook-reader";
 import { parseWithHeaderDetection } from "@/importers/shared/header-detection";
 import { parseFlexDate } from "@/lib/dates";
 import { parseBRNumberOrNull } from "@/lib/currency";
+import { normalizeRncUnitCode } from "@/features/rnc/utils/units";
 import {
   REQUIRED_RNC_COLS,
   type RncNormalizedRecord,
@@ -96,7 +97,7 @@ export function toRncRecord(
 
   return {
     statusRnc: String(row["status_rnc"] ?? "").trim(),
-    unidade: String(row["unidade"] ?? "").trim(),
+    unidade: normalizeRncUnitCode(row["unidade"]),
     dataCriacao,
     dataSolucao,
     tempoTratativa,

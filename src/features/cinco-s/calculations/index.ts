@@ -11,6 +11,10 @@
 
 import { MONTH_NAMES } from "@/lib/dates";
 import {
+  compareFiveSUnits,
+  normalizeFiveSUnitCode,
+} from "@/features/cinco-s/utils/units";
+import {
   FIVES_DEFAULT_TARGET,
   type FiveSArea,
   type FiveSMonthResult,
@@ -45,35 +49,52 @@ export function computeFiveSResult(
   excluded: readonly string[] = [],
   threshold: number = FIVES_DEFAULT_TARGET,
 ): FiveSResult {
-  const excludedUnits = excluded
-    .map((value) => value.trim().toUpperCase())
-    .filter(Boolean);
+  const excludedUnits = Array.from(
+    new Set(excluded.map(normalizeFiveSUnitCode).filter(Boolean)),
+  );
   const excludeSet = new Set(excludedUnits);
 
   // A identidade lógica do módulo é unidade + ano + mês. Em caso de registros
   // repetidos no array, a última ocorrência representa a versão mais recente.
-  const unique = new Map<string, FiveSNormalizedRecord>();
+  const unique = new Map<
+    string,
+    { record: FiveSNormalizedRecord; usesOfficialCode: boolean }
+  >();
   for (const record of records) {
-    if (!record.unit.trim() || !record.areas.length) continue;
+    const unit = normalizeFiveSUnitCode(record.unit);
+    if (!unit || !record.areas.length) continue;
     if (!Number.isInteger(record.year) || !Number.isInteger(record.month)) continue;
     if (record.month < 1 || record.month > 12) continue;
-    unique.set(`${record.unit.trim().toUpperCase()}|||${monthKey(record.year, record.month)}`, record);
+
+    const key = `${unit}|||${monthKey(record.year, record.month)}`;
+    const usesOfficialCode = record.unit.trim().toUpperCase() === unit;
+    const previous = unique.get(key);
+
+    // Bases antigas podem conter o nome completo e a sigla para o mesmo mês.
+    // A versão já gravada com a sigla oficial tem prioridade; entre registros
+    // equivalentes, a última ocorrência continua representando a correção mais recente.
+    if (!previous || usesOfficialCode || !previous.usesOfficialCode) {
+      unique.set(key, {
+        record: { ...record, unit },
+        usesOfficialCode,
+      });
+    }
   }
 
   const unitMonths: FiveSUnitMonth[] = Array.from(unique.values())
-    .map((record) => ({
-      unit: record.unit.trim(),
+    .map(({ record }) => ({
+      unit: record.unit,
       year: record.year,
       month: record.month,
       aderencia: aderenciaUnidade(record.areas),
-      excluded: excludeSet.has(record.unit.trim().toUpperCase()),
+      excluded: excludeSet.has(record.unit),
       areas: record.areas,
     }))
     .sort(
       (a, b) =>
         a.year - b.year ||
         a.month - b.month ||
-        a.unit.localeCompare(b.unit, "pt-BR"),
+        compareFiveSUnits(a.unit, b.unit),
     );
 
   const monthKeys = Array.from(

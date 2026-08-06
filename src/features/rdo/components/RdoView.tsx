@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
+import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
 import { exportRdoPdf } from "@/features/rdo/exports/pdf";
 import type { RdoNormalizedRecord, RdoResult } from "@/features/rdo/types";
@@ -51,6 +52,9 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [publication, setPublication] = useState<PublicationSummary | null>(null);
+  const [unitFilter, setUnitFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
+  const [yearFilter, setYearFilter] = useState("all");
 
   const load = useCallback(async (nextThreshold = threshold) => {
     setError(null);
@@ -202,6 +206,45 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
 
   const result = data?.result;
   const pct = progress?.totalBatches ? Math.round((progress.currentBatch / progress.totalBatches) * 100) : 0;
+  const filteredUnits = useMemo(() => {
+    if (!result) return [];
+    return unitFilter === "all"
+      ? result.units
+      : result.units.filter((unit) => unit.name === unitFilter);
+  }, [result, unitFilter]);
+  const filteredUnitAverage = useMemo(() => {
+    if (!filteredUnits.length) return 0;
+    return filteredUnits.reduce((sum, unit) => sum + unit.aderencia, 0) / filteredUnits.length;
+  }, [filteredUnits]);
+  const availableYears = useMemo(() => {
+    if (!result) return [];
+    return Array.from(new Set(result.months.map((month) => month.year))).sort((a, b) => b - a);
+  }, [result]);
+  const availableMonths = useMemo(() => {
+    if (!result) return [];
+    return Array.from(new Set(result.months.map((month) => month.month))).sort((a, b) => a - b);
+  }, [result]);
+  const filteredMonths = useMemo(() => {
+    if (!result) return [];
+    return result.months.filter((month) => {
+      const matchesYear = yearFilter === "all" || month.year === Number(yearFilter);
+      const matchesMonth = monthFilter === "all" || month.month === Number(monthFilter);
+      return matchesYear && matchesMonth;
+    });
+  }, [monthFilter, result, yearFilter]);
+
+  useEffect(() => {
+    if (!result) return;
+    if (unitFilter !== "all" && !result.units.some((unit) => unit.name === unitFilter)) {
+      setUnitFilter("all");
+    }
+    if (yearFilter !== "all" && !result.months.some((month) => month.year === Number(yearFilter))) {
+      setYearFilter("all");
+    }
+    if (monthFilter !== "all" && !result.months.some((month) => month.month === Number(monthFilter))) {
+      setMonthFilter("all");
+    }
+  }, [monthFilter, result, unitFilter, yearFilter]);
 
   return (
     <>
@@ -261,16 +304,96 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
             <div className="card"><div className="lbl">Preenchendo</div><div className="val">{formatPct(result.totalEmitidos ? result.totalPreenchendo / result.totalEmitidos : 0)}</div><div className="sub">{result.totalPreenchendo.toLocaleString("pt-BR")} relatórios</div></div>
           </div>
 
-          <div className="subtitle-block"><h3>Aderência por unidade</h3><p>Nº RDO emitidos x aprovados, por obra/unidade.</p></div>
-          <div className="table-scroll"><table className="data"><thead><tr><th>Unidade</th><th>Emitidos</th><th>Aprovados</th><th>Aderência</th><th>Situação</th></tr></thead><tbody>
-            {result.units.map((unit) => { const ok = unit.aderencia >= threshold / 100; return <tr key={unit.name}><td>{unit.name}</td><td className="num">{unit.emitidos}</td><td className="num">{unit.aprovados}</td><td className="num">{formatPct(unit.aderencia)}</td><td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Abaixo da meta"}</span></td></tr>; })}
-            <tr className="total"><td>Média</td><td /><td /><td className="num">{formatPct(result.unitAvg)}</td><td /></tr>
-          </tbody></table></div>
+          <div className="rdo-tables-stack">
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Aderência por unidade</h3>
+                  <p>Nº RDO emitidos x aprovados, por obra/unidade.</p>
+                </div>
+                <div className="rdo-section-filters">
+                  <label htmlFor="rdoUnitFilter">
+                    <span>Unidade</span>
+                    <select id="rdoUnitFilter" value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}>
+                      <option value="all">Todas as unidades</option>
+                      {result.units.map((unit) => <option value={unit.name} key={unit.name}>{unit.name}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead><tr><th>Unidade</th><th>Emitidos</th><th>Aprovados</th><th>Aderência</th><th>Situação</th></tr></thead>
+                  <tbody>
+                    {filteredUnits.length ? filteredUnits.map((unit) => {
+                      const ok = unit.aderencia >= threshold / 100;
+                      return (
+                        <tr key={unit.name}>
+                          <td>{unit.name}</td>
+                          <td className="num">{unit.emitidos.toLocaleString("pt-BR")}</td>
+                          <td className="num">{unit.aprovados.toLocaleString("pt-BR")}</td>
+                          <td className="num">{formatPct(unit.aderencia)}</td>
+                          <td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Abaixo da meta"}</span></td>
+                        </tr>
+                      );
+                    }) : <tr><td className="rdo-empty-row" colSpan={5}>Nenhuma unidade encontrada para o filtro selecionado.</td></tr>}
+                    {filteredUnits.length ? (
+                      <tr className="total">
+                        <td>{unitFilter === "all" ? "Média das unidades" : "Unidade selecionada"}</td>
+                        <td /><td /><td className="num">{formatPct(filteredUnitAverage)}</td><td />
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-          <div className="subtitle-block"><h3>Aderência por mês</h3><p>Consolidado mensal de todas as unidades.</p></div>
-          <div className="table-scroll"><table className="data"><thead><tr><th>Mês</th><th>Emitidos</th><th>Aprovados</th><th>Aderência</th><th>Situação</th></tr></thead><tbody>
-            {result.months.map((month) => { const ok = month.aderencia >= threshold / 100; return <tr key={`${month.year}-${month.month}`}><td>{month.label}</td><td className="num">{month.emitidos}</td><td className="num">{month.aprovados}</td><td className="num">{formatPct(month.aderencia)}</td><td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Abaixo da meta"}</span></td></tr>; })}
-          </tbody></table></div>
+            <section className="rdo-section-card">
+              <div className="rdo-section-header">
+                <div className="subtitle-block first">
+                  <h3>Aderência por mês</h3>
+                  <p>Consolidado mensal de todas as unidades.</p>
+                </div>
+                <div className="rdo-section-filters rdo-month-filters">
+                  <label htmlFor="rdoMonthFilter">
+                    <span>Mês</span>
+                    <select id="rdoMonthFilter" value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)}>
+                      <option value="all">Todos os meses</option>
+                      {availableMonths.map((month) => (
+                        <option value={month} key={month}>{MONTH_NAMES_FULL[month] ?? `Mês ${month + 1}`}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="rdoYearFilter">
+                    <span>Ano</span>
+                    <select id="rdoYearFilter" value={yearFilter} onChange={(event) => setYearFilter(event.target.value)}>
+                      <option value="all">Todos os anos</option>
+                      {availableYears.map((year) => <option value={year} key={year}>{year}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="table-scroll rdo-summary-table-wrap">
+                <table className="data rdo-summary-table">
+                  <thead><tr><th>Mês</th><th>Emitidos</th><th>Aprovados</th><th>Aderência</th><th>Situação</th></tr></thead>
+                  <tbody>
+                    {filteredMonths.length ? filteredMonths.map((month) => {
+                      const ok = month.aderencia >= threshold / 100;
+                      return (
+                        <tr key={`${month.year}-${month.month}`}>
+                          <td>{month.label}</td>
+                          <td className="num">{month.emitidos.toLocaleString("pt-BR")}</td>
+                          <td className="num">{month.aprovados.toLocaleString("pt-BR")}</td>
+                          <td className="num">{formatPct(month.aderencia)}</td>
+                          <td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Abaixo da meta"}</span></td>
+                        </tr>
+                      );
+                    }) : <tr><td className="rdo-empty-row" colSpan={5}>Nenhum mês encontrado para os filtros selecionados.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
         </div>
       ) : (
         <div className="placeholder rdo-admin-empty"><span className="tag">Aguardando dados</span><h3>RDO</h3><p>Importe um ou mais arquivos para calcular a aprovação por unidade e por mês.</p></div>

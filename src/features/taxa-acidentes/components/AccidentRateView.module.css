@@ -1,0 +1,330 @@
+.sectionCard {
+  overflow: hidden;
+  border: 1px solid #dbe4ef;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid #e5edf5;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.sectionHeader h3 {
+  margin: 0;
+  color: #1e3a5f;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.sectionHeader p {
+  max-width: 760px;
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.editingBadge {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5edf5;
+}
+
+.field {
+  display: flex;
+  grid-column: span 2;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.unitField {
+  grid-column: span 4;
+}
+
+.field span,
+.filterBar label span {
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.field input,
+.field select,
+.filterBar select {
+  width: 100%;
+  height: 42px;
+  min-width: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.field input,
+.field select {
+  padding: 0 12px;
+}
+
+.filterBar select {
+  min-width: 118px;
+  padding: 0 34px 0 11px;
+}
+
+.field input:focus,
+.field select:focus,
+.filterBar select:focus {
+  border-color: #5d7da6;
+  box-shadow: 0 0 0 3px rgba(48, 79, 126, 0.12);
+}
+
+.formActions {
+  display: flex;
+  grid-column: span 2;
+  align-items: center;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.filterBar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  padding: 15px 24px;
+  border-bottom: 1px solid #e5edf5;
+  background: #fbfdff;
+  flex-wrap: wrap;
+}
+
+.filterBar > strong {
+  align-self: center;
+  margin-right: 2px;
+  color: #1e3a5f;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.filterBar label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filterUnitField select {
+  min-width: 265px;
+}
+
+.recordCount {
+  align-self: center;
+  margin-left: auto;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tableScroll {
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table thead th {
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid #cbd5e1;
+  background: #edf3f9;
+  color: #24456f;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table tbody td {
+  height: 52px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e7edf3;
+  color: #334155;
+  font-size: 0.8rem;
+  vertical-align: middle;
+}
+
+.table th + th,
+.table td + td {
+  border-left: 1px solid #e2e8f0;
+}
+
+.table tbody tr:nth-child(even) td {
+  background: #fbfdff;
+}
+
+.table tbody tr:hover td {
+  background: #f3f7fb;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.actionsHeader {
+  width: 108px;
+  text-align: center !important;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.actionButton {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.actionButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.actionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.editAction {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.editAction:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.deleteAction {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #dc2626;
+}
+
+.deleteAction:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #ffe4e6;
+}
+
+.editingRow td {
+  background: #eff6ff !important;
+  box-shadow: inset 0 1px 0 #bfdbfe, inset 0 -1px 0 #bfdbfe;
+}
+
+.unitCell {
+  min-width: 245px;
+  color: #1e3a5f !important;
+  font-weight: 750;
+}
+
+.emptyRow {
+  height: 92px !important;
+  color: #64748b !important;
+  text-align: center !important;
+}
+
+@media (max-width: 1180px) {
+  .field {
+    grid-column: span 3;
+  }
+
+  .unitField {
+    grid-column: span 6;
+  }
+
+  .formActions {
+    grid-column: span 3;
+  }
+}
+
+@media (max-width: 760px) {
+  .sectionHeader {
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+
+  .field,
+  .unitField,
+  .formActions {
+    grid-column: auto;
+  }
+
+  .formActions {
+    flex-wrap: wrap;
+  }
+
+  .filterBar {
+    align-items: stretch;
+    padding: 14px 18px;
+  }
+
+  .filterBar > strong,
+  .filterBar label,
+  .filterBar select,
+  .filterUnitField select,
+  .recordCount {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .recordCount {
+    margin-left: 0;
+  }
+}

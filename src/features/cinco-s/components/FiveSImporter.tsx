@@ -14,6 +14,11 @@ import {
   FIVES_DEFAULT_EXCLUDED,
   type FiveSNormalizedRecord,
 } from "@/features/cinco-s/types";
+import {
+  compareFiveSUnits,
+  formatFiveSUnitLabel,
+  normalizeFiveSUnitCode,
+} from "@/features/cinco-s/utils/units";
 
 export function FiveSImporter() {
   const [threshold, setThreshold] = useState(FIVES_DEFAULT_TARGET * 100);
@@ -26,7 +31,7 @@ export function FiveSImporter() {
   const [error, setError] = useState<string | null>(null);
 
   const excluded = useMemo(
-    () => excludeText.split(",").map((s) => s.trim()).filter(Boolean),
+    () => excludeText.split(",").map(normalizeFiveSUnitCode).filter(Boolean),
     [excludeText],
   );
 
@@ -116,7 +121,7 @@ export function FiveSImporter() {
   const unitsSorted = useMemo(() => {
     if (!preview) return [];
     return [...preview.unitMonths].sort(
-      (a, b) => a.unit.localeCompare(b.unit) || a.year - b.year || a.month - b.month,
+      (a, b) => compareFiveSUnits(a.unit, b.unit) || a.year - b.year || a.month - b.month,
     );
   }, [preview]);
 
@@ -185,7 +190,7 @@ export function FiveSImporter() {
               subtitle={`GERAL ${preview.periodLabel}`}
               rows={unitsSorted}
               columns={[
-                { header: "Unidade", value: (u) => u.unit },
+                { header: "Unidade", value: (u) => formatFiveSUnitLabel(u.unit) },
                 { header: "Mês", value: (u) => `${u.month}/${u.year}` },
                 { header: "Aderência (%)", value: (u) => (u.aderencia * 100).toFixed(1) },
                 { header: "Excluída", value: (u) => (u.excluded ? "Sim" : "Não") },
@@ -226,7 +231,7 @@ export function FiveSImporter() {
                     className="border-t border-neutralbrand/20"
                   >
                     <td className="px-3 py-2">
-                      {u.unit}
+                      {formatFiveSUnitLabel(u.unit)}
                       {u.excluded ? (
                         <span className="ml-1 text-xs text-neutralbrand">
                           (excluída)

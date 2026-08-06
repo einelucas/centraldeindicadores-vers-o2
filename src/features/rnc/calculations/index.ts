@@ -20,6 +20,7 @@ import {
   type RncResult,
   type RncUnitAggregate,
 } from "@/features/rnc/types";
+import { normalizeRncUnitCode } from "@/features/rnc/utils/units";
 
 export function computeRncResult(
   records: readonly RncNormalizedRecord[],
@@ -46,7 +47,7 @@ export function computeRncResult(
     if (!record.dataCriacao || isNaN(record.dataCriacao.getTime())) continue;
 
     const status = String(record.statusRnc ?? "").trim().toUpperCase();
-    const unidade = String(record.unidade ?? "").trim();
+    const unidade = normalizeRncUnitCode(record.unidade);
     const ofensor = String(record.ofensor ?? "").trim() || "N/A";
 
     totalCriadas++;
