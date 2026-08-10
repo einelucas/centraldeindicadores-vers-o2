@@ -5,6 +5,7 @@ import type { FiveSPublishedPayload } from "@/features/cinco-s/publications";
 import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/publications";
 import {
   SC_INDICATORS,
+  SCORECARD_MAX_POINTS,
   SCORECARD_MONTHLY_POOL as MONTHLY_POOL,
   type ScorecardIndicator,
 } from "@/features/scorecard/types";
@@ -61,7 +62,10 @@ export interface GeneralPanelData {
   hasData: boolean;
   monthKeys: string[];
   monthLabels: string[];
+  /** Meta proporcional aos meses com dados disponíveis — denominador do atendimento. */
   pontuacaoPrevista: number;
+  /** Meta fixa do ciclo completo (6 meses) — referência, nunca usada como denominador parcial. */
+  pontuacaoPrevistaSemestre: number;
   pontosRealizados: number;
   atendimentoGeral: number;
   referenceDate: string | null;
@@ -428,6 +432,7 @@ export function buildGeneralPanelData(
     monthKeys,
     monthLabels,
     pontuacaoPrevista,
+    pontuacaoPrevistaSemestre: SCORECARD_MAX_POINTS,
     pontosRealizados,
     atendimentoGeral,
     referenceDate: latestPublication?.publishedAt.toISOString() ?? null,

@@ -5,35 +5,46 @@ import type { IdpNormalizedRecord } from "@/features/idp/types";
 
 function record(): IdpNormalizedRecord {
   return {
-    unit: "INPASA Sinop",
-    rsoNumero: 12,
-    referenceDate: "2026-08-05",
-    fileName: "rso-12.pdf",
-    areas: ["Área 1"],
-    execucaoFases: [{ prevAcum: 100, realAcum: 95.5 }],
-    discData: {
-      "01 - Civil": [{ area: "Área 1", prevAcum: 100, realAcum: 95.5 }],
-      "04 - Elétrica": [{ area: "Área 1", prevAcum: 100, realAcum: 99 }],
-    },
+    unit: "Nova Mutum",
+    detectedUnit: "Nova Mutum",
+    unitAdjusted: false,
+    rsoNumero: 34,
+    detectedRsoNumero: 34,
+    rsoAdjusted: false,
+    referenceYear: 2026,
+    referenceMonth: 6,
+    detectedReferenceYear: 2026,
+    detectedReferenceMonth: 6,
+    referenceSource: "PDF_MES_REF",
+    referenceOriginalText: "Mês ref.: 01/06/2026",
+    referenceAdjusted: false,
+    periodStart: "2026-06-24",
+    periodEnd: "2026-07-01",
+    emissionDate: "2026-07-06",
+    fileName: "RSO 34.pdf",
+    areas: ["1700.A — Pipe Rack"],
+    discData: { "01 - Civil": [{ area: "1700.A — Pipe Rack", prevAcum: 100, realAcum: 99.53 }] },
+    execucaoFases: [{ label: "Fase 1", prevAcum: 53.08, realAcum: 54.79 }],
     raw: {},
   };
 }
 
-describe("toIdpPublishedPayload — RSO", () => {
-  it("publica unidades, disciplinas e competência da publicação", () => {
-    const result = computeIdpResult([record()], 0.98, [], { selectedYear: 2026, monthStart: 8, monthEnd: 8 });
-    const payload = toIdpPublishedPayload(result, 98);
-
-    expect(payload.resultado).toBe(95.5);
-    expect(payload.documentosAtivos).toBe(1);
-    expect(payload.civil).toBe(95.5);
-    expect(payload.eletrica).toBe(99);
-    expect(payload.unidades[0]).toEqual({ n: "Sinop", v: 95.5, rsoNumero: 12, referenceDate: "2026-08-05" });
-    expect(payload.mensal[0]?.label).toBe("Ago/2026");
-  });
-
-  it("impede publicação sem RSO ativo", () => {
-    const result = computeIdpResult([], 0.98);
-    expect(() => toIdpPublishedPayload(result, 98)).toThrow("Não há documentos RSO ativos");
+describe("publicação do IDP por RSO", () => {
+  it("preserva no snapshot o RSO usado", () => {
+    const result = computeIdpResult([record()], 0.9, [], {
+      selectedYear: 2026,
+      selectedMonth: 6,
+      historyMonthStart: 6,
+      historyMonthEnd: 7,
+    });
+    const payload = toIdpPublishedPayload(result, 90);
+    expect(payload.unidades[0]).toMatchObject({
+      n: "Nova Mutum",
+      rsoNumero: 34,
+      referenceYear: 2026,
+      referenceMonth: 6,
+      fileName: "RSO 34.pdf",
+    });
+    expect(payload.mensal[1]?.v).toBeNull();
   });
 });

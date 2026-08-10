@@ -109,14 +109,21 @@ function applySpreadsheetScore(data: GeneralPanelData): GeneralPanelData {
     0,
   );
 
+  // Meta proporcional: só os meses do semestre selecionado que têm dados reais
+  // entram no denominador. Os 11.582 pontos continuam expostos à parte, em
+  // `pontuacaoPrevistaSemestre`, como referência fixa do ciclo completo.
+  const pontuacaoPrevista = monthKeys.length * SCORECARD_MONTHLY_POOL;
+
   return {
     ...data,
     hasData: indicators.some((indicator) => indicator.hasData),
     monthKeys,
     monthLabels: monthKeys.map(monthKeyToLabel),
-    pontuacaoPrevista: SCORECARD_MAX_POINTS,
+    pontuacaoPrevista,
+    pontuacaoPrevistaSemestre: SCORECARD_MAX_POINTS,
     pontosRealizados,
-    atendimentoGeral: (pontosRealizados / SCORECARD_MAX_POINTS) * 100,
+    atendimentoGeral:
+      pontuacaoPrevista > 0 ? (pontosRealizados / pontuacaoPrevista) * 100 : 0,
     indicators,
   };
 }

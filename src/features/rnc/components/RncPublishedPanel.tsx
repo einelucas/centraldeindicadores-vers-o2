@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import {
   CartesianGrid,
   Cell,
@@ -55,6 +57,40 @@ export function RncPublishedPanel() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!panelRef.current) return;
+
+    setExporting(true);
+    setExportError(null);
+
+    try {
+      const canvas = await html2canvas(panelRef.current, {
+        backgroundColor: "#eff2f7",
+        scale: 2,
+        useCORS: true,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save(`RNC_painel_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      setExportError(
+        err instanceof Error ? err.message : "Falha ao gerar o PDF do painel.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,9 +161,35 @@ export function RncPublishedPanel() {
   const chartMonths = data.mensal.filter((month) => month.v !== null);
 
   return (
-    <div className="painel-frontend">
+    <div className="painel-frontend" ref={panelRef}>
       <div className="content" style={{ padding: "14px 0 0" }}>
-        <div className="ph">RNC — Tempo para Resolução</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div className="ph">RNC — Tempo para Resolução</div>
+
+          <button
+            className="btn btn-gold"
+            type="button"
+            disabled={exporting}
+            data-html2canvas-ignore="true"
+            onClick={() => void handleExportPdf()}
+          >
+            {exporting ? "Gerando PDF…" : "Baixar PDF"}
+          </button>
+        </div>
+
+        {exportError ? (
+          <p className="ps" style={{ color: RED }}>
+            {exportError}
+          </p>
+        ) : null}
 
         <div className="ps rdo-panel-summary">
           <span className="rdo-panel-target">META: ≤{data.meta} dias</span>
@@ -149,6 +211,10 @@ export function RncPublishedPanel() {
             {publication.publishedBy.name}
           </span>
         </div>
+
+        <p className="ps" style={{ margin: "-4px 0 12px" }}>
+          Prazo médio consolidado calculado pela média simples dos resultados mensais do período selecionado.
+        </p>
 
         <div className="g2">
           {/* Coluna esquerda: resultado e gráfico mensal */}
@@ -277,6 +343,8 @@ export function RncPublishedPanel() {
                         innerRadius={45}
                         outerRadius={84}
                         paddingAngle={2}
+                        label={({ value }) => `${Number(value).toFixed(1)}%`}
+                        labelLine={false}
                       >
                         {data.ofensores.map((offender, index) => (
                           <Cell key={offender.n} fill={PIE_COLORS[index % PIE_COLORS.length]} />

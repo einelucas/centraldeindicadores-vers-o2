@@ -44,7 +44,7 @@ export interface RncResult {
   totalCriadas: number;
   totalTratadas: number;
   aderenciaTotal: number;
-  /** Média ponderada pelos chamados solucionados, usada no painel publicado. */
+  /** Média aritmética simples dos "dias médios" mensais válidos (cada mês pesa 1). */
   resultadoDias: number | null;
   months: RncMonthAggregate[];
   units: RncUnitAggregate[];

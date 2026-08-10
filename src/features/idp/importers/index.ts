@@ -42,6 +42,18 @@ export interface IdpFileParseResult {
   error: string | null;
 }
 
+export interface RsoReferenceMetadata {
+  referenceYear: number | null;
+  referenceMonth: number | null;
+  originalText: string | null;
+}
+
+export interface RsoPeriodMetadata {
+  periodStart: string | null;
+  periodEnd: string | null;
+  emissionDate: string | null;
+}
+
 async function configurePdfWorker(pdfjs: PdfJsLibrary): Promise<void> {
   if (!pdfWorkerPromise) {
     pdfWorkerPromise = fetch(PDF_WORKER_URL)
@@ -54,8 +66,6 @@ async function configurePdfWorker(pdfjs: PdfJsLibrary): Promise<void> {
         pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
       })
       .catch(() => {
-        // Fallback preservado do HTML base. Em alguns navegadores o worker
-        // remoto funciona diretamente; em outros, o Blob evita bloqueio CORS.
         pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_URL;
       });
   }
@@ -142,7 +152,11 @@ export function parseDisciplineLine(text: string, disciplineName: string) {
 }
 
 function normalizeText(text: string): string {
-  return text.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
+  return text
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .trim();
 }
 
 function isoDate(year: number, month: number, day: number): string | null {
@@ -154,34 +168,154 @@ function isoDate(year: number, month: number, day: number): string | null {
   ) {
     return null;
   }
-  return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day
-    .toString()
-    .padStart(2, "0")}`;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** Tenta localizar a competência/data do relatório na primeira página. */
-export function parseRsoReferenceDate(text: string, fallback: Date = new Date()): string {
-  const normalized = normalizeText(text);
-  const labelledPatterns = [
-    /(?:data\s+(?:de\s+)?(?:refer[eê]ncia|emiss[aã]o|medi[cç][aã]o|atualiza[cç][aã]o)|compet[eê]ncia|data\s*base|per[ií]odo\s+de\s+refer[eê]ncia)\s*:?\s*(\d{1,2})[./-](\d{1,2})[./-](\d{4})/i,
-    /(?:refer[eê]ncia|compet[eê]ncia)\s*:?\s*(\d{1,2})[./-](\d{4})/i,
-  ];
+function normalizeYear(value: number): number {
+  return value < 100 ? 2000 + value : value;
+}
 
-  for (const pattern of labelledPatterns) {
-    const match = normalized.match(pattern);
-    if (!match) continue;
-    if (match.length >= 4) {
-      const parsed = isoDate(Number(match[3]), Number(match[2]), Number(match[1]));
-      if (parsed) return parsed;
-    } else {
-      const parsed = isoDate(Number(match[2]), Number(match[1]), 1);
-      if (parsed) return parsed;
+function normalizedMonthName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+const RSO_MONTH_NAMES = new Map<string, number>([
+  ["janeiro", 1], ["jan", 1],
+  ["fevereiro", 2], ["fev", 2],
+  ["marco", 3], ["mar", 3],
+  ["abril", 4], ["abr", 4],
+  ["maio", 5], ["mai", 5],
+  ["junho", 6], ["jun", 6],
+  ["julho", 7], ["jul", 7],
+  ["agosto", 8], ["ago", 8],
+  ["setembro", 9], ["set", 9],
+  ["outubro", 10], ["out", 10],
+  ["novembro", 11], ["nov", 11],
+  ["dezembro", 12], ["dez", 12],
+]);
+
+/**
+ * Lê SOMENTE o campo explícito "Mês ref.". Não usa período, emissão ou data
+ * atual como fallback: se o RSO não declarar a competência, ela fica pendente
+ * para confirmação manual antes da importação.
+ */
+export function parseRsoReferenceMetadata(text: string): RsoReferenceMetadata {
+  const normalized = normalizeText(text);
+
+  const full = normalized.match(
+    /m[eê]s\s*ref\.?\s*:\s*(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/i,
+  );
+  if (full) {
+    const month = Number(full[2]);
+    const year = normalizeYear(Number(full[3]));
+    if (isoDate(year, month, 1)) {
+      return {
+        referenceYear: year,
+        referenceMonth: month,
+        originalText: full[0] ?? null,
+      };
     }
   }
 
-  return `${fallback.getFullYear().toString().padStart(4, "0")}-${(fallback.getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}-${fallback.getDate().toString().padStart(2, "0")}`;
+  const numeric = normalized.match(
+    /m[eê]s\s*ref\.?\s*:\s*(\d{1,2})[./-](\d{2,4})/i,
+  );
+  if (numeric) {
+    const month = Number(numeric[1]);
+    const year = normalizeYear(Number(numeric[2]));
+    if (isoDate(year, month, 1)) {
+      return {
+        referenceYear: year,
+        referenceMonth: month,
+        originalText: numeric[0] ?? null,
+      };
+    }
+  }
+
+  const named = normalized.match(
+    /m[eê]s\s*ref\.?\s*:\s*([a-záàâãéêíóôõúç]{3,12})(?:\s+de)?\s*[./-]?\s*(\d{2,4})/i,
+  );
+  if (named) {
+    const month = RSO_MONTH_NAMES.get(normalizedMonthName(named[1]!)) ?? null;
+    const year = normalizeYear(Number(named[2]));
+    if (month && isoDate(year, month, 1)) {
+      return {
+        referenceYear: year,
+        referenceMonth: month,
+        originalText: named[0] ?? null,
+      };
+    }
+  }
+
+  return { referenceYear: null, referenceMonth: null, originalText: null };
+}
+
+/** Compatibilidade com testes/integrações anteriores: retorna YYYY-MM-01 ou null. */
+export function parseRsoReferenceDate(text: string): string | null {
+  const parsed = parseRsoReferenceMetadata(text);
+  if (!parsed.referenceYear || !parsed.referenceMonth) return null;
+  return isoDate(parsed.referenceYear, parsed.referenceMonth, 1);
+}
+
+function parseDateMatch(match: RegExpMatchArray | null, startIndex = 1): string | null {
+  if (!match) return null;
+  return isoDate(
+    normalizeYear(Number(match[startIndex + 2])),
+    Number(match[startIndex + 1]),
+    Number(match[startIndex]),
+  );
+}
+
+export function parseRsoPeriodMetadata(text: string): RsoPeriodMetadata {
+  const normalized = normalizeText(text);
+  const period = normalized.match(
+    /per[ií]odo\s*:\s*(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:\s*(?:[–—-]|a|até)\s*|\s+)(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/i,
+  );
+  const emission = normalized.match(
+    /emiss[aã]o\s*:\s*(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/i,
+  );
+
+  return {
+    periodStart: parseDateMatch(period, 1),
+    periodEnd: parseDateMatch(period, 4),
+    emissionDate: parseDateMatch(emission, 1),
+  };
+}
+
+/** Identifica o título da área sem cortar códigos compostos como 1702.B/1702.E. */
+export function parseRsoAreaName(text: string, pageNumber: number): string {
+  const match = text.match(
+    /\b(\d{3,4}(?:\.[A-Za-z0-9]*)?(?:\s*\/\s*\d{3,4}(?:\.[A-Za-z0-9]*)?)?\s*[—–-]\s*[^\n]+)/,
+  );
+  return match?.[1]?.trim() || `Página ${pageNumber}`;
+}
+
+export function executionPhasesFromFirstPage(text: string) {
+  const phases: Array<{ label: string; prevAcum: number; realAcum: number }> = [];
+  let currentPhase: string | null = null;
+
+  for (const rawLine of normalizeText(text).split("\n")) {
+    const line = rawLine.trim();
+    const phaseMatch = line.match(/(?:Implanta[cç][aã]o|Amplia[cç][aã]o)\s+Fase\s+([A-Za-z0-9./-]+)/i);
+    if (phaseMatch) currentPhase = `Fase ${phaseMatch[1]}`;
+
+    const execution = line.match(
+      /^Execu[cç][aã]o\s+[\d.,]+%\s+[\d.,]+%\s+[+-]?[\d.,]+%\s+([\d.,]+)%\s+([\d.,]+)%/i,
+    );
+    if (!execution) continue;
+
+    phases.push({
+      label: currentPhase ?? `Fase ${phases.length + 1}`,
+      prevAcum: Number.parseFloat(execution[1]!.replace(",", ".")),
+      realAcum: Number.parseFloat(execution[2]!.replace(",", ".")),
+    });
+  }
+
+  return phases;
 }
 
 export async function parseRsoPdf(file: File): Promise<IdpNormalizedRecord> {
@@ -197,10 +331,12 @@ export async function parseRsoPdf(file: File): Promise<IdpNormalizedRecord> {
   const discData: IdpRsoDisciplineData = Object.fromEntries(
     IDP_DISC_NAMES.map((name) => [name, []]),
   );
-  const execucaoFases: Array<{ prevAcum: number; realAcum: number }> = [];
+  let execucaoFases: Array<{ label: string; prevAcum: number; realAcum: number }> = [];
   let unit: string | null = null;
   let rsoNumero: number | null = null;
-  let referenceDate = new Date().toISOString().slice(0, 10);
+  let reference = { referenceYear: null, referenceMonth: null, originalText: null } as RsoReferenceMetadata;
+  let period: RsoPeriodMetadata = { periodStart: null, periodEnd: null, emissionDate: null };
+  let firstPageText = "";
 
   for (let pageNumber = 1; pageNumber <= documentPdf.numPages; pageNumber += 1) {
     const page = await documentPdf.getPage(pageNumber);
@@ -219,28 +355,20 @@ export async function parseRsoPdf(file: File): Promise<IdpNormalizedRecord> {
     );
 
     if (pageNumber === 1) {
+      firstPageText = text;
       const unitMatch = text.match(/Unidade:\s*([^\n]+?)(?:\s+Projeto:|\n|$)/i);
       if (unitMatch) unit = unitMatch[1]!.trim();
 
       const rsoMatch = text.match(/RSO\s*N[º°o]?\s*:\s*(\d+)/i);
       if (rsoMatch) rsoNumero = Number.parseInt(rsoMatch[1]!, 10);
 
-      referenceDate = parseRsoReferenceDate(text);
-
-      const phasePattern =
-        /Execução\s+[\d.,]+%\s+[\d.,]+%\s+[+-]?[\d.,]+%\s+([\d.,]+)%\s+([\d.,]+)%/gi;
-      let phaseMatch: RegExpExecArray | null;
-      while ((phaseMatch = phasePattern.exec(text)) !== null) {
-        execucaoFases.push({
-          prevAcum: Number.parseFloat(phaseMatch[1]!.replace(",", ".")),
-          realAcum: Number.parseFloat(phaseMatch[2]!.replace(",", ".")),
-        });
-      }
+      reference = parseRsoReferenceMetadata(text);
+      period = parseRsoPeriodMetadata(text);
+      execucaoFases = executionPhasesFromFirstPage(text);
     }
 
     if (text.includes("Disciplinas") && /DISCIPLINA\s+PREV/i.test(text)) {
-      const areaMatch = text.match(/(\d{3,4}(?:\.\w+)?\s*[—–-]\s*[^\n]+)/);
-      const areaName = areaMatch ? areaMatch[1]!.trim() : `Página ${pageNumber}`;
+      const areaName = parseRsoAreaName(text, pageNumber);
       areas.push(areaName);
 
       for (const discipline of IDP_DISC_NAMES) {
@@ -258,8 +386,21 @@ export async function parseRsoPdf(file: File): Promise<IdpNormalizedRecord> {
 
   return {
     unit,
+    detectedUnit: unit,
+    unitAdjusted: false,
     rsoNumero,
-    referenceDate,
+    detectedRsoNumero: rsoNumero,
+    rsoAdjusted: false,
+    referenceYear: reference.referenceYear,
+    referenceMonth: reference.referenceMonth,
+    detectedReferenceYear: reference.referenceYear,
+    detectedReferenceMonth: reference.referenceMonth,
+    referenceSource: reference.referenceYear && reference.referenceMonth ? "PDF_MES_REF" : "UNRESOLVED",
+    referenceOriginalText: reference.originalText,
+    referenceAdjusted: false,
+    periodStart: period.periodStart,
+    periodEnd: period.periodEnd,
+    emissionDate: period.emissionDate,
     fileName: file.name,
     areas,
     discData,
@@ -269,7 +410,11 @@ export async function parseRsoPdf(file: File): Promise<IdpNormalizedRecord> {
       fileName: file.name,
       pages: documentPdf.numPages,
       parsedAt: new Date().toISOString(),
-      referenceDate,
+      firstPageHeader: firstPageText.slice(0, 3000),
+      referenceOriginalText: reference.originalText,
+      periodStart: period.periodStart,
+      periodEnd: period.periodEnd,
+      emissionDate: period.emissionDate,
     },
   };
 }

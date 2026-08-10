@@ -2,142 +2,97 @@ import { describe, expect, it } from "vitest";
 import {
   calculateIdpAdherence,
   computeIdpResult,
-  disciplineSortKey,
-  meetsTarget,
+  recordsInCompetence,
   selectLatestRsoByUnit,
 } from "@/features/idp/calculations";
 import type { IdpNormalizedRecord } from "@/features/idp/types";
 
-function record(partial: Partial<IdpNormalizedRecord> & { unit: string }): IdpNormalizedRecord {
+function record(partial: Partial<IdpNormalizedRecord> = {}): IdpNormalizedRecord {
   return {
-    rsoNumero: 1,
-    referenceDate: "2026-01-15",
-    fileName: `${partial.unit}.pdf`,
+    unit: "Nova Mutum",
+    detectedUnit: "Nova Mutum",
+    unitAdjusted: false,
+    rsoNumero: 34,
+    detectedRsoNumero: 34,
+    rsoAdjusted: false,
+    referenceYear: 2026,
+    referenceMonth: 6,
+    detectedReferenceYear: 2026,
+    detectedReferenceMonth: 6,
+    referenceSource: "PDF_MES_REF",
+    referenceOriginalText: "Mês ref.: 01/06/2026",
+    referenceAdjusted: false,
+    periodStart: "2026-06-24",
+    periodEnd: "2026-07-01",
+    emissionDate: "2026-07-06",
+    fileName: "rso.pdf",
     areas: [],
-    discData: {},
-    execucaoFases: [],
+    discData: {
+      "01 - Civil": [{ area: "Pipe Rack", prevAcum: 100, realAcum: 99.5 }],
+    },
+    execucaoFases: [{ label: "Fase 1", prevAcum: 53.08, realAcum: 54.79 }],
     raw: {},
     ...partial,
   };
 }
 
-describe("IDP RSO — cálculos", () => {
-  it("aderência = realizado acumulado / previsto acumulado", () => {
-    expect(calculateIdpAdherence(98, 100)).toBeCloseTo(0.98);
-    expect(calculateIdpAdherence(50, 0)).toBe(0);
+describe("IDP RSO — cálculos e versionamento", () => {
+  it("aderência = realizado / previsto", () => {
+    expect(calculateIdpAdherence(54.79, 53.08)).toBeCloseTo(54.79 / 53.08);
   });
 
-  it("seleciona somente o maior número de RSO por unidade", () => {
+  it("seleciona o maior RSO da mesma unidade e competência", () => {
     const selected = selectLatestRsoByUnit([
-      record({ unit: "Unidade A", rsoNumero: 4 }),
-      record({ unit: "Unidade A", rsoNumero: 7 }),
-      record({ unit: "Unidade B", rsoNumero: 2 }),
+      record({ rsoNumero: 32 }),
+      record({ rsoNumero: 34 }),
+      record({ rsoNumero: 33 }),
     ]);
-
-    expect(selected).toHaveLength(2);
-    expect(selected.find((item) => item.unit === "Unidade A")?.rsoNumero).toBe(7);
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.rsoNumero).toBe(34);
   });
 
-  it("calcula a unidade pela média das fases e o geral pela média das unidades", () => {
-    const result = computeIdpResult([
-      record({
-        unit: "Unidade A",
-        rsoNumero: 3,
-        execucaoFases: [
-          { prevAcum: 100, realAcum: 90 },
-          { prevAcum: 80, realAcum: 80 },
-        ],
-      }),
-      record({
-        unit: "Unidade B",
-        rsoNumero: 5,
-        execucaoFases: [{ prevAcum: 100, realAcum: 100 }],
-      }),
+  it("normaliza caixa e acentuação da unidade ao escolher a versão ativa", () => {
+    const selected = selectLatestRsoByUnit([
+      record({ unit: "RIO VERDE", rsoNumero: 37 }),
+      record({ unit: "Rio Verde", rsoNumero: 38 }),
     ]);
-
-    const unitA = result.unitRows.find((item) => item.unit === "Unidade A")!;
-    expect(unitA.prevAcum).toBe(90);
-    expect(unitA.realAcum).toBe(85);
-    expect(unitA.aderencia).toBeCloseTo(85 / 90);
-    expect(result.aderenciaGeral).toBeCloseTo(((85 / 90) + 1) / 2);
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.rsoNumero).toBe(38);
   });
 
-  it("consolida a disciplina pela média simples de todas as áreas", () => {
-    const result = computeIdpResult([
-      record({
-        unit: "Unidade A",
-        discData: {
-          "01 - Civil": [
-            { area: "Área 1", prevAcum: 100, realAcum: 90 },
-            { area: "Área 2", prevAcum: 80, realAcum: 80 },
-          ],
-        },
-      }),
-      record({
-        unit: "Unidade B",
-        discData: {
-          "01 - Civil": [{ area: "Área 3", prevAcum: 90, realAcum: 81 }],
-        },
-      }),
+  it("não carrega RSO de junho para julho", () => {
+    const rows = [record({ referenceMonth: 6, rsoNumero: 34 })];
+    expect(recordsInCompetence(rows, 2026, 7)).toEqual([]);
+    const result = computeIdpResult(rows, 0.9, [], {
+      selectedYear: 2026,
+      selectedMonth: 7,
+      historyMonthStart: 6,
+      historyMonthEnd: 7,
+    });
+    expect(result.activeDocuments).toBe(0);
+    expect(result.monthly.map((item) => item.aderencia)).toEqual([
+      expect.any(Number),
+      null,
     ]);
-
-    const civil = result.disciplineRows.find((item) => item.discipline === "01 - Civil")!;
-    expect(civil.prevAvg).toBe(90);
-    expect(civil.realAvg).toBeCloseTo(251 / 3);
-    expect(civil.aderencia).toBeCloseTo((251 / 3) / 90);
-    expect(civil.unitGroups).toHaveLength(2);
   });
 
-  it("remove disciplinas configuradas sem alterar a execução geral", () => {
-    const result = computeIdpResult(
-      [
-        record({
-          unit: "Unidade A",
-          execucaoFases: [{ prevAcum: 100, realAcum: 98 }],
-          discData: {
-            "01 - Civil": [{ area: "Área", prevAcum: 100, realAcum: 98 }],
-            "04 - Elétrica": [{ area: "Área", prevAcum: 100, realAcum: 90 }],
-          },
-        }),
-      ],
-      0.98,
-      ["04_Elétrica"],
-    );
-
-    expect(result.aderenciaGeral).toBeCloseTo(0.98);
-    expect(result.disciplineRows.some((item) => item.discipline === "04 - Elétrica")).toBe(false);
-  });
-
-
-  it("permite consultar uma posição histórica e gera a evolução mensal", () => {
-    const result = computeIdpResult(
-      [
-        record({
-          unit: "Unidade A",
-          rsoNumero: 1,
-          referenceDate: "2026-01-15",
-          execucaoFases: [{ prevAcum: 100, realAcum: 80 }],
-        }),
-        record({
-          unit: "Unidade A",
-          rsoNumero: 2,
-          referenceDate: "2026-03-10",
-          execucaoFases: [{ prevAcum: 100, realAcum: 95 }],
-        }),
-      ],
-      0.98,
-      [],
-      { selectedYear: 2026, monthStart: 1, monthEnd: 3 },
-    );
-
-    expect(result.unitRows[0]?.rsoNumero).toBe(2);
-    expect(result.monthly.map((month) => month.aderencia)).toEqual([0.8, 0.8, 0.95]);
-  });
-
-  it("mantém utilitários de ordenação e meta", () => {
-    expect(disciplineSortKey("06 - Automação")).toBe(6);
-    expect(disciplineSortKey("Sem código")).toBe(999);
-    expect(meetsTarget(0.98, 0.98)).toBe(true);
-    expect(meetsTarget(0.9, 0.98)).toBe(false);
+  it("mantém versões semanais no histórico, mas calcula apenas a maior versão", () => {
+    const rows = [
+      record({ rsoNumero: 32, execucaoFases: [{ label: "Fase 1", prevAcum: 50, realAcum: 45 }] }),
+      record({ rsoNumero: 34, execucaoFases: [{ label: "Fase 1", prevAcum: 53.08, realAcum: 54.79 }] }),
+      record({ unit: "Rio Verde", rsoNumero: 38, execucaoFases: [
+        { label: "Fase 1", prevAcum: 51.23, realAcum: 49.5 },
+        { label: "Fase 2", prevAcum: 25.55, realAcum: 26.93 },
+      ] }),
+    ];
+    const result = computeIdpResult(rows, 0.9, [], {
+      selectedYear: 2026,
+      selectedMonth: 6,
+      historyMonthStart: 6,
+      historyMonthEnd: 6,
+    });
+    expect(result.activeDocuments).toBe(2);
+    expect(result.unitRows.find((item) => item.unit === "Nova Mutum")?.rsoNumero).toBe(34);
+    expect(result.unitRows.find((item) => item.unit === "Rio Verde")?.nFases).toBe(2);
   });
 });

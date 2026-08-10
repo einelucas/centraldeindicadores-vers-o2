@@ -169,20 +169,25 @@ export function DashboardOverview() {
       <div className="content" style={{ padding: "14px 0 0" }}>
         <div className="mgrid">
           <SummaryMetric
-            label="Pontuação Prevista"
+            label="Pontuação Prevista — Semestre"
+            value={formatPoints(data.pontuacaoPrevistaSemestre)}
+            sub="Meta total dos 6 meses"
+          />
+          <SummaryMetric
+            label="Pontuação Prevista — Período"
             value={formatPoints(data.pontuacaoPrevista)}
-            sub={`${data.monthKeys.length} mês(es) publicado(s)`}
+            sub={`Meta dos ${data.monthKeys.length} mês(es) com dados`}
           />
           <SummaryMetric
             label="Pontos Realizados"
             value={data.pontosRealizados.toLocaleString("pt-BR")}
-            sub="Execução acumulada do painel"
+            sub="Acumulado no período com dados"
             state="A"
           />
           <SummaryMetric
             label="Atendimento Geral"
             value={`${data.atendimentoGeral.toFixed(0)}%`}
-            sub="Percentual consolidado do PPR"
+            sub="Realizado ÷ previsto do período"
             state={attendanceState}
           />
           <SummaryMetric

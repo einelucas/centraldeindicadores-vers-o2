@@ -6,8 +6,9 @@
  * - Uma RNC conta como solucionada no mês da criação quando possui Data de Solução.
  * - Dias médios consideram apenas solucionadas com Tempo de Tratativa numérico.
  * - Aderência por unidade usa status TRATADA / criadas.
- * - O resultado publicado é a média ponderada dos dias mensais pela quantidade
- *   de solucionadas de cada mês.
+ * - O resultado consolidado é a média aritmética simples dos "dias médios"
+ *   mensais válidos: cada mês tem peso 1, independentemente da quantidade de
+ *   RNCs tratadas nele. Meses sem tratativa numérica não entram na conta.
  */
 
 import { MONTH_NAMES } from "@/lib/dates";
@@ -21,6 +22,29 @@ import {
   type RncUnitAggregate,
 } from "@/features/rnc/types";
 import { normalizeRncUnitCode } from "@/features/rnc/utils/units";
+
+/**
+ * Consolida os "dias médios" mensais em um único resultado pela média
+ * aritmética simples: cada mês com resultado válido pesa 1, nenhum mês é
+ * ponderado pela quantidade de RNCs elaboradas, tratadas ou por unidade.
+ * Meses sem resultado válido (diasMedios null) não entram na soma nem no
+ * denominador — nunca são tratados como zero.
+ */
+export function averageMonthlyRncDays(
+  months: readonly Pick<RncMonthAggregate, "diasMedios">[],
+): number | null {
+  const validDays = months
+    .map((month) => month.diasMedios)
+    .filter(
+      (value): value is number => value !== null && Number.isFinite(value),
+    );
+
+  if (validDays.length === 0) return null;
+
+  return (
+    validDays.reduce((sum, value) => sum + value, 0) / validDays.length
+  );
+}
 
 export function computeRncResult(
   records: readonly RncNormalizedRecord[],
@@ -130,23 +154,7 @@ export function computeRncResult(
       pct: totalOfensor ? count / totalOfensor : 0,
     }));
 
-  const monthsWithDays = months.filter(
-    (month): month is RncMonthAggregate & { diasMedios: number } =>
-      month.diasMedios !== null,
-  );
-  const solvedWeight = monthsWithDays.reduce(
-    (sum, month) => sum + month.solucionados,
-    0,
-  );
-  const resultadoDias = solvedWeight
-    ? monthsWithDays.reduce(
-        (sum, month) => sum + month.diasMedios * month.solucionados,
-        0,
-      ) / solvedWeight
-    : monthsWithDays.length
-      ? monthsWithDays.reduce((sum, month) => sum + month.diasMedios, 0) /
-        monthsWithDays.length
-      : null;
+  const resultadoDias = averageMonthlyRncDays(months);
 
   return {
     metaDias,

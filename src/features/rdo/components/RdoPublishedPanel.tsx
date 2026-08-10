@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -32,6 +35,8 @@ const BLUE = "#304F7E";
 const GOLD = "#EAA239";
 const GREEN = "#609346";
 const RED = "#CC5121";
+/** Tinta de gráfico (não a marca) — a navy da marca falha o piso de croma como preenchimento categórico. */
+const CHART_BLUE = "#2E6DB4";
 
 function formatPublishedAt(value: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -88,6 +93,11 @@ export function RdoPublishedPanel() {
   const resultOk = result >= d.meta;
   const reviewingCount = Math.round((d.emRevisaoPct / 100) * d.emitidos);
   const fillingCount = Math.round((d.preenchendoPct / 100) * d.emitidos);
+  const statusChartData = [
+    { name: "Aprovado", value: result, color: GREEN },
+    { name: "Em revisão", value: Math.round(d.emRevisaoPct), color: GOLD },
+    { name: "Preenchendo", value: Math.round(d.preenchendoPct), color: CHART_BLUE },
+  ];
 
   return (
     <div className="painel-frontend">
@@ -128,20 +138,54 @@ export function RdoPublishedPanel() {
             </div>
           </div>
 
-          <div className="card">
-            <div className="ct">Aprovação por unidade</div>
-            {d.unidades.length ? d.unidades.map((unit) => {
-              const ok = unit.v >= d.meta;
-              return (
-                <div className="urow" key={unit.n}>
-                  <div className="uname">{unit.n}</div>
-                  <div className="utrack">
-                    <div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} />
+          <div className="panel-col">
+            <div className="card panel-compact">
+              <div className="ct">Aprovação por unidade</div>
+              {d.unidades.length ? d.unidades.map((unit) => {
+                const ok = unit.v >= d.meta;
+                return (
+                  <div className="urow" key={unit.n}>
+                    <div className="uname">{unit.n}</div>
+                    <div className="utrack">
+                      <div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} />
+                    </div>
+                    <div className="uval" style={{ color: ok ? GREEN : RED }}>{unit.v}%</div>
                   </div>
-                  <div className="uval" style={{ color: ok ? GREEN : RED }}>{unit.v}%</div>
-                </div>
-              );
-            }) : <p className="ps">Sem unidades publicadas.</p>}
+                );
+              }) : <p className="ps">Sem unidades publicadas.</p>}
+            </div>
+
+            <div className="card">
+              <div className="ct">Distribuição de status</div>
+              <div className="cw" style={{ height: 190 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                    <Pie
+                      data={statusChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius="52%"
+                      outerRadius="78%"
+                      paddingAngle={2}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      label={({ value }) => `${value}%`}
+                      labelLine={false}
+                    >
+                      {statusChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                    </Pie>
+                    <Tooltip formatter={(value, name) => [`${value}%`, name]} />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={24}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontFamily: "Montserrat", fontSize: 9 }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         </div>
       </div>

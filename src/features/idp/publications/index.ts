@@ -1,17 +1,27 @@
 import type { IdpDetailedResult } from "@/features/idp/types";
-import { IDP_SCORECARD_POINTS, IDP_SCORECARD_WEIGHT } from "@/features/idp/types";
+import {
+  IDP_SCORECARD_POINTS,
+  IDP_SCORECARD_WEIGHT,
+} from "@/features/idp/types";
 
 export interface IdpPublishedUnit {
   n: string;
   v: number;
-  /** Ausente em snapshots anteriores à migração para RSO. */
-  rsoNumero?: number | null;
-  referenceDate?: string;
+  rsoNumero?: number;
+  referenceYear?: number;
+  referenceMonth?: number;
+  referenceSource?: string;
+  referenceOriginalText?: string | null;
+  referenceAdjusted?: boolean;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  emissionDate?: string | null;
+  fileName?: string;
 }
 
 export interface IdpPublishedDiscipline {
   n: string;
-  v: number;
+  v: number | null;
 }
 
 export interface IdpPublishedMonth {
@@ -19,7 +29,7 @@ export interface IdpPublishedMonth {
   v: number | null;
   linhaBase?: number;
   real?: number;
-  activeDocuments?: number;
+  documentosAtivos?: number;
 }
 
 export interface IdpPublishedPayload {
@@ -29,21 +39,21 @@ export interface IdpPublishedPayload {
   resultado: number;
   civil: number | null;
   mecanica: number | null;
-  /** Campos RSO podem não existir em snapshots antigos do IDP. */
-  eletrica?: number | null;
-  /** Alias de compatibilidade com snapshots antigos. */
-  eia: number | null;
-  documentosAtivos?: number;
-  totalPrevistoMedio?: number;
-  totalRealMedio?: number;
-  /** Campos legados mantidos para o scorecard já existente. */
-  totalLinhaBase: number;
-  totalReal: number;
+  eletrica: number | null;
+  /** Compatibilidade com publicações antigas. */
+  eia?: number | null;
   selectedYear: number;
+  selectedMonth: number;
+  historyMonthStart: number;
+  historyMonthEnd: number;
+  /** Mantidos para compatibilidade com o Scorecard e snapshots antigos. */
   monthStart: number;
   monthEnd: number;
+  totalLinhaBase: number;
+  totalReal: number;
+  documentosAtivos: number;
   unidades: IdpPublishedUnit[];
-  disciplinas?: IdpPublishedDiscipline[];
+  disciplinas: IdpPublishedDiscipline[];
   mensal: IdpPublishedMonth[];
 }
 
@@ -51,59 +61,65 @@ function roundPercent(value: number): number {
   return Math.round(value * 10_000) / 100;
 }
 
-function disciplinePercent(result: IdpDetailedResult, name: string): number | null {
+function disciplineValue(result: IdpDetailedResult, name: string): number | null {
   const row = result.disciplineRows.find((item) => item.discipline === name);
   return row?.aderencia === null || row?.aderencia === undefined
     ? null
     : roundPercent(row.aderencia);
 }
 
-/** Converte o cálculo RSO em snapshot imutável do painel. */
+/** Snapshot imutável com os RSOs exatos que participaram da publicação. */
 export function toIdpPublishedPayload(
   result: IdpDetailedResult,
   targetPercent: number,
 ): IdpPublishedPayload {
-  if (!result.activeDocuments) {
-    throw new Error("Não há documentos RSO ativos para publicar.");
+  if (!result.activeDocuments || result.totalPrevistoMedio <= 0) {
+    throw new Error(
+      "Não há RSO com execução prevista válida na competência selecionada para publicar.",
+    );
   }
-
-  const resultado = roundPercent(result.aderenciaGeral);
-  const eletrica = disciplinePercent(result, "04 - Elétrica");
 
   return {
     pontos: IDP_SCORECARD_POINTS,
     peso: IDP_SCORECARD_WEIGHT,
     meta: targetPercent,
-    resultado,
-    civil: disciplinePercent(result, "01 - Civil"),
-    mecanica: disciplinePercent(result, "02 - Mecânica"),
-    eletrica,
-    eia: eletrica,
-    documentosAtivos: result.activeDocuments,
-    totalPrevistoMedio: result.totalPrevistoMedio,
-    totalRealMedio: result.totalRealMedio,
+    resultado: roundPercent(result.aderenciaGeral),
+    civil: disciplineValue(result, "01 - Civil"),
+    mecanica: disciplineValue(result, "02 - Mecânica"),
+    eletrica: disciplineValue(result, "04 - Elétrica"),
+    selectedYear: result.selectedYear,
+    selectedMonth: result.selectedMonth,
+    historyMonthStart: result.historyMonthStart,
+    historyMonthEnd: result.historyMonthEnd,
+    monthStart: result.historyMonthStart,
+    monthEnd: result.historyMonthEnd,
     totalLinhaBase: result.totalPrevistoMedio,
     totalReal: result.totalRealMedio,
-    selectedYear: result.selectedYear,
-    monthStart: result.monthStart,
-    monthEnd: result.monthEnd,
-    unidades: result.unitRows
-      .map((unit) => ({
-        n: unit.unit.replace(/^INPASA\s*/i, "").trim(),
-        v: roundPercent(unit.aderencia),
-        rsoNumero: unit.rsoNumero,
-        referenceDate: unit.referenceDate,
-      }))
-      .sort((a, b) => b.v - a.v),
-    disciplinas: result.disciplineRows
-      .filter((row) => row.aderencia !== null)
-      .map((row) => ({ n: row.discipline, v: roundPercent(row.aderencia ?? 0) })),
+    documentosAtivos: result.activeDocuments,
+    unidades: result.unitRows.map((unit) => ({
+      n: unit.unit.replace(/^INPASA\s*/i, "").trim(),
+      v: roundPercent(unit.aderencia),
+      rsoNumero: unit.rsoNumero,
+      referenceYear: unit.referenceYear,
+      referenceMonth: unit.referenceMonth,
+      referenceSource: unit.referenceSource,
+      referenceOriginalText: unit.referenceOriginalText,
+      referenceAdjusted: unit.referenceAdjusted,
+      periodStart: unit.periodStart,
+      periodEnd: unit.periodEnd,
+      emissionDate: unit.emissionDate,
+      fileName: unit.fileName,
+    })),
+    disciplinas: result.disciplineRows.map((row) => ({
+      n: row.discipline,
+      v: row.aderencia === null ? null : roundPercent(row.aderencia),
+    })),
     mensal: result.monthly.map((month) => ({
       label: month.label,
       v: month.aderencia === null ? null : roundPercent(month.aderencia),
       linhaBase: month.totalPrevistoMedio,
       real: month.totalRealMedio,
-      activeDocuments: month.activeDocuments,
+      documentosAtivos: month.activeDocuments,
     })),
   };
 }

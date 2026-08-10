@@ -219,7 +219,14 @@ export function ScorecardView() {
     [effectiveByMonth],
   );
 
-  const semesterAttendance = (semesterPoints / SCORECARD_MAX_POINTS) * 100;
+  // Só os meses com snapshot/preview disponível entram na meta do período —
+  // o mês corrente do calendário nunca é usado para inferir disponibilidade.
+  const availableMonthsCount = effectiveByMonth.size;
+  const semesterPontuacaoPrevista = availableMonthsCount * SCORECARD_MONTHLY_POOL;
+  const semesterAttendance =
+    semesterPontuacaoPrevista > 0
+      ? (semesterPoints / semesterPontuacaoPrevista) * 100
+      : 0;
 
   const historyExportRows = useMemo<HistoryExportRow[]>(() => {
     const monthField = [
@@ -526,7 +533,7 @@ export function ScorecardView() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard
           label="Pontos do mês"
           value={formatPoints(displayedResult.totalPontos)}
@@ -539,19 +546,29 @@ export function ScorecardView() {
           sub={`${selectedRows.filter((row) => row.pass).length} indicadores na meta`}
         />
         <MetricCard
+          label="Pontuação prevista — Semestre"
+          value={formatPoints(SCORECARD_MAX_POINTS)}
+          sub="Meta total dos 6 meses"
+        />
+        <MetricCard
+          label="Pontuação prevista — Período"
+          value={formatPoints(semesterPontuacaoPrevista)}
+          sub={`Meta dos ${availableMonthsCount} mês(es) com dados`}
+        />
+        <MetricCard
           label="Pontos no ciclo"
           value={formatPoints(semesterPoints)}
-          sub="Junho a novembro"
+          sub="Realizado acumulado no período"
           accent
         />
         <MetricCard
           label="Atendimento do ciclo"
           value={`${semesterAttendance.toFixed(2)}%`}
-          sub={`sobre ${SCORECARD_MAX_POINTS.toLocaleString("pt-BR")} pontos`}
+          sub={`sobre ${formatPoints(semesterPontuacaoPrevista)} pontos do período`}
         />
         <MetricCard
           label="Meses disponíveis"
-          value={String(effectiveByMonth.size)}
+          value={String(availableMonthsCount)}
           sub={`de ${SCORECARD_PERIOD_MONTHS.length}`}
         />
       </div>

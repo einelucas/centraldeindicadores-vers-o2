@@ -4,7 +4,7 @@ import { IdpPublishedPanel } from "@/features/idp/components/IdpPublishedPanel";
 import { IdpView } from "@/features/idp/components/IdpView";
 import { getCurrentUser } from "@/server/auth/session";
 
-export const metadata = { title: "IDP — Avanço Físico RSO — Central de Indicadores" };
+export const metadata = { title: "IDP - Disciplinas — Central de Indicadores" };
 
 export default async function IdpPage() {
   const user = await getCurrentUser();
@@ -17,8 +17,8 @@ export default async function IdpPage() {
       administration={canAdmin ? (
         <>
           <ReferenceSectionHeader
-            title="IDP — Cronograma (Administração)"
-            description="Aderência do avanço físico calculada a partir do RSO mais recente de cada unidade. A execução geral usa a média das fases; o consolidado por disciplina usa todas as áreas reconhecidas nos PDFs ativos."
+            title="IDP — Aderência do Cronograma (Administração)"
+            description="Controle semanal dos Relatórios Semanais de Obra (RSO), com rastreabilidade de versão, competência, período, emissão, execução e disciplinas."
           />
           <IdpView canPublish={isAdmin} canClear={isAdmin} />
         </>

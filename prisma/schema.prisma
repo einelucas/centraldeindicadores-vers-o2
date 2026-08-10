@@ -299,29 +299,39 @@ model IdpRecord {
 }
 
 model IdpRsoRecord {
-  id             String   @id @default(uuid())
-  businessKey    String   @unique
-  contentHash    String
-  // Documento RSO normalizado. O maior rsoNumero de cada unidade é o ativo.
-  unit            String
-  rsoNumero       Int?
-  referenceDate   DateTime @default(now())
-  fileName        String
-  areas           Json
-  discData        Json
-  execucaoFases   Json
-  raw              Json
-  firstImportId   String
-  lastImportId    String
-  firstSeenAt     DateTime @default(now())
-  lastSeenAt      DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  businessKey            String   @unique
+  contentHash            String
+  unit                   String
+  detectedUnit           String?
+  unitAdjusted           Boolean  @default(false)
+  rsoNumero              Int
+  detectedRsoNumero      Int?
+  rsoAdjusted            Boolean  @default(false)
+  referenceYear          Int
+  referenceMonth         Int
+  detectedReferenceYear  Int?
+  detectedReferenceMonth Int?
+  referenceSource        String
+  referenceOriginalText  String?
+  referenceAdjusted      Boolean  @default(false)
+  periodStart            DateTime?
+  periodEnd              DateTime?
+  emissionDate           DateTime?
+  fileName               String
+  areas                  Json
+  discData               Json
+  execucaoFases          Json
+  raw                     Json
+  firstImportId          String
+  lastImportId           String
+  firstSeenAt            DateTime @default(now())
+  lastSeenAt             DateTime @default(now())
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  @@index([unit])
+  @@index([referenceYear, referenceMonth])
   @@index([unit, rsoNumero])
-  @@index([referenceDate])
-  @@index([updatedAt])
 }
 
 model RncRecord {

@@ -5,20 +5,15 @@ import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 
-/** DELETE /api/idp/registros — limpa RSOs e registros legados administrativos. */
+/** Limpa apenas o histórico administrativo de RSOs; publicação permanece. */
 export async function DELETE() {
   try {
     const user = await requirePermission("indicators:edit");
-    const [rsoCount, legacyCount] = await Promise.all([
-      prisma.idpRsoRecord.count(),
-      prisma.idpRecord.count(),
-    ]);
-    const count = rsoCount + legacyCount;
+    const count = await prisma.idpRsoRecord.count();
     if (count === 0) return NextResponse.json({ ok: true, deleted: 0 });
 
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.idpRsoRecord.deleteMany();
-      await tx.idpRecord.deleteMany();
       await tx.indicatorResult.deleteMany({ where: { module: "idp" } });
     });
 
@@ -26,8 +21,8 @@ export async function DELETE() {
       userId: user.id,
       action: "RECORDS_CLEARED",
       entity: "IdpRsoRecord",
-      previousData: { rso: rsoCount, legado: legacyCount, quantidade: count },
-      metadata: { module: "idp", escopo: "todos" },
+      previousData: { quantidade: count },
+      metadata: { module: "idp", escopo: "todos_rsos" },
     });
 
     return NextResponse.json({ ok: true, deleted: count });

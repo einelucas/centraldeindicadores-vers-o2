@@ -1,15 +1,14 @@
 /**
  * Cálculos do IDP baseados nos PDFs RSO.
  *
- * Regras:
- *  - Um documento ativo por unidade: o maior número de RSO disponível até a
- *    competência consultada.
- *  - Execução geral da unidade: média das fases encontradas no documento.
- *  - Aderência da unidade: realizado acumulado / previsto acumulado.
- *  - Consolidado por disciplina: média simples de todas as áreas disponíveis
- *    em todas as unidades ativas.
- *  - Aderência geral: média simples das aderências das unidades ativas.
- *  - Série mensal: posição acumulada no fechamento de cada mês selecionado.
+ * Regras centrais:
+ *  - cada RSO é uma versão semanal independente e permanece no histórico;
+ *  - a competência é mês/ano explícito do documento (ou ajuste manual rastreado);
+ *  - para uma competência, entra no cálculo apenas o maior RSO de cada unidade;
+ *  - documentos de outros meses nunca são carregados para preencher lacunas;
+ *  - execução geral = média das linhas "Execução" das fases do RSO ativo;
+ *  - aderência da unidade = realizado acumulado / previsto acumulado;
+ *  - aderência geral = média simples das aderências das unidades ativas.
  */
 
 import { isIdpDisciplineExcluded } from "@/features/idp/configuration";
@@ -25,13 +24,15 @@ import {
   type IdpNormalizedRecord,
   type IdpRsoAreaValue,
   type IdpUnitDetail,
+  type IdpUnitExecutionRow,
 } from "@/features/idp/types";
-import { MONTH_NAMES } from "@/lib/dates";
+import { MONTH_NAMES_FULL } from "@/lib/dates";
 
 export interface IdpPeriodOptions {
   selectedYear?: number;
-  monthStart?: number;
-  monthEnd?: number;
+  selectedMonth?: number;
+  historyMonthStart?: number;
+  historyMonthEnd?: number;
 }
 
 export function calculateIdpAdherence(real: number, previsto: number): number {
@@ -45,34 +46,53 @@ export function disciplineSortKey(name: string): number {
   return match ? Number.parseInt(match[1]!, 10) : 999;
 }
 
-function referenceTime(record: IdpNormalizedRecord): number {
-  const parsed = new Date(`${record.referenceDate}T12:00:00Z`).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
+export function normalizedUnitKey(value: string): string {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toLocaleUpperCase("pt-BR");
 }
 
-/** Seleciona o RSO vigente de cada unidade dentro dos documentos recebidos. */
+function tieBreakerTime(entry: IdpNormalizedRecord): number {
+  const candidates = [entry.updatedAt, entry.emissionDate, entry.periodEnd];
+  for (const value of candidates) {
+    if (!value) continue;
+    const time = new Date(value).getTime();
+    if (Number.isFinite(time)) return time;
+  }
+  return 0;
+}
+
+/**
+ * Seleciona um único RSO por unidade dentre os registros recebidos. Como a
+ * função normalmente recebe apenas uma competência, o maior número do RSO é
+ * a versão ativa. Reimportações do mesmo RSO usam updatedAt apenas como desempate.
+ */
 export function selectLatestRsoByUnit(
   entries: readonly IdpNormalizedRecord[],
 ): IdpNormalizedRecord[] {
   const latestByUnit = new Map<string, IdpNormalizedRecord>();
 
   for (const entry of entries) {
-    const unit = String(entry.unit ?? "").trim();
-    if (!unit) continue;
+    const unitKey = normalizedUnitKey(entry.unit);
+    if (!unitKey) continue;
 
-    const current = latestByUnit.get(unit);
+    const current = latestByUnit.get(unitKey);
     if (!current) {
-      latestByUnit.set(unit, entry);
+      latestByUnit.set(unitKey, entry);
       continue;
     }
 
     const currentNumber = current.rsoNumero ?? Number.NEGATIVE_INFINITY;
     const nextNumber = entry.rsoNumero ?? Number.NEGATIVE_INFINITY;
-    const isNewerNumber = nextNumber > currentNumber;
-    const isSameNumberAndNewerDate =
-      nextNumber === currentNumber && referenceTime(entry) > referenceTime(current);
-
-    if (isNewerNumber || isSameNumberAndNewerDate) latestByUnit.set(unit, entry);
+    if (
+      nextNumber > currentNumber ||
+      (nextNumber === currentNumber && tieBreakerTime(entry) > tieBreakerTime(current))
+    ) {
+      latestByUnit.set(unitKey, entry);
+    }
   }
 
   return Array.from(latestByUnit.values()).sort((a, b) =>
@@ -83,6 +103,34 @@ export function selectLatestRsoByUnit(
 function average(values: readonly number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function isCompleteReference(entry: IdpNormalizedRecord): entry is IdpNormalizedRecord & {
+  referenceYear: number;
+  referenceMonth: number;
+  rsoNumero: number;
+} {
+  return (
+    Number.isInteger(entry.referenceYear) &&
+    Number.isInteger(entry.referenceMonth) &&
+    (entry.referenceMonth ?? 0) >= 1 &&
+    (entry.referenceMonth ?? 0) <= 12 &&
+    Number.isInteger(entry.rsoNumero) &&
+    (entry.rsoNumero ?? 0) > 0
+  );
+}
+
+export function recordsInCompetence(
+  entries: readonly IdpNormalizedRecord[],
+  year: number,
+  month: number,
+): IdpNormalizedRecord[] {
+  return entries.filter(
+    (entry) =>
+      isCompleteReference(entry) &&
+      entry.referenceYear === year &&
+      entry.referenceMonth === month,
+  );
 }
 
 function buildDisciplineRows(
@@ -175,38 +223,34 @@ function buildUnitDetails(
   }));
 }
 
-function buildUnitRows(activeEntries: readonly IdpNormalizedRecord[]) {
-  return activeEntries.map((entry) => {
-    const fases = entry.execucaoFases ?? [];
-    const prevAcum = average(fases.map((phase) => Number(phase.prevAcum) || 0));
-    const realAcum = average(fases.map((phase) => Number(phase.realAcum) || 0));
+function buildUnitRows(activeEntries: readonly IdpNormalizedRecord[]): IdpUnitExecutionRow[] {
+  return activeEntries
+    .filter(isCompleteReference)
+    .map((entry) => {
+      const fases = entry.execucaoFases ?? [];
+      const prevAcum = average(fases.map((phase) => Number(phase.prevAcum) || 0));
+      const realAcum = average(fases.map((phase) => Number(phase.realAcum) || 0));
 
-    return {
-      sourceId: entry.id,
-      unit: entry.unit,
-      rsoNumero: entry.rsoNumero,
-      referenceDate: entry.referenceDate,
-      fileName: entry.fileName,
-      prevAcum,
-      realAcum,
-      aderencia: calculateIdpAdherence(realAcum, prevAcum),
-      nFases: fases.length,
-      fases,
-    };
-  });
-}
-
-function endOfMonthUtc(year: number, month: number): number {
-  return Date.UTC(year, month, 0, 23, 59, 59, 999);
-}
-
-function recordsAvailableAt(
-  entries: readonly IdpNormalizedRecord[],
-  year: number,
-  month: number,
-): IdpNormalizedRecord[] {
-  const limit = endOfMonthUtc(year, month);
-  return entries.filter((entry) => referenceTime(entry) <= limit);
+      return {
+        sourceId: entry.id,
+        unit: entry.unit,
+        rsoNumero: entry.rsoNumero,
+        referenceYear: entry.referenceYear,
+        referenceMonth: entry.referenceMonth,
+        referenceSource: entry.referenceSource,
+        referenceOriginalText: entry.referenceOriginalText,
+        referenceAdjusted: entry.referenceAdjusted,
+        periodStart: entry.periodStart,
+        periodEnd: entry.periodEnd,
+        emissionDate: entry.emissionDate,
+        fileName: entry.fileName,
+        prevAcum,
+        realAcum,
+        aderencia: calculateIdpAdherence(realAcum, prevAcum),
+        nFases: fases.length,
+        fases,
+      };
+    });
 }
 
 function monthlyResult(
@@ -218,12 +262,14 @@ function monthlyResult(
   const rows: IdpMonthlyAggregate[] = [];
 
   for (let month = monthStart; month <= monthEnd; month += 1) {
-    const activeEntries = selectLatestRsoByUnit(recordsAvailableAt(entries, selectedYear, month));
+    const activeEntries = selectLatestRsoByUnit(
+      recordsInCompetence(entries, selectedYear, month),
+    );
     const unitRows = buildUnitRows(activeEntries);
     rows.push({
       year: selectedYear,
       month,
-      label: `${MONTH_NAMES[month - 1] ?? month}/${selectedYear}`,
+      label: `${MONTH_NAMES_FULL[month - 1] ?? month}/${selectedYear}`,
       aderencia: unitRows.length ? average(unitRows.map((unit) => unit.aderencia)) : null,
       activeDocuments: unitRows.length,
       totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
@@ -239,14 +285,12 @@ function boundedMonth(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.min(12, Math.trunc(value ?? fallback)));
 }
 
-function resolveYear(entries: readonly IdpNormalizedRecord[], requested?: number): number {
-  if (Number.isInteger(requested) && (requested ?? 0) >= 2000 && (requested ?? 0) <= 2100) {
-    return requested!;
-  }
-  const years = entries
-    .map((entry) => Number(entry.referenceDate.slice(0, 4)))
-    .filter((year) => Number.isInteger(year) && year >= 2000 && year <= 2100);
-  return years.length ? Math.max(...years) : new Date().getFullYear();
+function latestCompetence(entries: readonly IdpNormalizedRecord[]): { year: number; month: number } | null {
+  const valid = entries
+    .filter(isCompleteReference)
+    .map((entry) => ({ year: entry.referenceYear, month: entry.referenceMonth }))
+    .sort((a, b) => b.year - a.year || b.month - a.month);
+  return valid[0] ?? null;
 }
 
 export function computeIdpResult(
@@ -255,23 +299,38 @@ export function computeIdpResult(
   excludedDisciplines: readonly string[] = [],
   options: IdpPeriodOptions = {},
 ): IdpDetailedResult {
-  const selectedYear = resolveYear(entries, options.selectedYear);
-  let monthStart = boundedMonth(options.monthStart, IDP_DEFAULT_MONTH_START);
-  let monthEnd = boundedMonth(options.monthEnd, IDP_DEFAULT_MONTH_END);
-  if (monthEnd < monthStart) [monthStart, monthEnd] = [monthEnd, monthStart];
+  const latest = latestCompetence(entries);
+  const selectedYear =
+    Number.isInteger(options.selectedYear) && (options.selectedYear ?? 0) >= 2000
+      ? options.selectedYear!
+      : latest?.year ?? new Date().getFullYear();
 
-  const availableEntries = recordsAvailableAt(entries, selectedYear, monthEnd);
-  const activeEntries = selectLatestRsoByUnit(availableEntries);
+  const selectedMonth = boundedMonth(
+    options.selectedMonth,
+    latest?.year === selectedYear ? latest.month : IDP_DEFAULT_MONTH_END,
+  );
+
+  let historyMonthStart = boundedMonth(options.historyMonthStart, IDP_DEFAULT_MONTH_START);
+  let historyMonthEnd = boundedMonth(options.historyMonthEnd, selectedMonth);
+  if (historyMonthEnd < historyMonthStart) {
+    [historyMonthStart, historyMonthEnd] = [historyMonthEnd, historyMonthStart];
+  }
+
+  const competenceEntries = recordsInCompetence(entries, selectedYear, selectedMonth);
+  const activeEntries = selectLatestRsoByUnit(competenceEntries);
   const unitRows = buildUnitRows(activeEntries);
   const disciplineRows = buildDisciplineRows(activeEntries, excludedDisciplines);
   const unitDetails = buildUnitDetails(activeEntries, excludedDisciplines);
-  const aderenciaGeral = average(unitRows.map((unit) => unit.aderencia));
+  const aderenciaGeral = unitRows.length
+    ? average(unitRows.map((unit) => unit.aderencia))
+    : 0;
 
   return {
     threshold,
     selectedYear,
-    monthStart,
-    monthEnd,
+    selectedMonth,
+    historyMonthStart,
+    historyMonthEnd,
     aderenciaGeral,
     unitRows,
     disciplineRows,
@@ -280,11 +339,11 @@ export function computeIdpResult(
     activeDocuments: activeEntries.length,
     totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
     totalRealMedio: unitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
-    monthly: monthlyResult(entries, selectedYear, monthStart, monthEnd),
+    monthly: monthlyResult(entries, selectedYear, historyMonthStart, historyMonthEnd),
   };
 }
 
-/** Alias mantido para integrações que importavam o nome antigo. */
+/** Alias preservado para integrações existentes. */
 export const computeIdpDetailedResult = computeIdpResult;
 
 export function meetsTarget(adherence: number, threshold: number): boolean {

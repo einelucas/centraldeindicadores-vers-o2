@@ -1,4 +1,4 @@
-/** Tipos do módulo IDP — avanço físico extraído dos relatórios RSO. */
+/** Tipos do módulo IDP baseado nos Relatórios Semanais de Obra (RSO). */
 
 export const IDP_DISC_NAMES = [
   "01 - Civil",
@@ -13,44 +13,77 @@ export const IDP_DISC_NAMES = [
 
 export type IdpDisciplineName = (typeof IDP_DISC_NAMES)[number];
 
-export interface IdpRsoPhase {
+export interface IdpRsoAreaValue {
+  area: string;
   prevAcum: number;
   realAcum: number;
 }
 
-export interface IdpRsoAreaValue extends IdpRsoPhase {
-  area: string;
-}
-
 export type IdpRsoDisciplineData = Record<string, IdpRsoAreaValue[]>;
 
-/** Um documento RSO normalizado, pronto para chave/hash e persistência. */
+export interface IdpExecutionPhase {
+  label: string;
+  prevAcum: number;
+  realAcum: number;
+}
+
+export type IdpReferenceSource = "PDF_MES_REF" | "MANUAL" | "UNRESOLVED";
+
+/**
+ * Um registro representa uma versão semanal completa do RSO de uma unidade.
+ * O número do RSO identifica a versão; competência, período e emissão são
+ * dimensões independentes e nunca substituem umas às outras silenciosamente.
+ */
 export interface IdpNormalizedRecord {
   id?: string;
   businessKey?: string;
+  updatedAt?: string;
+
   unit: string;
+  detectedUnit: string | null;
+  unitAdjusted: boolean;
+
   rsoNumero: number | null;
-  /** Competência do relatório no formato YYYY-MM-DD. */
-  referenceDate: string;
+  detectedRsoNumero: number | null;
+  rsoAdjusted: boolean;
+
+  referenceYear: number | null;
+  referenceMonth: number | null;
+  detectedReferenceYear: number | null;
+  detectedReferenceMonth: number | null;
+  referenceSource: IdpReferenceSource;
+  referenceOriginalText: string | null;
+  referenceAdjusted: boolean;
+
+  periodStart: string | null;
+  periodEnd: string | null;
+  emissionDate: string | null;
+
   fileName: string;
   areas: string[];
   discData: IdpRsoDisciplineData;
-  execucaoFases: IdpRsoPhase[];
+  execucaoFases: IdpExecutionPhase[];
   raw: Record<string, unknown>;
-  updatedAt?: string;
 }
 
-export interface IdpUnitAggregate {
+export interface IdpUnitExecutionRow {
   sourceId?: string;
   unit: string;
-  rsoNumero: number | null;
-  referenceDate: string;
+  rsoNumero: number;
+  referenceYear: number;
+  referenceMonth: number;
+  referenceSource: IdpReferenceSource;
+  referenceOriginalText: string | null;
+  referenceAdjusted: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  emissionDate: string | null;
   fileName: string;
   prevAcum: number;
   realAcum: number;
   aderencia: number;
   nFases: number;
-  fases: IdpRsoPhase[];
+  fases: IdpExecutionPhase[];
 }
 
 export interface IdpDisciplineUnitGroup {
@@ -70,7 +103,7 @@ export interface IdpDisciplineAggregate {
   unitGroups: IdpDisciplineUnitGroup[];
 }
 
-export interface IdpUnitDisciplineAggregate {
+export interface IdpUnitDetailDiscipline {
   discipline: string;
   n: number;
   prevAvg: number;
@@ -81,7 +114,7 @@ export interface IdpUnitDisciplineAggregate {
 
 export interface IdpUnitDetail {
   unit: string;
-  disciplines: IdpUnitDisciplineAggregate[];
+  disciplines: IdpUnitDetailDiscipline[];
 }
 
 export interface IdpMonthlyAggregate {
@@ -94,14 +127,14 @@ export interface IdpMonthlyAggregate {
   totalRealMedio: number;
 }
 
-/** Resultado completo usado pela Administração, PDF e publicação. */
 export interface IdpDetailedResult {
   threshold: number;
   selectedYear: number;
-  monthStart: number;
-  monthEnd: number;
+  selectedMonth: number;
+  historyMonthStart: number;
+  historyMonthEnd: number;
   aderenciaGeral: number;
-  unitRows: IdpUnitAggregate[];
+  unitRows: IdpUnitExecutionRow[];
   disciplineRows: IdpDisciplineAggregate[];
   unitDetails: IdpUnitDetail[];
   unitNames: string[];
@@ -111,12 +144,13 @@ export interface IdpDetailedResult {
   monthly: IdpMonthlyAggregate[];
 }
 
-/** Meta oficial da lógica RSO extraída do HTML base: 98%. */
-export const IDP_DEFAULT_TARGET = 0.98;
+/** Meta oficial de aderência ao cronograma. */
+export const IDP_DEFAULT_TARGET = 0.9;
 
 /** Participação do IDP no ciclo de 11.582 pontos. */
 export const IDP_SCORECARD_WEIGHT = 0.35;
 export const IDP_SCORECARD_POINTS = 4_053.7;
 
+/** Faixa histórica exibida por padrão. */
 export const IDP_DEFAULT_MONTH_START = 1;
 export const IDP_DEFAULT_MONTH_END = 12;

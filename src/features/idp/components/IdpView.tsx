@@ -1,16 +1,40 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { parseIdpFile } from "@/features/idp/importers";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
-import {
-  IDP_DISC_NAMES,
-  type IdpDetailedResult,
-  type IdpNormalizedRecord,
-} from "@/features/idp/types";
+import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
+
+interface DocumentRow {
+  id: string;
+  unit: string;
+  detectedUnit: string | null;
+  unitAdjusted: boolean;
+  rsoNumero: number;
+  detectedRsoNumero: number | null;
+  rsoAdjusted: boolean;
+  referenceYear: number;
+  referenceMonth: number;
+  detectedReferenceYear: number | null;
+  detectedReferenceMonth: number | null;
+  referenceSource: string;
+  referenceOriginalText: string | null;
+  referenceAdjusted: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  emissionDate: string | null;
+  fileName: string;
+  areas: number;
+  active: boolean;
+  sameCompetence: boolean;
+  createdAt: string;
+  updatedAt: string;
+  firstImportedBy: string | null;
+  lastUpdatedBy: string | null;
+}
 
 interface ApiResponse {
   total: number;
@@ -18,21 +42,13 @@ interface ApiResponse {
   threshold: number;
   years: number[];
   selectedYear: number;
-  monthStart: number;
-  monthEnd: number;
+  selectedMonth: number;
+  historyMonthStart: number;
+  historyMonthEnd: number;
   excludedDisciplines: string[];
   result: IdpDetailedResult;
   setupRequired?: boolean;
-  documents: Array<{
-    id: string;
-    unit: string;
-    rsoNumero: number | null;
-    referenceDate: string;
-    fileName: string;
-    areas: number;
-    active: boolean;
-    updatedAt: string;
-  }>;
+  documents: DocumentRow[];
   lastImport: null | {
     id: string;
     fileName: string;
@@ -80,49 +96,89 @@ function accumulated(value: number): string {
   })}%`;
 }
 
-function rsoLabel(value: number | null): string {
-  return value === null ? "Não identificado" : `RSO ${value}`;
+function competenceLabel(year: number, month: number): string {
+  return `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`;
+}
+
+function shortDate(value: string | null): string {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function periodLabel(start: string | null, end: string | null): string {
+  if (!start && !end) return "Não identificado";
+  return `${shortDate(start)} → ${shortDate(end)}`;
+}
+
+function inputMonthValue(record: IdpNormalizedRecord): string {
+  if (!record.referenceYear || !record.referenceMonth) return "";
+  return `${record.referenceYear}-${String(record.referenceMonth).padStart(2, "0")}`;
+}
+
+function isPendingRecordValid(record: IdpNormalizedRecord | null): record is IdpNormalizedRecord {
+  return Boolean(
+    record &&
+      record.unit.trim() &&
+      Number.isInteger(record.rsoNumero) &&
+      (record.rsoNumero ?? 0) > 0 &&
+      Number.isInteger(record.referenceYear) &&
+      Number.isInteger(record.referenceMonth) &&
+      (record.referenceMonth ?? 0) >= 1 &&
+      (record.referenceMonth ?? 0) <= 12 &&
+      record.referenceSource !== "UNRESOLVED" &&
+      record.execucaoFases.length > 0,
+  );
 }
 
 export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClear: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<ApiResponse | null>(null);
-  const [threshold, setThreshold] = useState(98);
+  const [threshold, setThreshold] = useState(90);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [monthStart, setMonthStart] = useState(1);
-  const [monthEnd, setMonthEnd] = useState(12);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [historyMonthStart, setHistoryMonthStart] = useState(1);
+  const [historyMonthEnd, setHistoryMonthEnd] = useState(12);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [excludedDisciplinesDraft, setExcludedDisciplinesDraft] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [publication, setPublication] = useState<PublicationSummary | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function load(filters?: {
-    threshold?: number;
-    selectedYear?: number;
-    monthStart?: number;
-    monthEnd?: number;
-  }) {
+  async function load(filters?: Partial<{
+    year: number;
+    month: number;
+    historyStart: number;
+    historyEnd: number;
+    threshold: number;
+  }>, useCurrentSelection = true) {
     setError(null);
-    const params = new URLSearchParams({
-      threshold: String(filters?.threshold ?? threshold),
-      year: String(filters?.selectedYear ?? selectedYear),
-      monthStart: String(filters?.monthStart ?? monthStart),
-      monthEnd: String(filters?.monthEnd ?? monthEnd),
-    });
-    const response = await fetch(`/api/idp?${params}`, { cache: "no-store" });
-    if (!response.ok) throw await responseError(response, "Falha ao carregar os dados do IDP.");
+    const params = new URLSearchParams();
+    const year = filters?.year ?? (useCurrentSelection ? selectedYear : undefined);
+    const month = filters?.month ?? (useCurrentSelection ? selectedMonth : undefined);
+    const historyStart = filters?.historyStart ?? (useCurrentSelection ? historyMonthStart : undefined);
+    const historyEnd = filters?.historyEnd ?? (useCurrentSelection ? historyMonthEnd : undefined);
+    const target = filters?.threshold ?? (useCurrentSelection ? threshold : undefined);
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    if (historyStart !== undefined) params.set("historyStart", String(historyStart));
+    if (historyEnd !== undefined) params.set("historyEnd", String(historyEnd));
+    if (target !== undefined) params.set("threshold", String(target));
+    const suffix = params.toString();
+    const response = await fetch(`/api/idp${suffix ? `?${suffix}` : ""}`, { cache: "no-store" });
+    if (!response.ok) throw await responseError(response, "Falha ao carregar o IDP.");
     const body = (await response.json()) as ApiResponse;
     setData(body);
-    setThreshold(body.threshold * 100);
     setSelectedYear(body.selectedYear);
-    setMonthStart(body.monthStart);
-    setMonthEnd(body.monthEnd);
+    setSelectedMonth(body.selectedMonth);
+    setHistoryMonthStart(body.historyMonthStart);
+    setHistoryMonthEnd(body.historyMonthEnd);
+    setThreshold(body.threshold * 100);
     setExcludedDisciplinesDraft(body.excludedDisciplines.join("\n"));
     setSelectedUnit((current) =>
       body.result.unitDetails.some((item) => item.unit === current)
@@ -139,17 +195,17 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   }
 
   useEffect(() => {
-    void Promise.all([load({ threshold: 98, selectedYear: 0 }).catch((err: Error) => setError(err.message)), loadPublication()]);
+    void Promise.all([load(undefined, false).catch((err: Error) => setError(err.message)), loadPublication()]);
+    // A primeira leitura não envia mês/ano: a API abre a competência mais recente realmente armazenada.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function toggle(key: string) {
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  function updatePending(id: string, updater: (record: IdpNormalizedRecord) => IdpNormalizedRecord) {
+    setPendingFiles((current) =>
+      current.map((item) =>
+        item.id === id && item.record ? { ...item, record: updater(item.record) } : item,
+      ),
+    );
   }
 
   async function prepareFiles(files: FileList | File[]) {
@@ -159,22 +215,18 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     setError(null);
     setMessage(null);
     setProgress(null);
-
     try {
       const parsed: PendingFile[] = [];
       for (let index = 0; index < selected.length; index += 1) {
         const file = selected[index]!;
         const result = await parseIdpFile(file);
-        parsed.push({
-          id: `${Date.now()}-${index}-${file.name}`,
-          fileName: result.fileName,
-          record: result.record,
-          error: result.error,
-        });
+        parsed.push({ ...result, id: `${Date.now()}-${index}-${file.name}` });
       }
       setPendingFiles((current) => [...current, ...parsed]);
-      if (parsed.some((file) => file.record)) {
-        setMessage("RSOs lidos. Confira a unidade, o número e a competência antes de importar.");
+      if (parsed.some((item) => item.record)) {
+        setMessage(
+          "RSOs lidos. Confira unidade, número da versão, competência, período e emissão antes de importar.",
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao ler os PDFs RSO.");
@@ -184,10 +236,15 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     }
   }
 
+  const validPendingCount = pendingFiles.filter((item) => isPendingRecordValid(item.record)).length;
+  const invalidPendingCount = pendingFiles.filter((item) => item.record && !isPendingRecordValid(item.record)).length;
+
   async function importPendingFiles() {
-    const records = pendingFiles.flatMap((file) => (file.record ? [file.record] : []));
+    const records = pendingFiles
+      .map((item) => item.record)
+      .filter(isPendingRecordValid);
     if (!records.length) {
-      setError("Nenhum RSO válido foi preparado para importação.");
+      setError("Nenhum RSO está completo para importação. Revise os campos destacados.");
       return;
     }
 
@@ -211,7 +268,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           module: "idp",
-          fileName: pendingFiles.map((file) => file.fileName).join(", "),
+          fileName: records.map((record) => record.fileName).join(", "),
+          referenceYear: records[0]?.referenceYear,
+          referenceMonth: records[0]?.referenceMonth,
           totalFound: records.length,
         }),
       });
@@ -223,7 +282,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         const response = await fetch(`/api/importacoes/${importJobId}/lotes`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ batchNumber: index + 1, records: batches[index] ?? [] }),
+          body: JSON.stringify({ batchNumber: index + 1, records: batches[index] }),
         });
         if (!response.ok) {
           throw await responseError(response, `Falha ao processar o lote ${index + 1}.`);
@@ -247,12 +306,75 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       if (!finish.ok) throw await responseError(finish, "Falha ao finalizar a importação.");
 
       setMessage(
-        `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s) e ${totals.rejected} rejeitado(s).`,
+        `Importação concluída: ${totals.inserted} nova(s) versão(ões), ${totals.updated} corrigida(s), ${totals.ignored} idêntica(s) e ${totals.rejected} rejeitada(s).`,
       );
       setPendingFiles([]);
-      await load();
+      const importedCompetence = records
+        .filter((record) => record.referenceYear && record.referenceMonth)
+        .map((record) => ({ year: record.referenceYear!, month: record.referenceMonth! }))
+        .sort((a, b) => b.year - a.year || b.month - a.month)[0];
+      if (importedCompetence) {
+        await load({
+          year: importedCompetence.year,
+          month: importedCompetence.month,
+          historyStart: Math.min(historyMonthStart, importedCompetence.month),
+          historyEnd: Math.max(historyMonthEnd, importedCompetence.month),
+          threshold,
+        });
+      } else {
+        await load(undefined, false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na importação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publish() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/publicacoes/idp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: selectedYear,
+          month: selectedMonth,
+          historyStart: historyMonthStart,
+          historyEnd: historyMonthEnd,
+          threshold,
+        }),
+      });
+      if (!response.ok) throw await responseError(response, "Falha ao publicar o IDP.");
+      const body = (await response.json()) as { publication: PublicationSummary };
+      setPublication(body.publication);
+      setMessage("IDP publicado com os RSOs exatos da competência selecionada.");
+      window.dispatchEvent(new Event("idp:published"));
+      window.dispatchEvent(new Event("indicator:published"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao publicar o IDP.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearAll() {
+    if (!window.confirm("Excluir todo o histórico administrativo de RSOs do IDP? A publicação ativa será preservada.")) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/idp/registros", { method: "DELETE" });
+      if (!response.ok) throw await responseError(response, "Falha ao limpar os RSOs.");
+      const body = (await response.json()) as { deleted: number };
+      setMessage(`${body.deleted} versão(ões) de RSO removida(s).`);
+      setPendingFiles([]);
+      setProgress(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao limpar os registros.");
     } finally {
       setBusy(false);
     }
@@ -274,7 +396,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       });
       if (!response.ok) throw await responseError(response, "Falha ao salvar as exclusões.");
       await load();
-      setMessage("Exclusões atualizadas para as tabelas e a próxima publicação.");
+      setMessage("Disciplinas excluídas atualizadas.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar as exclusões.");
     } finally {
@@ -282,47 +404,13 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     }
   }
 
-  async function publish() {
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/publicacoes/idp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold, selectedYear, monthStart, monthEnd }),
-      });
-      if (!response.ok) throw await responseError(response, "Falha ao publicar o IDP.");
-      const body = (await response.json()) as { publication: PublicationSummary };
-      setPublication(body.publication);
-      setMessage("IDP publicado no painel com sucesso.");
-      window.dispatchEvent(new Event("idp:published"));
-      window.dispatchEvent(new Event("indicator:published"));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao publicar o IDP.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function clearAll() {
-    if (!window.confirm("Excluir todos os RSOs administrativos do IDP? O painel publicado será preservado.")) return;
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/idp/registros", { method: "DELETE" });
-      if (!response.ok) throw await responseError(response, "Falha ao limpar os registros do IDP.");
-      const body = (await response.json()) as { deleted: number };
-      setMessage(`${body.deleted} registro(s) removido(s).`);
-      setPendingFiles([]);
-      setProgress(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao limpar os registros.");
-    } finally {
-      setBusy(false);
-    }
+  function toggle(key: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   const result = data?.result;
@@ -330,102 +418,30 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const progressPct = progress?.totalBatches
     ? Math.round((progress.currentBatch / progress.totalBatches) * 100)
     : 0;
-  const validPendingCount = pendingFiles.filter((file) => file.record).length;
-  const rowByName = new Map<string, IdpDetailedResult["disciplineRows"][number]>(
-    result?.disciplineRows.map((row) => [row.discipline, row] as const) ?? [],
+  const rowByName = useMemo(
+    () => new Map(result?.disciplineRows.map((row) => [row.discipline, row]) ?? []),
+    [result],
   );
 
   return (
-    <div className="idp-admin-stack">
-      <div className="idp-toolbar">
-        <label htmlFor="idpYear">Ano</label>
-        <select
-          id="idpYear"
-          value={selectedYear}
-          onChange={(event) => setSelectedYear(Number(event.target.value))}
-        >
-          {(data?.years ?? [selectedYear]).map((year) => (
-            <option value={year} key={year}>{year}</option>
-          ))}
-        </select>
-        <label htmlFor="idpMonthStart">De</label>
-        <select
-          id="idpMonthStart"
-          value={monthStart}
-          onChange={(event) => setMonthStart(Number(event.target.value))}
-        >
-          {MONTH_NAMES_FULL.map((month, index) => (
-            <option value={index + 1} key={month}>{month}</option>
-          ))}
-        </select>
-        <label htmlFor="idpMonthEnd">Até</label>
-        <select
-          id="idpMonthEnd"
-          value={monthEnd}
-          onChange={(event) => setMonthEnd(Number(event.target.value))}
-        >
-          {MONTH_NAMES_FULL.map((month, index) => (
-            <option value={index + 1} key={month}>{month}</option>
-          ))}
-        </select>
-        <label htmlFor="idpTolerance">Meta de aderência (%)</label>
-        <input
-          id="idpTolerance"
-          type="number"
-          min={0}
-          max={200}
-          value={threshold}
-          onChange={(event) => setThreshold(Number(event.target.value))}
-        />
-        <button className="btn secondary" type="button" disabled={busy} onClick={() => void load({ threshold, selectedYear, monthStart, monthEnd })}>
-          Consultar
-        </button>
-        <button className="btn" type="button" disabled={busy || !result?.activeDocuments} onClick={() => result && exportIdpPdf(result)}>
-          Baixar PDF
-        </button>
-        {canClear ? (
-          <button className="btn secondary" type="button" disabled={busy} onClick={() => void clearAll()}>
-            Limpar tudo
-          </button>
-        ) : null}
-        {canPublish ? (
-          <button className="btn idp-publish-button" type="button" disabled={busy || !result?.activeDocuments} onClick={() => void publish()}>
-            Publicar no Painel
-          </button>
-        ) : null}
-      </div>
-      <div className="idp-period-hint">
-        Consulta acumulada até {MONTH_NAMES_FULL[(result?.monthEnd ?? monthEnd) - 1]}/{result?.selectedYear ?? selectedYear}; a série mensal considera o intervalo de {MONTH_NAMES_FULL[(result?.monthStart ?? monthStart) - 1]} a {MONTH_NAMES_FULL[(result?.monthEnd ?? monthEnd) - 1]}.
-      </div>
-
-      <div className="idp-publication-status">
-        {publication
-          ? `Última publicação: versão ${publication.version}, em ${new Date(publication.publishedAt).toLocaleString("pt-BR")}, por ${publication.publishedBy.name}.`
-          : "O IDP ainda não foi publicado no painel."}
-      </div>
-
+    <div className="space-y-5">
       {data?.setupRequired ? (
         <div className="error-box">
-          A tabela de RSO ainda não existe. Execute <strong>pnpm db:upgrade:idp-rso</strong> no ambiente conectado ao banco.
+          A tabela de versões do RSO ainda não existe. Execute <strong>pnpm db:upgrade:idp-rso</strong> no banco conectado.
         </div>
       ) : null}
-      {error ? <div className="error-box">{error}</div> : null}
-      {message ? <div className="info-box">{message}</div> : null}
 
       <section className="idp-section-card">
         <div className="subtitle-block first">
-          <h3>RSO — fonte principal</h3>
+          <h3>RSO — controle semanal</h3>
           <p>
-            Envie um PDF por unidade. A unidade, o número e a competência do RSO são sugeridos pelo documento e podem ser corrigidos; quando houver mais de um RSO da mesma unidade, somente o maior número entra no cálculo.
+            Cada PDF é uma versão semanal independente. O número do RSO identifica a versão; competência, período e emissão são armazenados separadamente.
           </p>
         </div>
         <div
           className={`upload-zone${dragging ? " drag" : ""}`}
           onClick={() => !busy && inputRef.current?.click()}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(event) => {
             event.preventDefault();
@@ -440,7 +456,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         >
           <div className="icon">↑</div>
           <h4>Arraste os PDFs do RSO aqui, ou clique para escolher</h4>
-          <p>O leitor busca execução acumulada, áreas, disciplinas e a competência no padrão do relatório.</p>
+          <p>O sistema lê Unidade, RSO Nº, Mês ref., Período, Emissão, Execução e disciplinas.</p>
           <input
             ref={inputRef}
             type="file"
@@ -449,117 +465,180 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
             onChange={(event) => event.target.files && void prepareFiles(event.target.files)}
           />
         </div>
+      </section>
 
-        {busy && !progress ? (
-          <div className="progress-item"><span className="spinner" /> Lendo PDFs RSO…</div>
-        ) : null}
+      {busy && !progress ? <div className="progress-item"><span className="spinner" /> Processando…</div> : null}
 
-        {pendingFiles.length ? (
-          <div className="idp-pending-list">
-            {pendingFiles.map((file) => (
-              <div className={`idp-pending-card${file.error ? " is-error" : ""}`} key={file.id}>
-                <div className="idp-pending-file">{file.fileName}</div>
-                {file.error || !file.record ? (
-                  <div className="idp-pending-error">{file.error ?? "Arquivo inválido."}</div>
-                ) : (
-                  <div className="idp-pending-fields">
+      {pendingFiles.length ? (
+        <section className="idp-section-card">
+          <div className="subtitle-block first">
+            <h3>Pré-validação dos documentos</h3>
+            <p>Nenhuma competência é inferida por período, emissão ou data de upload. Se “Mês ref.” não for localizado, a definição manual é obrigatória.</p>
+          </div>
+          <div className="idp-rso-preview-list">
+            {pendingFiles.map((file) => {
+              const record = file.record;
+              if (file.error || !record) {
+                return (
+                  <div className="idp-rso-preview-card is-error" key={file.id}>
+                    <strong>{file.fileName}</strong>
+                    <span>{file.error ?? "Falha ao interpretar o arquivo."}</span>
+                    <button type="button" className="btn secondary" onClick={() => setPendingFiles((items) => items.filter((item) => item.id !== file.id))}>Remover</button>
+                  </div>
+                );
+              }
+
+              const valid = isPendingRecordValid(record);
+              const detectedCompetence = record.detectedReferenceYear && record.detectedReferenceMonth
+                ? competenceLabel(record.detectedReferenceYear, record.detectedReferenceMonth)
+                : "Não identificada";
+
+              return (
+                <div className={`idp-rso-preview-card${valid ? "" : " is-warning"}`} key={file.id}>
+                  <div className="idp-rso-preview-head">
+                    <div>
+                      <strong>{file.fileName}</strong>
+                      <div className="idp-rso-source-line">
+                        Fonte da competência: {record.referenceOriginalText ?? "Mês ref. não localizado"}
+                      </div>
+                    </div>
+                    <span className={`badge ${valid ? "ok" : "fail"}`}>{valid ? "Pronto para importar" : "Revisão obrigatória"}</span>
+                  </div>
+
+                  <div className="idp-rso-edit-grid">
                     <label>
-                      Unidade
+                      <span>Unidade</span>
                       <input
-                        value={file.record.unit}
-                        onChange={(event) => {
-                          const unit = event.target.value;
-                          setPendingFiles((current) => current.map((item) =>
-                            item.id === file.id && item.record
-                              ? { ...item, record: { ...item.record, unit } }
-                              : item,
-                          ));
-                        }}
+                        value={record.unit}
+                        onChange={(event) => updatePending(file.id, (current) => ({
+                          ...current,
+                          unit: event.target.value,
+                          unitAdjusted: event.target.value.trim() !== (current.detectedUnit ?? "").trim(),
+                        }))}
                       />
+                      <small>Detectado: {record.detectedUnit ?? "—"}</small>
                     </label>
                     <label>
-                      Número do RSO
+                      <span>Número do RSO</span>
                       <input
                         type="number"
-                        min={0}
-                        value={file.record.rsoNumero ?? ""}
-                        placeholder="Não detectado"
+                        min={1}
+                        value={record.rsoNumero ?? ""}
                         onChange={(event) => {
-                          const rsoNumero = event.target.value === "" ? null : Number(event.target.value);
-                          setPendingFiles((current) => current.map((item) =>
-                            item.id === file.id && item.record
-                              ? { ...item, record: { ...item.record, rsoNumero } }
-                              : item,
-                          ));
+                          const value = event.target.value ? Number(event.target.value) : null;
+                          updatePending(file.id, (current) => ({
+                            ...current,
+                            rsoNumero: value,
+                            rsoAdjusted: value !== current.detectedRsoNumero,
+                          }));
                         }}
                       />
+                      <small>Detectado: {record.detectedRsoNumero ?? "—"}</small>
                     </label>
                     <label>
-                      Competência
+                      <span>Competência</span>
                       <input
-                        type="date"
-                        required
-                        value={file.record.referenceDate}
+                        type="month"
+                        value={inputMonthValue(record)}
                         onChange={(event) => {
-                          const referenceDate = event.target.value;
-                          if (!referenceDate) return;
-                          setPendingFiles((current) => current.map((item) =>
-                            item.id === file.id && item.record
-                              ? { ...item, record: { ...item.record, referenceDate } }
-                              : item,
-                          ));
+                          const [yearText, monthText] = event.target.value.split("-");
+                          const referenceYear = yearText ? Number(yearText) : null;
+                          const referenceMonth = monthText ? Number(monthText) : null;
+                          updatePending(file.id, (current) => {
+                            const adjusted =
+                              referenceYear !== current.detectedReferenceYear ||
+                              referenceMonth !== current.detectedReferenceMonth;
+                            return {
+                              ...current,
+                              referenceYear,
+                              referenceMonth,
+                              referenceAdjusted: adjusted,
+                              referenceSource: adjusted || !current.detectedReferenceYear ? "MANUAL" : "PDF_MES_REF",
+                            };
+                          });
                         }}
                       />
+                      <small>Detectado: {detectedCompetence}</small>
                     </label>
-                    <span>{file.record.execucaoFases.length} fase(s) · {file.record.areas.length} área(s)</span>
+                    <div className="idp-rso-readonly-field"><span>Período</span><strong>{periodLabel(record.periodStart, record.periodEnd)}</strong><small>Não altera a competência</small></div>
+                    <div className="idp-rso-readonly-field"><span>Emissão</span><strong>{shortDate(record.emissionDate)}</strong><small>Data formal do documento</small></div>
+                    <div className="idp-rso-readonly-field"><span>Execução</span><strong>{record.execucaoFases.length} fase(s)</strong><small>{record.areas.length} área(s) reconhecida(s)</small></div>
                   </div>
-                )}
-                <button
-                  type="button"
-                  className="idp-remove-file"
-                  aria-label={`Remover ${file.fileName}`}
-                  onClick={() => setPendingFiles((current) => current.filter((item) => item.id !== file.id))}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
 
-        {validPendingCount ? (
+                  {record.referenceAdjusted || record.unitAdjusted || record.rsoAdjusted ? (
+                    <div className="idp-manual-adjustment-note">Ajuste manual rastreado: o valor detectado no PDF será preservado junto do valor usado.</div>
+                  ) : null}
+
+                  <button type="button" className="btn secondary" onClick={() => setPendingFiles((items) => items.filter((item) => item.id !== file.id))}>Remover arquivo</button>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="controls-row" style={{ marginTop: 12 }}>
-            <button className="btn" type="button" disabled={busy} onClick={() => void importPendingFiles()}>
+            <button className="btn" type="button" disabled={busy || validPendingCount === 0} onClick={() => void importPendingFiles()}>
               Importar {validPendingCount} RSO(s)
             </button>
-            <span className="idp-help-text">Os dados normalizados serão persistidos no Neon; o PDF original não é armazenado.</span>
+            {invalidPendingCount ? <span className="badge fail">{invalidPendingCount} documento(s) aguardando revisão</span> : null}
           </div>
-        ) : null}
+        </section>
+      ) : null}
 
-        {progress ? (
-          <div className="info-box">
-            Processando lote {progress.currentBatch}/{progress.totalBatches} — {progressPct}% · Inseridos: {progress.inserted} · Atualizados: {progress.updated} · Ignorados: {progress.ignored} · Rejeitados: {progress.rejected}
-          </div>
-        ) : null}
+      {progress ? (
+        <div className="info-box">
+          Processando lote {progress.currentBatch}/{progress.totalBatches} — {progressPct}% · Inseridos: {progress.inserted} · Atualizados: {progress.updated} · Ignorados: {progress.ignored} · Rejeitados: {progress.rejected}
+        </div>
+      ) : null}
+      {error ? <div className="error-box">{error}</div> : null}
+      {message ? <div className="info-box">{message}</div> : null}
+
+      <section className="idp-section-card">
+        <div className="subtitle-block first">
+          <h3>Competência e série histórica</h3>
+          <p>A tabela principal usa somente a competência escolhida. “De / Até” controla apenas a série histórica.</p>
+        </div>
+        <div className="controls-row idp-control-grid">
+          <label>Ano
+            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+              {(data?.years ?? [selectedYear]).map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </label>
+          <label>Competência analisada
+            <select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>
+              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+            </select>
+          </label>
+          <label>Série histórica — de
+            <select value={historyMonthStart} onChange={(event) => setHistoryMonthStart(Number(event.target.value))}>
+              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+            </select>
+          </label>
+          <label>Série histórica — até
+            <select value={historyMonthEnd} onChange={(event) => setHistoryMonthEnd(Number(event.target.value))}>
+              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+            </select>
+          </label>
+          <label>Meta (%)
+            <input type="number" min={0} max={200} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
+          </label>
+          <button className="btn secondary" type="button" disabled={busy} onClick={() => void load({ year: selectedYear, month: selectedMonth, historyStart: historyMonthStart, historyEnd: historyMonthEnd, threshold })}>Recalcular</button>
+          {result?.activeDocuments ? <button className="btn secondary" type="button" onClick={() => exportIdpPdf(result)}>Baixar PDF</button> : null}
+          {canPublish ? <button className="btn" type="button" disabled={busy || !result?.activeDocuments} onClick={() => void publish()}>Publicar</button> : null}
+          {canClear ? <button className="btn secondary" type="button" disabled={busy || !data?.total} onClick={() => void clearAll()}>Limpar histórico</button> : null}
+        </div>
+        <div className="idp-competence-banner">
+          <strong>Competência ativa: {competenceLabel(data?.selectedYear ?? selectedYear, data?.selectedMonth ?? selectedMonth)}</strong>
+          <span>{result?.activeDocuments ?? 0} RSO(s) ativo(s). Nenhuma versão de outro mês é reutilizada.</span>
+        </div>
+        {publication ? <div className="idp-publication-note">Última publicação: versão {publication.version} · {new Date(publication.publishedAt).toLocaleString("pt-BR")} · {publication.publishedBy.name}</div> : null}
       </section>
 
       {canPublish ? (
-        <section className="idp-section-card idp-config-card">
-          <div className="subtitle-block first">
-            <h3>Disciplinas desconsideradas</h3>
-            <p>Uma disciplina por linha. A exclusão afeta o consolidado por disciplina, o detalhamento, o PDF e a publicação; a execução geral por unidade permanece baseada nas fases do RSO.</p>
-          </div>
-          <div className="idp-config-row">
-            <textarea
-              rows={3}
-              value={excludedDisciplinesDraft}
-              onChange={(event) => setExcludedDisciplinesDraft(event.target.value)}
-              disabled={busy}
-              placeholder={IDP_DISC_NAMES.join("\n")}
-            />
-            <button className="btn secondary" type="button" disabled={busy} onClick={() => void saveExcludedDisciplines()}>
-              Salvar exclusões
-            </button>
+        <section className="idp-section-card">
+          <div className="subtitle-block first"><h3>Disciplinas desconsideradas</h3><p>As versões continuam armazenadas; a exclusão afeta apenas os cálculos por disciplina.</p></div>
+          <div className="controls-row">
+            <textarea rows={3} value={excludedDisciplinesDraft} onChange={(event) => setExcludedDisciplinesDraft(event.target.value)} style={{ minWidth: 360, flex: 1 }} />
+            <button className="btn secondary" type="button" disabled={busy} onClick={() => void saveExcludedDisciplines()}>Salvar exclusões</button>
           </div>
         </section>
       ) : null}
@@ -567,22 +646,28 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       {data?.documents.length ? (
         <section className="idp-section-card">
           <div className="subtitle-block first">
-            <h3>RSOs importados</h3>
-            <p>O selo “Em cálculo” identifica o documento vigente na competência consultada.</p>
+            <h3>Histórico de versões RSO</h3>
+            <p>Todos os documentos permanecem no banco. “Em cálculo” marca a maior versão de cada unidade na competência ativa.</p>
           </div>
           <div className="table-scroll idp-summary-table-wrap">
             <table className="data idp-summary-table">
-              <thead><tr><th>Unidade</th><th>RSO</th><th>Competência</th><th>Arquivo</th><th>Áreas</th><th>Atualizado em</th><th>Uso</th></tr></thead>
+              <thead><tr><th>Unidade</th><th>RSO</th><th>Competência</th><th>Período</th><th>Emissão</th><th>Origem ref.</th><th>Arquivo</th><th>1ª importação</th><th>Última atualização</th><th>Uso</th></tr></thead>
               <tbody>
                 {data.documents.map((document) => (
                   <tr key={document.id}>
-                    <td>{document.unit}</td>
-                    <td className="num">{rsoLabel(document.rsoNumero)}</td>
-                    <td>{new Date(`${document.referenceDate}T12:00:00`).toLocaleDateString("pt-BR")}</td>
-                    <td>{document.fileName}</td>
-                    <td className="num">{document.areas}</td>
-                    <td>{new Date(document.updatedAt).toLocaleString("pt-BR")}</td>
-                    <td><span className={`badge ${document.active ? "ok" : "info"}`}>{document.active ? "Em cálculo" : "Histórico"}</span></td>
+                    <td>{document.unit}{document.unitAdjusted ? <small className="idp-inline-audit"> ajustada</small> : null}</td>
+                    <td>RSO {document.rsoNumero}{document.rsoAdjusted ? <small className="idp-inline-audit"> ajustado</small> : null}</td>
+                    <td>{competenceLabel(document.referenceYear, document.referenceMonth)}{document.referenceAdjusted ? <small className="idp-inline-audit"> manual</small> : null}</td>
+                    <td>{periodLabel(document.periodStart, document.periodEnd)}</td>
+                    <td>{shortDate(document.emissionDate)}</td>
+                    <td>
+                      {document.referenceSource === "PDF_MES_REF" ? "Mês ref. do PDF" : "Ajuste manual"}
+                      {document.referenceOriginalText ? <small className="idp-rso-source-line">{document.referenceOriginalText}</small> : null}
+                    </td>
+                    <td title={document.fileName}>{document.fileName}</td>
+                    <td>{new Date(document.createdAt).toLocaleString("pt-BR")}{document.firstImportedBy ? <small className="idp-rso-source-line">por {document.firstImportedBy}</small> : null}</td>
+                    <td>{new Date(document.updatedAt).toLocaleString("pt-BR")}{document.lastUpdatedBy ? <small className="idp-rso-source-line">por {document.lastUpdatedBy}</small> : null}</td>
+                    <td>{document.active ? <span className="badge ok">Em cálculo</span> : document.sameCompetence ? <span className="badge info">Histórico da competência</span> : <span className="badge info">Outra competência</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -593,28 +678,19 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {result?.activeDocuments ? (
         <>
-          {data?.lastImport ? (
-            <div className="info-box">
-              Última importação: {data.lastImport.fileName} · {data.lastImport.totalFound} RSO(s) encontrado(s) · {data.lastImport.totalInserted} inserido(s) · {data.lastImport.totalUpdated} atualizado(s) · {data.lastImport.totalIgnored} ignorado(s).
-            </div>
-          ) : null}
-
           <div className="cards idp-metric-grid">
             <Metric label="Aderência geral (Execução)" value={fmtPct(result.aderenciaGeral)} accent />
-            <Metric label="Unidades ativas" value={String(result.activeDocuments)} />
+            <Metric label="RSOs ativos" value={String(result.activeDocuments)} />
             <DisciplineMetric label="Civil" value={rowByName.get("01 - Civil")?.aderencia ?? null} threshold={result.threshold} />
             <DisciplineMetric label="Mecânica" value={rowByName.get("02 - Mecânica")?.aderencia ?? null} threshold={result.threshold} />
             <DisciplineMetric label="Elétrica" value={rowByName.get("04 - Elétrica")?.aderencia ?? null} threshold={result.threshold} />
           </div>
 
           <section className="idp-section-card">
-            <div className="subtitle-block first">
-              <h3>Execução geral por unidade</h3>
-              <p>Média das fases encontradas no RSO ativo, acumulada desde o início da obra.</p>
-            </div>
+            <div className="subtitle-block first"><h3>Execução geral por unidade</h3><p>Fonte: página 1 → Avanços por Etapa → linha Execução → acumulado. A maior versão semanal da competência é usada.</p></div>
             <div className="table-scroll idp-summary-table-wrap">
               <table className="data idp-summary-table">
-                <thead><tr><th></th><th>Unidade</th><th>RSO</th><th>Competência</th><th>Fases</th><th>Prev. acum.</th><th>Real acum.</th><th>Aderência</th><th>Situação</th></tr></thead>
+                <thead><tr><th></th><th>Unidade</th><th>RSO utilizado</th><th>Período</th><th>Ref.</th><th>Fases</th><th>Prev. acum.</th><th>Real acum.</th><th>Aderência</th><th>Situação</th></tr></thead>
                 <tbody>
                   {result.unitRows.map((unit) => {
                     const key = `unit-${unit.unit}`;
@@ -625,22 +701,28 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                         <tr className="idp-expandable-row" onClick={() => toggle(key)}>
                           <td><span className={`idp-chevron${open ? " is-open" : ""}`}>▸</span></td>
                           <td>{unit.unit}</td>
-                          <td>{rsoLabel(unit.rsoNumero)}</td>
-                          <td>{new Date(`${unit.referenceDate}T12:00:00`).toLocaleDateString("pt-BR")}</td>
+                          <td><strong>RSO {unit.rsoNumero}</strong></td>
+                          <td>{periodLabel(unit.periodStart, unit.periodEnd)}</td>
+                          <td>{competenceLabel(unit.referenceYear, unit.referenceMonth)}{unit.referenceAdjusted ? <small className="idp-inline-audit"> manual</small> : null}</td>
                           <td className="num">{unit.nFases}</td>
                           <td className="num">{accumulated(unit.prevAcum)}</td>
                           <td className="num">{accumulated(unit.realAcum)}</td>
                           <td className="num">{fmtPct(unit.aderencia)}</td>
                           <td><span className={`badge ${ok ? "ok" : "fail"}`}>{ok ? "Dentro da meta" : "Fora da meta"}</span></td>
                         </tr>
-                        {open ? unit.fases.map((phase, phaseIndex) => (
-                          <tr className="idp-detail-row" key={`${key}-${phaseIndex}`}>
-                            <td></td><td>Fase {phaseIndex + 1}</td><td></td><td></td><td></td>
-                            <td className="num">{accumulated(phase.prevAcum)}</td>
-                            <td className="num">{accumulated(phase.realAcum)}</td>
-                            <td className="num">{fmtPct(phase.prevAcum ? phase.realAcum / phase.prevAcum : 0)}</td><td></td>
-                          </tr>
-                        )) : null}
+                        {open ? (
+                          <>
+                            <tr className="idp-detail-row idp-source-detail"><td></td><td colSpan={9}><strong>Rastreabilidade:</strong> arquivo {unit.fileName} · emissão {shortDate(unit.emissionDate)} · competência {unit.referenceSource === "PDF_MES_REF" ? `lida de ${unit.referenceOriginalText ?? "Mês ref."}` : `ajustada manualmente (original: ${unit.referenceOriginalText ?? "não identificado"})`}.</td></tr>
+                            {unit.fases.map((phase, phaseIndex) => (
+                              <tr className="idp-detail-row" key={`${key}-${phaseIndex}`}>
+                                <td></td><td>{phase.label}</td><td></td><td></td><td></td><td></td>
+                                <td className="num">{accumulated(phase.prevAcum)}</td>
+                                <td className="num">{accumulated(phase.realAcum)}</td>
+                                <td className="num">{fmtPct(phase.prevAcum ? phase.realAcum / phase.prevAcum : 0)}</td><td></td>
+                              </tr>
+                            ))}
+                          </>
+                        ) : null}
                       </Fragment>
                     );
                   })}
@@ -650,10 +732,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </section>
 
           <section className="idp-section-card">
-            <div className="subtitle-block first">
-              <h3>Aderência por disciplina</h3>
-              <p>Média simples de todas as áreas disponíveis nas unidades ativas.</p>
-            </div>
+            <div className="subtitle-block first"><h3>Aderência por disciplina</h3><p>Média das áreas do RSO ativo de cada unidade na competência selecionada.</p></div>
             <div className="table-scroll idp-summary-table-wrap">
               <table className="data idp-summary-table">
                 <thead><tr><th></th><th>Disciplina</th><th>Áreas usadas</th><th>Prev. médio</th><th>Real médio</th><th>Aderência</th><th>Situação</th></tr></thead>
@@ -690,10 +769,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </section>
 
           <section className="idp-section-card">
-            <div className="subtitle-block first">
-              <h3>Detalhamento por unidade</h3>
-              <p>Selecione uma unidade e expanda as disciplinas para visualizar cada área.</p>
-            </div>
+            <div className="subtitle-block first"><h3>Detalhamento por unidade</h3><p>Expanda as disciplinas para chegar às áreas originais do RSO ativo.</p></div>
             <div className="controls-row compact">
               <label htmlFor="idpUnitDetailSelect">Unidade</label>
               <select id="idpUnitDetailSelect" value={selectedUnit} onChange={(event) => setSelectedUnit(event.target.value)}>
@@ -732,9 +808,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         </>
       ) : (
         <div className="placeholder idp-empty-state">
-          <span className="tag">Aguardando RSO</span>
-          <h3>IDP — Avanço físico</h3>
-          <p>Importe ao menos um PDF RSO válido. Nenhum valor de demonstração é exibido.</p>
+          <span className="tag">Sem RSO nesta competência</span>
+          <h3>{competenceLabel(data?.selectedYear ?? selectedYear, data?.selectedMonth ?? selectedMonth)}</h3>
+          <p>O sistema não reutiliza automaticamente RSOs de meses anteriores. Importe uma versão desta competência ou selecione outro mês.</p>
         </div>
       )}
     </div>
@@ -742,12 +818,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 }
 
 function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className={`card${accent ? " accent" : ""}`}>
-      <div className="lbl">{label}</div>
-      <div className="val">{value}</div>
-    </div>
-  );
+  return <div className={`card${accent ? " accent" : ""}`}><div className="lbl">{label}</div><div className="val">{value}</div></div>;
 }
 
 function DisciplineMetric({ label, value, threshold }: { label: string; value: number | null; threshold: number }) {

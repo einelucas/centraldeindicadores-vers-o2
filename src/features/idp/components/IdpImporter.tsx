@@ -1,8 +1,9 @@
 "use client";
 
-import { IdpView } from "@/features/idp/components/IdpView";
-
-/** Compatibilidade com pontos antigos que ainda importem IdpImporter. */
+/**
+ * Componente legado preservado para imports antigos.
+ * A importação ativa do IDP agora é feita pelo IdpView a partir dos PDFs RSO.
+ */
 export function IdpImporter() {
-  return <IdpView canPublish={false} canClear={false} />;
+  return null;
 }

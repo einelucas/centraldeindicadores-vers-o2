@@ -5,6 +5,7 @@ import { computeIdpResult } from "@/features/idp/calculations";
 import { loadIdpExcludedDisciplines } from "@/features/idp/configuration";
 import { toIdpPublishedPayload } from "@/features/idp/publications";
 import { storedIdpRowToRecord } from "@/features/idp/services";
+import { IDP_DEFAULT_TARGET } from "@/features/idp/types";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -15,14 +16,15 @@ const MODULE = "idp";
 const INDICATOR = "aderencia";
 
 const publishSchema = z.object({
-  threshold: z.number().min(0).max(200).default(98),
-  selectedYear: z.number().int().min(2000).max(2100),
-  monthStart: z.number().int().min(1).max(12),
-  monthEnd: z.number().int().min(1).max(12),
+  year: z.number().int().min(2000).max(2200),
+  month: z.number().int().min(1).max(12),
+  historyStart: z.number().int().min(1).max(12),
+  historyEnd: z.number().int().min(1).max(12),
+  threshold: z.number().min(0).max(200).default(IDP_DEFAULT_TARGET * 100),
 });
 
 function isMissingPublicationTable(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && ["P2021", "P2022"].includes(error.code);
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
 }
 
 function serializePublication(publication: {
@@ -57,45 +59,49 @@ export async function GET() {
   }
 }
 
+/** Publica a competência escolhida com a lista exata de RSOs usada no cálculo. */
 export async function POST(req: NextRequest) {
   try {
     const user = await requirePermission("indicators:publish");
     const input = publishSchema.parse(await req.json());
     const thresholdFraction = input.threshold / 100;
+    const historyStart = Math.min(input.historyStart, input.historyEnd);
+    const historyEnd = Math.max(input.historyStart, input.historyEnd);
 
     const [rows, excludedDisciplines] = await Promise.all([
       prisma.idpRsoRecord.findMany({
-        orderBy: [{ referenceDate: "desc" }, { unit: "asc" }, { rsoNumero: "desc" }],
+        where: { referenceYear: input.year },
+        orderBy: [
+          { referenceMonth: "asc" },
+          { unit: "asc" },
+          { rsoNumero: "asc" },
+        ],
       }),
       loadIdpExcludedDisciplines(prisma),
     ]);
 
     if (!rows.length) {
       return NextResponse.json(
-        { error: "Não há documentos RSO importados para publicar." },
+        { error: "Não há RSOs no ano selecionado para publicar." },
         { status: 400 },
       );
     }
 
-    const result = computeIdpResult(
-      rows.map(storedIdpRowToRecord),
-      thresholdFraction,
-      excludedDisciplines,
-      {
-        selectedYear: input.selectedYear,
-        monthStart: input.monthStart,
-        monthEnd: input.monthEnd,
-      },
-    );
+    const records = rows.map(storedIdpRowToRecord);
+    const result = computeIdpResult(records, thresholdFraction, excludedDisciplines, {
+      selectedYear: input.year,
+      selectedMonth: input.month,
+      historyMonthStart: historyStart,
+      historyMonthEnd: historyEnd,
+    });
 
-    if (!result.unitRows.some((unit) => unit.nFases > 0)) {
+    if (!result.activeDocuments) {
       return NextResponse.json(
-        { error: "Os RSOs ativos não possuem fases de execução reconhecidas." },
+        { error: "Não há RSO para a competência selecionada." },
         { status: 400 },
       );
     }
 
-    const publicationDate = new Date();
     const payload = toIdpPublishedPayload(result, input.threshold);
     const status = payload.resultado >= input.threshold ? "OK" : "ABAIXO";
 
@@ -123,7 +129,6 @@ export async function POST(req: NextRequest) {
           payload: toJsonValue(payload),
           active: true,
           publishedById: user.id,
-          publishedAt: publicationDate,
         },
         include: { publishedBy: { select: { id: true, name: true, email: true } } },
       });
@@ -138,21 +143,19 @@ export async function POST(req: NextRequest) {
         module: MODULE,
         indicator: INDICATOR,
         version: publication.version,
-        source: "RSO",
+        year: input.year,
+        month: input.month,
         target: input.threshold,
         result: payload.resultado,
         status,
       },
       metadata: {
         documentosAtivos: payload.documentosAtivos,
-        unidades: payload.unidades.length,
-        disciplinas: payload.disciplinas?.length ?? 0,
-        disciplinasExcluidas: excludedDisciplines,
-        periodo: {
-          ano: payload.selectedYear,
-          mesInicial: payload.monthStart,
-          mesFinal: payload.monthEnd,
-        },
+        documentos: payload.unidades.map((unit) => ({
+          unidade: unit.n,
+          rso: unit.rsoNumero,
+          arquivo: unit.fileName,
+        })),
       },
     });
 
@@ -160,10 +163,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json(
-        {
-          error:
-            "As tabelas do IDP/RSO ou de publicações ainda não foram criadas. Execute os upgrades do banco.",
-        },
+        { error: "A tabela de publicações ainda não foi criada. Execute pnpm db:upgrade:rdo." },
         { status: 503 },
       );
     }

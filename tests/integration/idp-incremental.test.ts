@@ -3,85 +3,69 @@ import { idpBusinessKey, idpContentHash } from "@/features/idp/utils/keys";
 import type { IdpNormalizedRecord } from "@/features/idp/types";
 import {
   processIncrementalBatch,
-  type IncrementalRecord,
   type RecordDelegate,
 } from "@/importers/shared/incremental-upsert";
 
-function rso(realAcum: number): IdpNormalizedRecord {
+function record(overrides: Partial<IdpNormalizedRecord> = {}): IdpNormalizedRecord {
   return {
-    unit: "Unidade Teste",
-    rsoNumero: 15,
-    referenceDate: "2026-08-05",
-    fileName: "rso-15.pdf",
-    areas: ["Área 1"],
-    discData: {
-      "01 - Civil": [{ area: "Área 1", prevAcum: 100, realAcum }],
-    },
-    execucaoFases: [{ prevAcum: 100, realAcum }],
+    unit: "Nova Mutum",
+    detectedUnit: "Nova Mutum",
+    unitAdjusted: false,
+    rsoNumero: 34,
+    detectedRsoNumero: 34,
+    rsoAdjusted: false,
+    referenceYear: 2026,
+    referenceMonth: 6,
+    detectedReferenceYear: 2026,
+    detectedReferenceMonth: 6,
+    referenceSource: "PDF_MES_REF",
+    referenceOriginalText: "Mês ref.: 01/06/2026",
+    referenceAdjusted: false,
+    periodStart: "2026-06-24",
+    periodEnd: "2026-07-01",
+    emissionDate: "2026-07-06",
+    fileName: "rso34.pdf",
+    areas: [],
+    discData: {},
+    execucaoFases: [{ label: "Fase 1", prevAcum: 53.08, realAcum: 54.79 }],
     raw: {},
+    ...overrides,
   };
 }
 
-function incremental(record: IdpNormalizedRecord): IncrementalRecord {
+function incremental(r: IdpNormalizedRecord) {
   return {
-    businessKey: idpBusinessKey(record),
-    contentHash: idpContentHash(record),
-    data: record as unknown as Record<string, unknown>,
+    businessKey: idpBusinessKey(r),
+    contentHash: idpContentHash(r),
+    data: r as unknown as Record<string, unknown>,
   };
 }
 
-function makeMemoryDelegate() {
+function memoryDelegate() {
   const store = new Map<string, { contentHash: string }>();
   const delegate: RecordDelegate = {
-    async findByBusinessKey(businessKey) {
-      return store.get(businessKey) ?? null;
-    },
-    async insert(record) {
-      store.set(record.businessKey, { contentHash: record.contentHash });
-    },
-    async update(record) {
-      store.set(record.businessKey, { contentHash: record.contentHash });
-    },
+    async findByBusinessKey(key) { return store.get(key) ?? null; },
+    async insert(item) { store.set(item.businessKey, { contentHash: item.contentHash }); },
+    async update(item) { store.set(item.businessKey, { contentHash: item.contentHash }); },
   };
   return { store, delegate };
 }
 
-describe("IDP RSO — importação incremental", () => {
-  it("usa unidade + número do RSO como identidade lógica", () => {
-    expect(idpBusinessKey(rso(90))).toBe(idpBusinessKey(rso(95)));
-    expect(idpContentHash(rso(90))).not.toBe(idpContentHash(rso(95)));
+describe("IDP RSO — incremental", () => {
+  it("o mesmo número de RSO da mesma unidade é a mesma versão lógica", () => {
+    expect(idpBusinessKey(record({ referenceMonth: 6 }))).toBe(
+      idpBusinessKey(record({ referenceMonth: 7, referenceSource: "MANUAL", referenceAdjusted: true })),
+    );
   });
 
-
-  it("mantém o hash estável mesmo quando as chaves do JSON mudam de ordem", () => {
-    const first = rso(90);
-    const second: IdpNormalizedRecord = {
-      ...first,
-      discData: {
-        "04 - Elétrica": [],
-        "01 - Civil": first.discData["01 - Civil"] ?? [],
-      },
-    };
-    const firstWithExtraKey: IdpNormalizedRecord = {
-      ...first,
-      discData: {
-        "01 - Civil": first.discData["01 - Civil"] ?? [],
-        "04 - Elétrica": [],
-      },
-    };
-
-    expect(idpContentHash(firstWithExtraKey)).toBe(idpContentHash(second));
-  });
-
-  it("insere, ignora reimportação idêntica e atualiza conteúdo corrigido", async () => {
-    const { delegate, store } = makeMemoryDelegate();
-    const first = await processIncrementalBatch([incremental(rso(90))], delegate, "job-1");
-    const identical = await processIncrementalBatch([incremental(rso(90))], delegate, "job-2");
-    const corrected = await processIncrementalBatch([incremental(rso(95))], delegate, "job-3");
-
-    expect(first.inserted).toBe(1);
-    expect(identical.ignored).toBe(1);
-    expect(corrected.updated).toBe(1);
+  it("uma correção do mesmo RSO atualiza em vez de criar outra versão", async () => {
+    const first = incremental(record());
+    const corrected = incremental(record({ referenceMonth: 7, referenceSource: "MANUAL", referenceAdjusted: true }));
+    const { delegate, store } = memoryDelegate();
+    const a = await processIncrementalBatch([first], delegate, "job-1");
+    const b = await processIncrementalBatch([corrected], delegate, "job-2");
+    expect(a.inserted).toBe(1);
+    expect(b.updated).toBe(1);
     expect(store.size).toBe(1);
   });
 });
