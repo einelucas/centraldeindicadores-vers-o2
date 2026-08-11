@@ -198,6 +198,51 @@ describe("Painel Geral por publicações", () => {
     ).toBe(85);
   });
 
+  it("não herda valor de publicações antigas quando o indicador não tem nenhuma publicação ativa", () => {
+    // Indicador totalmente retratado: a fonte (ex.: RSOs do IDP) foi apagada e
+    // nada foi republicado, então nenhuma publicação está ativa. Mesmo
+    // havendo publicações antigas/de teste com valores para o período, elas
+    // não devem "vazar" — o indicador deve aparecer como sem dados.
+    const retractedPublication = { ...rdoPublication, active: false };
+
+    expect(
+      latestPublishedValueForPeriod("rdo", [retractedPublication], 2026, 6),
+    ).toBeNull();
+  });
+
+  it("o Painel Geral usa só a publicação mais recente, sem herdar meses de versões antigas", () => {
+    // Publicação antiga (desativada) cobre Jun+Jul. Uma republicação mais
+    // nova ativa só reenvia Jul (ex.: correção de um dado que estava errado
+    // em Jun, ou intervalo "De/Até" do IDP reduzido de propósito).
+    // Mesclar as duas traria de volta dado velho/obsoleto — como aconteceu
+    // de verdade com uma publicação antiga do IDP que "vazou" números de
+    // teste para Set/Out/Nov no Painel Geral. Só a versão mais nova conta.
+    const olderFullPublication = {
+      ...rdoPublication,
+      active: false,
+    };
+    const newerPartialPublication = {
+      ...rdoPublication,
+      active: true,
+      id: "pub-rdo-v2",
+      version: 2,
+      payload: {
+        ...rdoPublication.payload,
+        resultado: 85,
+        mensal: [{ label: "Jul/2026", v: 85 }],
+      },
+      publishedAt: new Date("2026-08-10T12:00:00.000Z"),
+    };
+
+    const data = buildGeneralPanelData([olderFullPublication, newerPartialPublication]);
+    const rdo = data.indicators.find((indicator) => indicator.key === "rdo");
+
+    // Junho só existia na versão antiga (desativada) — não deve aparecer.
+    expect(data.monthKeys).toEqual(["2026-07"]);
+    expect(rdo?.months.map((month) => month.value)).toEqual([85]);
+    expect(rdo?.result).toBe(85);
+  });
+
   it("ignora mês do IDP sem linha de base em vez de publicar 0%", () => {
     const publicationWithoutBaseline = {
       ...idpPublication,

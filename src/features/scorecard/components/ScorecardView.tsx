@@ -104,6 +104,8 @@ function average(values: number[]): number | null {
     : null;
 }
 
+const LIVE_REFRESH_INTERVAL_MS = 30_000;
+
 export function ScorecardView() {
   const [year, setYear] = useState(2026);
   const [month, setMonth] = useState(initialPeriodMonth);
@@ -114,60 +116,126 @@ export function ScorecardView() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [statusError, setStatusError] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const currentRequestId = useRef(0);
-
-  const loadCurrent = useCallback(async () => {
-    const requestId = currentRequestId.current + 1;
-    currentRequestId.current = requestId;
-
-    setBusy(true);
-    setStatus(null);
-    setStatusError(false);
-    setData(null);
-    setInputs({});
-
-    try {
-      const response = await fetch(`/api/scorecard?year=${year}&month=${month}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("Não foi possível puxar os indicadores.");
-
-      const computation = (await response.json()) as Computation;
-      if (requestId !== currentRequestId.current) return;
-
-      setData(computation);
-      setInputs(inputsFromValues(computation.values));
-    } catch (error) {
-      if (requestId !== currentRequestId.current) return;
-      setStatus(error instanceof Error ? error.message : "Falha ao carregar o mês.");
-      setStatusError(true);
-    } finally {
-      if (requestId === currentRequestId.current) setBusy(false);
-    }
-  }, [month, year]);
+  // Guarda o último valor "ao vivo" aplicado a cada campo, para saber se o
+  // usuário editou manualmente desde então — assim uma atualização em tempo
+  // real não apaga um ajuste que ainda não foi salvo.
+  const lastLiveInputsRef = useRef<Record<string, string>>({});
+  const previousPeriodKeyRef = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/scorecard/history?year=${year}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) throw new Error("Não foi possível carregar o histórico.");
-      const payload = (await response.json()) as HistoryResponse;
-      setHistory(payload.snapshots);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha no histórico.");
-      setStatusError(true);
-    }
+    const response = await fetch(`/api/scorecard/history?year=${year}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Não foi possível carregar o histórico.");
+    const payload = (await response.json()) as HistoryResponse;
+    setHistory(payload.snapshots);
   }, [year]);
 
-  useEffect(() => {
-    void loadCurrent();
-  }, [loadCurrent]);
+  const fetchSemesterComputations = useCallback(async () => {
+    const responses = await Promise.all(
+      SCORECARD_PERIOD_MONTHS.map((periodMonth) =>
+        fetch(`/api/scorecard?year=${year}&month=${periodMonth}`, {
+          cache: "no-store",
+        }),
+      ),
+    );
+
+    if (responses.some((response) => !response.ok)) {
+      throw new Error("Não foi possível carregar os indicadores do ciclo.");
+    }
+
+    return Promise.all(responses.map((response) => response.json() as Promise<Computation>));
+  }, [year]);
+
+  // Substitui os antigos botões "Puxar mês/semestre": consulta os módulos de
+  // origem para o ano selecionado (os seis meses do ciclo de uma vez) e
+  // atualiza o histórico salvo. Chamada no carregamento inicial, ao trocar
+  // de ano e periodicamente em segundo plano (ver useEffect abaixo).
+  const refreshLive = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const requestId = currentRequestId.current + 1;
+      currentRequestId.current = requestId;
+
+      if (!silent) {
+        setBusy(true);
+        setStatus(null);
+        setStatusError(false);
+      }
+
+      try {
+        const [computations] = await Promise.all([fetchSemesterComputations(), loadHistory()]);
+        if (requestId !== currentRequestId.current) return;
+        setSemesterPreview(computations);
+        setLastSyncedAt(new Date());
+      } catch (error) {
+        if (requestId !== currentRequestId.current) return;
+        if (!silent) {
+          setStatus(error instanceof Error ? error.message : "Falha ao carregar os indicadores.");
+          setStatusError(true);
+        }
+      } finally {
+        if (!silent && requestId === currentRequestId.current) setBusy(false);
+      }
+    },
+    [fetchSemesterComputations, loadHistory],
+  );
 
   useEffect(() => {
-    setSemesterPreview([]);
-    void loadHistory();
-  }, [loadHistory]);
+    void refreshLive();
+  }, [refreshLive]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void refreshLive({ silent: true });
+    }, LIVE_REFRESH_INTERVAL_MS);
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible") void refreshLive({ silent: true });
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [refreshLive]);
+
+  // Mantém "Indicadores do mês" em sincronia com o snapshot ao vivo do mês
+  // selecionado. Ao trocar de mês/ano, os campos assumem o valor publicado;
+  // numa atualização em segundo plano, só os campos que o usuário não tocou
+  // desde a última sincronização são sobrescritos.
+  useEffect(() => {
+    const current = semesterPreview.find((computation) => computation.month === month) ?? null;
+    const periodKey = `${year}-${month}`;
+    const periodChanged = previousPeriodKeyRef.current !== periodKey;
+    previousPeriodKeyRef.current = periodKey;
+
+    // Sem entrada ao vivo para o mês selecionado e o período não mudou: o
+    // salvamento (ver save()/editHistoryCell) removeu esse mês da prévia de
+    // propósito, para não sobrepor o snapshot recém-salvo com um valor ao
+    // vivo desatualizado. O próximo ciclo de sincronização o repõe.
+    if (!current && !periodChanged) return;
+
+    setData(current);
+
+    const liveInputs = current ? inputsFromValues(current.values) : {};
+    setInputs((currentInputs) => {
+      if (periodChanged) return liveInputs;
+      const next = { ...currentInputs };
+      for (const indicator of SC_INDICATORS) {
+        const key = indicator.key;
+        const untouched =
+          (currentInputs[key] ?? "") === (lastLiveInputsRef.current[key] ?? "");
+        if (untouched) next[key] = liveInputs[key] ?? "";
+      }
+      return next;
+    });
+    lastLiveInputsRef.current = liveInputs;
+  }, [month, year, semesterPreview]);
 
   const displayedValues = useMemo(() => {
     const values: Record<string, number | null> = { ...(data?.values ?? {}) };
@@ -194,20 +262,80 @@ export function ScorecardView() {
 
   const effectiveByMonth = useMemo(() => {
     const map = new Map<number, Computation>();
-    history.forEach((computation) => map.set(computation.month, computation));
-    semesterPreview.forEach((computation) => map.set(computation.month, computation));
+    const historyByMonth = new Map(history.map((computation) => [computation.month, computation]));
+    const previewByMonth = new Map(
+      semesterPreview.map((computation) => [computation.month, computation]),
+    );
 
-    if (data && data.year === year) {
-      map.set(data.month, {
-        year: data.year,
-        month: data.month,
-        values: displayedValues,
-        result: displayedResult,
+    // Mescla por indicador, não por mês inteiro, com o valor ao vivo ganhando
+    // de um snapshot salvo sempre que ele existir. O "Salvar snapshot" hoje
+    // não distingue um ajuste manual de um valor apenas puxado do módulo de
+    // origem — os dois são gravados como o mesmo número — então tratar o
+    // salvo como definitivo para sempre travaria o histórico na publicação
+    // que existia no momento do save, ignorando republicações mais recentes
+    // dos outros módulos (RDO/IDP/RNC/5S/Taxa). O snapshot salvo só entra
+    // como respaldo quando o valor ao vivo não existe para aquele
+    // indicador/mês (ex.: indicador retratado, sem publicação ativa).
+    //
+    // A mesma regra vale para o mês selecionado no topo — ele não pode ter
+    // uma regra diferente dos demais, senão a mesma coluna mostra um valor
+    // quando o mês está selecionado e outro quando não está.
+    const mergeWithSavedFallback = (
+      liveValues: Record<string, number | null>,
+      saved: Computation | undefined,
+    ): Record<string, number | null> => {
+      const merged: Record<string, number | null> = {};
+      for (const indicator of SC_INDICATORS) {
+        const liveValue = liveValues[indicator.key];
+        merged[indicator.key] =
+          typeof liveValue === "number" && Number.isFinite(liveValue)
+            ? liveValue
+            : (saved?.values[indicator.key] ?? null);
+      }
+      return merged;
+    };
+
+    // Um mês só "tem dado" se pelo menos um indicador tiver valor real. A
+    // busca em tempo real sempre retorna os 6 meses do ciclo (mesmo os sem
+    // nenhum indicador publicado ainda), então checar só "existe um
+    // Computation para esse mês" contava todo mês como disponível — inflando
+    // "Meses disponíveis" e "Pontuação prevista — Período" para o semestre
+    // inteiro mesmo com só 1 ou 2 meses realmente preenchidos.
+    const hasRealValue = (values: Record<string, number | null>) =>
+      Object.values(values).some((value) => typeof value === "number" && Number.isFinite(value));
+
+    for (const periodMonth of SCORECARD_PERIOD_MONTHS) {
+      const saved = historyByMonth.get(periodMonth);
+      const preview = previewByMonth.get(periodMonth);
+      if (!saved && !preview) continue;
+
+      const mergedValues = mergeWithSavedFallback(preview?.values ?? {}, saved);
+      if (!hasRealValue(mergedValues)) continue;
+
+      map.set(periodMonth, {
+        year,
+        month: periodMonth,
+        values: mergedValues,
+        result: computeScorecard(mergedValues),
       });
     }
 
+    if (data && data.year === year) {
+      const mergedValues = mergeWithSavedFallback(displayedValues, historyByMonth.get(data.month));
+      if (hasRealValue(mergedValues)) {
+        map.set(data.month, {
+          year: data.year,
+          month: data.month,
+          values: mergedValues,
+          result: computeScorecard(mergedValues),
+        });
+      } else {
+        map.delete(data.month);
+      }
+    }
+
     return map;
-  }, [data, displayedResult, displayedValues, history, semesterPreview, year]);
+  }, [data, displayedValues, history, semesterPreview, year]);
 
   const semesterPoints = useMemo(
     () =>
@@ -300,8 +428,13 @@ export function ScorecardView() {
       if (!response.ok) throw new Error("Não foi possível salvar o snapshot.");
 
       const saved = (await response.json()) as Computation;
+      const savedInputs = inputsFromValues(saved.values);
       setData(saved);
-      setInputs(inputsFromValues(saved.values));
+      setInputs(savedInputs);
+      // O próximo ciclo de sincronização em tempo real substitui esse valor
+      // pelo publicado ao vivo assim que houver um — daí marcar o override
+      // recém-salvo como o baseline "ao vivo" atual (ver o efeito acima).
+      lastLiveInputsRef.current = savedInputs;
       setSemesterPreview((current) =>
         current.filter((computation) => computation.month !== month),
       );
@@ -313,45 +446,6 @@ export function ScorecardView() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function previewSemester() {
-    setBusy(true);
-    setStatus(null);
-    setStatusError(false);
-
-    try {
-      const responses = await Promise.all(
-        SCORECARD_PERIOD_MONTHS.map((periodMonth) =>
-          fetch(`/api/scorecard?year=${year}&month=${periodMonth}`, {
-            cache: "no-store",
-          }),
-        ),
-      );
-
-      if (responses.some((response) => !response.ok)) {
-        throw new Error("Não foi possível puxar todos os meses do semestre.");
-      }
-
-      const computations = await Promise.all(
-        responses.map((response) => response.json() as Promise<Computation>),
-      );
-      setSemesterPreview(computations);
-      setStatus("Prévia do semestre atualizada. Salve cada mês para persistir ajustes manuais.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao puxar o semestre.");
-      setStatusError(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function restoreSourceValue(key: string) {
-    const sourceValue = data?.sourceValues?.[key] ?? data?.values[key] ?? null;
-    setInputs((current) => ({
-      ...current,
-      [key]: sourceValue === null ? "" : String(sourceValue),
-    }));
   }
 
   async function editHistoryCell(indicatorKey: string, periodMonth: number) {
@@ -416,8 +510,10 @@ export function ScorecardView() {
       );
 
       if (periodMonth === month) {
+        const savedInputs = inputsFromValues(saved.values);
         setData(saved);
-        setInputs(inputsFromValues(saved.values));
+        setInputs(savedInputs);
+        lastLiveInputsRef.current = savedInputs;
       }
 
       setStatus(
@@ -483,28 +579,24 @@ export function ScorecardView() {
 
           <button
             type="button"
-            onClick={() => void loadCurrent()}
-            disabled={busy}
-            className="rounded-lg border border-brand px-4 py-2 text-sm font-bold text-brand transition hover:bg-brand/5 disabled:opacity-40"
-          >
-            Puxar mês
-          </button>
-          <button
-            type="button"
-            onClick={() => void previewSemester()}
-            disabled={busy}
-            className="rounded-lg border border-brand px-4 py-2 text-sm font-bold text-brand transition hover:bg-brand/5 disabled:opacity-40"
-          >
-            Puxar semestre
-          </button>
-          <button
-            type="button"
             onClick={() => void save()}
             disabled={busy}
             className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark disabled:opacity-40"
           >
             Salvar snapshot
           </button>
+
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-neutralbrand">
+            <span
+              className={`h-2 w-2 rounded-full ${busy ? "animate-pulse bg-accent" : "bg-success"}`}
+              aria-hidden
+            />
+            {busy
+              ? "Sincronizando…"
+              : lastSyncedAt
+                ? `Ao vivo · atualizado às ${lastSyncedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                : "Ao vivo"}
+          </div>
 
           <div className="ml-auto">
             <ExportButtons
@@ -578,7 +670,8 @@ export function ScorecardView() {
           <div>
             <h3 className="text-base font-extrabold text-brand-dark">Indicadores do mês</h3>
             <p className="mt-1 text-xs text-neutralbrand">
-              O campo editável pode sobrepor o valor publicado. “Puxar” restaura o resultado do módulo de origem.
+              O valor é atualizado automaticamente a partir do módulo de origem. O campo pode ser editado para um
+              ajuste manual antes de salvar; sem edição, ele acompanha o valor publicado em tempo real.
             </p>
           </div>
         </div>
@@ -615,28 +708,19 @@ export function ScorecardView() {
                     )}
                   </td>
                   <td className="px-3 py-3">
-                    <div className="flex min-w-48 items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Sem resultado"
-                        value={inputs[row.key] ?? ""}
-                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                          setInputs((current) => ({
-                            ...current,
-                            [row.key]: event.target.value,
-                          }))
-                        }
-                        className="w-32 rounded-lg border border-neutralbrand/40 px-3 py-2 text-sm font-semibold outline-none focus:border-brand"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => restoreSourceValue(row.key)}
-                        className="rounded-lg border border-brand px-3 py-2 text-xs font-bold text-brand hover:bg-brand/5"
-                      >
-                        Puxar
-                      </button>
-                    </div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Sem resultado"
+                      value={inputs[row.key] ?? ""}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        setInputs((current) => ({
+                          ...current,
+                          [row.key]: event.target.value,
+                        }))
+                      }
+                      className="w-32 rounded-lg border border-neutralbrand/40 px-3 py-2 text-sm font-semibold outline-none focus:border-brand"
+                    />
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums">{formatPoints(row.pontosPossiveis)}</td>
                   <td className={`px-3 py-3 text-right font-extrabold tabular-nums ${row.pass ? "text-success" : "text-neutralbrand"}`}>

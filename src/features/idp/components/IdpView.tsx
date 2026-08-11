@@ -225,7 +225,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       setPendingFiles((current) => [...current, ...parsed]);
       if (parsed.some((item) => item.record)) {
         setMessage(
-          "RSOs lidos. Confira unidade, número da versão, competência, período e emissão antes de importar.",
+          "RSOs lidos. Confira unidade, número da versão, mês de referência, período e emissão antes de importar.",
         );
       }
     } catch (err) {
@@ -350,7 +350,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       if (!response.ok) throw await responseError(response, "Falha ao publicar o IDP.");
       const body = (await response.json()) as { publication: PublicationSummary };
       setPublication(body.publication);
-      setMessage("IDP publicado com os RSOs exatos da competência selecionada.");
+      setMessage("IDP publicado com os RSOs exatos do mês analisado.");
       window.dispatchEvent(new Event("idp:published"));
       window.dispatchEvent(new Event("indicator:published"));
     } catch (err) {
@@ -435,7 +435,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         <div className="subtitle-block first">
           <h3>RSO — controle semanal</h3>
           <p>
-            Cada PDF é uma versão semanal independente. O número do RSO identifica a versão; competência, período e emissão são armazenados separadamente.
+            Cada PDF é uma versão semanal independente. O número do RSO identifica a versão; mês de referência, período e emissão são armazenados separadamente.
           </p>
         </div>
         <div
@@ -473,7 +473,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         <section className="idp-section-card">
           <div className="subtitle-block first">
             <h3>Pré-validação dos documentos</h3>
-            <p>Nenhuma competência é inferida por período, emissão ou data de upload. Se “Mês ref.” não for localizado, a definição manual é obrigatória.</p>
+            <p>Nenhum mês de referência é inferido por período, emissão ou data de upload. Se “Mês ref.” não for localizado, a definição manual é obrigatória.</p>
           </div>
           <div className="idp-rso-preview-list">
             {pendingFiles.map((file) => {
@@ -499,7 +499,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                     <div>
                       <strong>{file.fileName}</strong>
                       <div className="idp-rso-source-line">
-                        Fonte da competência: {record.referenceOriginalText ?? "Mês ref. não localizado"}
+                        Fonte do mês de referência: {record.referenceOriginalText ?? "Mês ref. não localizado"}
                       </div>
                     </div>
                     <span className={`badge ${valid ? "ok" : "fail"}`}>{valid ? "Pronto para importar" : "Revisão obrigatória"}</span>
@@ -536,7 +536,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                       <small>Detectado: {record.detectedRsoNumero ?? "—"}</small>
                     </label>
                     <label>
-                      <span>Competência</span>
+                      <span>Mês de referência</span>
                       <input
                         type="month"
                         value={inputMonthValue(record)}
@@ -560,7 +560,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                       />
                       <small>Detectado: {detectedCompetence}</small>
                     </label>
-                    <div className="idp-rso-readonly-field"><span>Período</span><strong>{periodLabel(record.periodStart, record.periodEnd)}</strong><small>Não altera a competência</small></div>
+                    <div className="idp-rso-readonly-field"><span>Período</span><strong>{periodLabel(record.periodStart, record.periodEnd)}</strong><small>Não altera o mês de referência</small></div>
                     <div className="idp-rso-readonly-field"><span>Emissão</span><strong>{shortDate(record.emissionDate)}</strong><small>Data formal do documento</small></div>
                     <div className="idp-rso-readonly-field"><span>Execução</span><strong>{record.execucaoFases.length} fase(s)</strong><small>{record.areas.length} área(s) reconhecida(s)</small></div>
                   </div>
@@ -594,41 +594,64 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       <section className="idp-section-card">
         <div className="subtitle-block first">
-          <h3>Competência e série histórica</h3>
-          <p>A tabela principal usa somente a competência escolhida. “De / Até” controla apenas a série histórica.</p>
+          <h3>Mês analisado e ajustes de cálculo</h3>
+          <p>Dois grupos com papéis diferentes: um define quais RSOs entram na conta e vão para o Painel; o outro só ajusta como esse resultado é exibido, sem trocar os dados usados.</p>
         </div>
-        <div className="controls-row idp-control-grid">
-          <label>Ano
-            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
-              {(data?.years ?? [selectedYear]).map((year) => <option key={year} value={year}>{year}</option>)}
-            </select>
-          </label>
-          <label>Competência analisada
-            <select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>
-              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
-            </select>
-          </label>
-          <label>Série histórica — de
-            <select value={historyMonthStart} onChange={(event) => setHistoryMonthStart(Number(event.target.value))}>
-              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
-            </select>
-          </label>
-          <label>Série histórica — até
-            <select value={historyMonthEnd} onChange={(event) => setHistoryMonthEnd(Number(event.target.value))}>
-              {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
-            </select>
-          </label>
-          <label>Meta (%)
-            <input type="number" min={0} max={200} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-          </label>
+
+        <div className="idp-filter-groups">
+          <div className="idp-filter-group">
+            <h4>Mês analisado — define os dados do Painel</h4>
+            <p>
+              Escolha o ano e o mês. São os RSOs deste mês que alimentam todas as tabelas abaixo e são
+              exatamente os que vão para o Painel quando você clicar em “Publicar”.
+            </p>
+            <div className="controls-row idp-control-grid">
+              <label>Ano
+                <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+                  {(data?.years ?? [selectedYear]).map((year) => <option key={year} value={year}>{year}</option>)}
+                </select>
+              </label>
+              <label>Mês analisado
+                <select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))}>
+                  {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="idp-competence-banner">
+              <strong>Mês analisado: {competenceLabel(data?.selectedYear ?? selectedYear, data?.selectedMonth ?? selectedMonth)}</strong>
+              <span>{result?.activeDocuments ?? 0} RSO(s) ativo(s). Nenhuma versão de outro mês é reutilizada.</span>
+            </div>
+          </div>
+
+          <div className="idp-filter-group">
+            <h4>Intervalo do gráfico e meta</h4>
+            <p>
+              Não mudam quais RSOs são usados. “De / Até” define quais meses aparecem no gráfico de tendência
+              do Painel publicado. “Meta” define a aderência mínima para marcar “Dentro da meta” aqui e no Painel.
+            </p>
+            <div className="controls-row idp-control-grid">
+              <label>Gráfico do Painel — de
+                <select value={historyMonthStart} onChange={(event) => setHistoryMonthStart(Number(event.target.value))}>
+                  {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+                </select>
+              </label>
+              <label>Gráfico do Painel — até
+                <select value={historyMonthEnd} onChange={(event) => setHistoryMonthEnd(Number(event.target.value))}>
+                  {MONTH_NAMES_FULL.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
+                </select>
+              </label>
+              <label>Meta (%)
+                <input type="number" min={0} max={200} value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="controls-row" style={{ marginTop: 14 }}>
           <button className="btn secondary" type="button" disabled={busy} onClick={() => void load({ year: selectedYear, month: selectedMonth, historyStart: historyMonthStart, historyEnd: historyMonthEnd, threshold })}>Recalcular</button>
           {result?.activeDocuments ? <button className="btn secondary" type="button" onClick={() => exportIdpPdf(result)}>Baixar PDF</button> : null}
           {canPublish ? <button className="btn" type="button" disabled={busy || !result?.activeDocuments} onClick={() => void publish()}>Publicar</button> : null}
           {canClear ? <button className="btn secondary" type="button" disabled={busy || !data?.total} onClick={() => void clearAll()}>Limpar histórico</button> : null}
-        </div>
-        <div className="idp-competence-banner">
-          <strong>Competência ativa: {competenceLabel(data?.selectedYear ?? selectedYear, data?.selectedMonth ?? selectedMonth)}</strong>
-          <span>{result?.activeDocuments ?? 0} RSO(s) ativo(s). Nenhuma versão de outro mês é reutilizada.</span>
         </div>
         {publication ? <div className="idp-publication-note">Última publicação: versão {publication.version} · {new Date(publication.publishedAt).toLocaleString("pt-BR")} · {publication.publishedBy.name}</div> : null}
       </section>
@@ -647,11 +670,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         <section className="idp-section-card">
           <div className="subtitle-block first">
             <h3>Histórico de versões RSO</h3>
-            <p>Todos os documentos permanecem no banco. “Em cálculo” marca a maior versão de cada unidade na competência ativa.</p>
+            <p>Todos os documentos permanecem no banco. “Em cálculo” marca a maior versão de cada unidade no mês analisado.</p>
           </div>
           <div className="table-scroll idp-summary-table-wrap">
             <table className="data idp-summary-table">
-              <thead><tr><th>Unidade</th><th>RSO</th><th>Competência</th><th>Período</th><th>Emissão</th><th>Origem ref.</th><th>Arquivo</th><th>1ª importação</th><th>Última atualização</th><th>Uso</th></tr></thead>
+              <thead><tr><th>Unidade</th><th>RSO</th><th>Ref.</th><th>Período</th><th>Emissão</th><th>Origem ref.</th><th>Arquivo</th><th>1ª importação</th><th>Última atualização</th><th>Uso</th></tr></thead>
               <tbody>
                 {data.documents.map((document) => (
                   <tr key={document.id}>
@@ -667,7 +690,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                     <td title={document.fileName}>{document.fileName}</td>
                     <td>{new Date(document.createdAt).toLocaleString("pt-BR")}{document.firstImportedBy ? <small className="idp-rso-source-line">por {document.firstImportedBy}</small> : null}</td>
                     <td>{new Date(document.updatedAt).toLocaleString("pt-BR")}{document.lastUpdatedBy ? <small className="idp-rso-source-line">por {document.lastUpdatedBy}</small> : null}</td>
-                    <td>{document.active ? <span className="badge ok">Em cálculo</span> : document.sameCompetence ? <span className="badge info">Histórico da competência</span> : <span className="badge info">Outra competência</span>}</td>
+                    <td>{document.active ? <span className="badge ok">Em cálculo</span> : document.sameCompetence ? <span className="badge info">Histórico do mês analisado</span> : <span className="badge info">Outro mês</span>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -687,7 +710,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </div>
 
           <section className="idp-section-card">
-            <div className="subtitle-block first"><h3>Execução geral por unidade</h3><p>Fonte: página 1 → Avanços por Etapa → linha Execução → acumulado. A maior versão semanal da competência é usada.</p></div>
+            <div className="subtitle-block first"><h3>Execução geral por unidade</h3><p>Fonte: página 1 → Avanços por Etapa → linha Execução → acumulado. A maior versão semanal do mês analisado é usada.</p></div>
             <div className="table-scroll idp-summary-table-wrap">
               <table className="data idp-summary-table">
                 <thead><tr><th></th><th>Unidade</th><th>RSO utilizado</th><th>Período</th><th>Ref.</th><th>Fases</th><th>Prev. acum.</th><th>Real acum.</th><th>Aderência</th><th>Situação</th></tr></thead>
@@ -712,7 +735,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                         </tr>
                         {open ? (
                           <>
-                            <tr className="idp-detail-row idp-source-detail"><td></td><td colSpan={9}><strong>Rastreabilidade:</strong> arquivo {unit.fileName} · emissão {shortDate(unit.emissionDate)} · competência {unit.referenceSource === "PDF_MES_REF" ? `lida de ${unit.referenceOriginalText ?? "Mês ref."}` : `ajustada manualmente (original: ${unit.referenceOriginalText ?? "não identificado"})`}.</td></tr>
+                            <tr className="idp-detail-row idp-source-detail"><td></td><td colSpan={9}><strong>Rastreabilidade:</strong> arquivo {unit.fileName} · emissão {shortDate(unit.emissionDate)} · mês de referência {unit.referenceSource === "PDF_MES_REF" ? `lida de ${unit.referenceOriginalText ?? "Mês ref."}` : `ajustada manualmente (original: ${unit.referenceOriginalText ?? "não identificado"})`}.</td></tr>
                             {unit.fases.map((phase, phaseIndex) => (
                               <tr className="idp-detail-row" key={`${key}-${phaseIndex}`}>
                                 <td></td><td>{phase.label}</td><td></td><td></td><td></td><td></td>
@@ -732,7 +755,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </section>
 
           <section className="idp-section-card">
-            <div className="subtitle-block first"><h3>Aderência por disciplina</h3><p>Média das áreas do RSO ativo de cada unidade na competência selecionada.</p></div>
+            <div className="subtitle-block first"><h3>Aderência por disciplina</h3><p>Média das áreas do RSO ativo de cada unidade no mês analisado.</p></div>
             <div className="table-scroll idp-summary-table-wrap">
               <table className="data idp-summary-table">
                 <thead><tr><th></th><th>Disciplina</th><th>Áreas usadas</th><th>Prev. médio</th><th>Real médio</th><th>Aderência</th><th>Situação</th></tr></thead>
@@ -808,9 +831,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         </>
       ) : (
         <div className="placeholder idp-empty-state">
-          <span className="tag">Sem RSO nesta competência</span>
+          <span className="tag">Sem RSO neste mês</span>
           <h3>{competenceLabel(data?.selectedYear ?? selectedYear, data?.selectedMonth ?? selectedMonth)}</h3>
-          <p>O sistema não reutiliza automaticamente RSOs de meses anteriores. Importe uma versão desta competência ou selecione outro mês.</p>
+          <p>O sistema não reutiliza automaticamente RSOs de meses anteriores. Importe um RSO para este mês ou selecione outro mês analisado.</p>
         </div>
       )}
     </div>

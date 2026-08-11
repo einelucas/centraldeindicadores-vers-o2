@@ -271,6 +271,13 @@ export function publishedValueForPeriod(
  * anterior. Por isso, o Scorecard não pode consultar somente a publicação ativa:
  * ele precisa percorrer o histórico, da versão mais nova para a mais antiga, até
  * encontrar um valor válido para o período.
+ *
+ * Essa busca só entra em ação quando existe uma publicação ativa — ela serve
+ * para completar meses que a republicação mais recente não cobre, não para
+ * reviver dado de um indicador que não tem publicação ativa nenhuma. Sem essa
+ * guarda, um indicador totalmente retratado (ex.: histórico de origem apagado
+ * e nenhuma nova publicação feita) continuava exibindo números de publicações
+ * antigas e desativadas — inclusive de testes/desenvolvimento — para sempre.
  */
 export function latestPublishedValueForPeriod(
   key: string,
@@ -278,6 +285,8 @@ export function latestPublishedValueForPeriod(
   year: number,
   month: number,
 ): number | null {
+  if (!publications.some((publication) => publication.active === true)) return null;
+
   const ordered = publications.slice().sort(
     (a, b) =>
       Number(b.active === true) - Number(a.active === true) ||
@@ -293,24 +302,28 @@ export function latestPublishedValueForPeriod(
   return null;
 }
 
-function publicationForIndicator(
+/**
+ * Publicações de um indicador, da mais nova para a mais antiga. Só a posição
+ * [0] (a mais recente) é usada por `buildGeneralPanelData` — ver o
+ * comentário lá sobre por que versões antigas não devem ser mescladas.
+ */
+function publicationsForIndicator(
   indicator: ScorecardIndicator,
   publications: readonly GeneralPanelPublicationInput[],
-): GeneralPanelPublicationInput | null {
-  if (!indicator.source) return null;
-  return (
-    publications
-      .filter(
-        (publication) =>
-          publication.module === indicator.source?.module &&
-          publication.indicator === indicator.source?.indicator,
-      )
-      .sort(
-        (a, b) =>
-          b.publishedAt.getTime() - a.publishedAt.getTime() ||
-          b.version - a.version,
-      )[0] ?? null
-  );
+): GeneralPanelPublicationInput[] {
+  if (!indicator.source) return [];
+  return publications
+    .filter(
+      (publication) =>
+        publication.module === indicator.source?.module &&
+        publication.indicator === indicator.source?.indicator,
+    )
+    .sort(
+      (a, b) =>
+        Number(b.active === true) - Number(a.active === true) ||
+        b.publishedAt.getTime() - a.publishedAt.getTime() ||
+        b.version - a.version,
+    );
 }
 
 export function passesPanelTarget(
@@ -350,11 +363,19 @@ export function buildGeneralPanelData(
   const monthKeySet = new Set<string>();
 
   for (const indicator of indicators) {
-    const publication = publicationForIndicator(indicator, publications);
-    if (!publication) continue;
-    const data = adaptPublication(indicator.key, publication);
-    adaptedByKey.set(indicator.key, { publication, data });
-    Object.keys(data.monthly).forEach((key) => monthKeySet.add(key));
+    const latest = publicationsForIndicator(indicator, publications)[0];
+    if (!latest) continue;
+
+    // Só a publicação mais recente conta. Uma versão anterior é
+    // deliberadamente aposentada quando uma nova é publicada — inclusive
+    // quando a nova cobre menos meses de propósito (dado antigo corrigido ou
+    // invalidado). Uma tentativa anterior de mesclar todo o histórico
+    // trouxe de volta dados de teste/obsoletos de publicações antigas do IDP
+    // para meses que a versão atual nunca preencheu (Set/Out/Nov apareciam
+    // com números repetidos de uma publicação de meses atrás).
+    const adapted = adaptPublication(indicator.key, latest);
+    adaptedByKey.set(indicator.key, { publication: latest, data: adapted });
+    Object.keys(adapted.monthly).forEach((key) => monthKeySet.add(key));
   }
 
   const monthKeys = Array.from(monthKeySet).sort();

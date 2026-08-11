@@ -140,8 +140,10 @@ export async function GET() {
   try {
     await requirePermission("indicators:read");
 
+    // Histórico completo (não só a versão ativa): uma republicação pode
+    // cobrir só parte do ciclo, e buildGeneralPanelData precisa das versões
+    // antigas para não perder meses que a mais nova não inclui.
     const publications = await prisma.indicatorPublication.findMany({
-      where: { active: true },
       orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
       include: {
         publishedBy: { select: { id: true, name: true, email: true } },
