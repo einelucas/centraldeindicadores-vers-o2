@@ -13,7 +13,8 @@ Este diretório concentra a documentação de arquitetura, operação e regras d
 | [`scorecard-2026.md`](scorecard-2026.md) | Regras do ciclo, pesos, pontuação e histórico |
 | [`testing-and-quality.md`](testing-and-quality.md) | Testes, validações e critérios de entrega |
 | [`development-guide.md`](development-guide.md) | Convenções para manutenção e novos módulos |
+| [`migration-fastapi-nuxt.md`](migration-fastapi-nuxt.md) | Plano de refatoração para Nuxt/Vue + FastAPI, para integração ao hub corporativo de automação |
 
 ## Referências já existentes no repositório
 
-Os documentos antigos de migração e validação registram decisões históricas. Para o estado atual do sistema, utilize primeiro os documentos deste índice e o `README.md` da raiz.
+Os demais documentos de migração e validação (`migration-map.md`, `migration-phase-1.md`, `corporate-integration.md`) registram decisões históricas ou pontos de extensão específicos. Para o estado atual do sistema, utilize primeiro os documentos deste índice e o `README.md` da raiz.

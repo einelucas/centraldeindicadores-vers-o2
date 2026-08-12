@@ -2,6 +2,8 @@
 
 Aplicação web desenvolvida pelo time de Planejamento da INPASA para importar, calcular, publicar e acompanhar indicadores operacionais em um único ambiente. O sistema separa o processamento administrativo dos painéis de consulta, mantém histórico de publicações e consolida o ciclo de desempenho em um scorecard.
 
+A identidade visual (cabeçalho, abas por ícone, hierarquia de cartões dos painéis) segue o padrão do hub corporativo de automação, para facilitar uma futura integração.
+
 ## Principais recursos
 
 - autenticação e controle de acesso por perfil;
@@ -30,12 +32,13 @@ Aplicação web desenvolvida pelo time de Planejamento da INPASA para importar, 
 | Camada         | Tecnologia                        |
 | -------------- | --------------------------------- |
 | Aplicação      | Next.js 15, React 19 e TypeScript |
+| Interface      | shadcn/ui e lucide-react          |
 | Banco de dados | PostgreSQL na Neon                |
 | ORM            | Prisma 6                          |
 | Autenticação   | Better Auth                       |
 | Validação      | Zod                               |
 | Planilhas      | SheetJS/XLSX e Papa Parse         |
-| Exportação PDF | jsPDF e AutoTable                 |
+| Exportação PDF | jsPDF, AutoTable e html2canvas    |
 | Gráficos       | Recharts                          |
 | Testes         | Vitest e Playwright               |
 | Deploy         | Vercel                            |
@@ -210,3 +213,5 @@ pnpm build
 ## Documentação
 
 A documentação técnica está organizada em [`docs/README.md`](docs/README.md).
+
+Para a eventual integração ao hub corporativo de automação (Nuxt/Vue no frontend e FastAPI no backend), consulte [`docs/migration-fastapi-nuxt.md`](docs/migration-fastapi-nuxt.md).
