@@ -110,19 +110,36 @@ function SummaryMetric({
   value,
   sub,
   state,
+  color,
 }: {
   label: string;
   value: string;
   sub: string;
   state?: "G" | "A" | "R";
+  /** Cor exata (sobrepõe `state`) — usada quando a faixa vem de uma escala
+      com mais níveis do que G/A/R, ex.: o degradê de 5 faixas da legenda
+      setorial. */
+  color?: string;
 }) {
   return (
-    <div className={`mc${state ? ` ${state}` : ""}`}>
+    <div className={`mc${state ? ` ${state}` : ""}`} style={color ? { borderLeftColor: color } : undefined}>
       <div className="ml">{label}</div>
-      <div className={`mv${state ? ` ${state}` : ""}`}>{value}</div>
+      <div className={`mv${state ? ` ${state}` : ""}`} style={color ? { color } : undefined}>
+        {value}
+      </div>
       <div className="mm">{sub}</div>
     </div>
   );
+}
+
+/** Mesmas faixas da "Legenda · Indicadores setoriais" — 5 níveis em vez do
+    G/A/R de 3 níveis usado no resto do painel. */
+function sectoralTone(value: number): string {
+  if (value >= 95) return "#609346";
+  if (value >= 90) return "#168A86";
+  if (value >= 80) return "#1382C4";
+  if (value >= 70) return "#EAA239";
+  return "#CC5121";
 }
 
 export function DashboardOverview() {
@@ -191,8 +208,11 @@ export function DashboardOverview() {
     );
   }
 
-  const attendanceState =
-    data.atendimentoGeral >= 95 ? "G" : data.atendimentoGeral >= 70 ? "A" : "R";
+  // Arredonda antes de classificar a faixa de cor — senão um valor como
+  // 89,6% aparece como "90%" na tela mas ainda pinta na faixa de baixo
+  // (80–89,99%), porque a cor usava o número cru e o texto usava o
+  // arredondado. Os dois têm que nascer do mesmo número redondo.
+  const roundedAtendimentoGeral = Math.round(data.atendimentoGeral);
 
   return (
     <div className="painel-frontend">
@@ -216,134 +236,136 @@ export function DashboardOverview() {
           />
           <SummaryMetric
             label="Atendimento Geral"
-            value={`${data.atendimentoGeral.toFixed(0)}%`}
+            value={`${roundedAtendimentoGeral}%`}
             sub="Realizado ÷ previsto do período"
-            state={attendanceState}
-          />
-          <SummaryMetric
-            label="Status de Referência"
-            value={formatDate(data.referenceDate)}
-            sub="Última publicação considerada"
+            color={sectoralTone(roundedAtendimentoGeral)}
           />
         </div>
 
-        <div className="subtitle-block" style={{ margin: "18px 0 8px" }}>
-          <h3 style={{ color: BLUE }}>Resumo Executivo</h3>
-        </div>
+        {/* Container do indicador: agrupa a tabela consolidada, as legendas
+            e o gráfico mensal — mesma hierarquia usada nos painéis publicados
+            (RDO, IDP, RNC, 5S, Taxa de Acidentes). */}
+        <div className="card indicator-card">
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <div className="ph" style={{ margin: 0 }}>Resumo Executivo</div>
+            <span style={{ fontSize: 11, color: "#999" }}>
+              Referência: {formatDate(data.referenceDate)}
+            </span>
+          </div>
 
-        <div className="card">
-          <div className="ct">Resultado geral do PPR Obras</div>
-          <p className="ps" style={{ margin: "-6px 0 12px" }}>
-            Leitura consolidada dos indicadores e pesos mensais. Dados administrativos não publicados não entram neste quadro.
-          </p>
-          <div style={{ overflowX: "auto" }}>
-            <table className="dt" style={{ minWidth: 700 }}>
-              <thead>
-                <tr>
-                  <th>Entrega</th>
-                  <th>Meta</th>
-                  <th>Peso</th>
-                  {data.monthLabels.map((label) => (
-                    <th key={label} style={{ textAlign: "center" }}>{label}</th>
-                  ))}
-                  <th>Parcial</th>
-                  <th>Consolidado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.indicators.map((indicator) => (
-                  <tr key={indicator.key}>
-                    <td>{indicator.label.toUpperCase()}</td>
-                    <td>{formatMeta(indicator)}</td>
-                    <td>{indicator.peso.toFixed(2)}%</td>
-                    {indicator.months.map((month) => (
-                      <td key={month.key} style={{ textAlign: "center" }}>
-                        <Dot state={month.pass === null ? "X" : month.pass ? "G" : "R"} />
-                      </td>
+          <div className="indicator-subcard" style={{ marginTop: 14, marginBottom: 14 }}>
+            <div className="ct">Resultado geral do PPR Obras</div>
+            <p className="ps" style={{ margin: "-6px 0 12px" }}>
+              Leitura consolidada dos indicadores e pesos mensais. Dados administrativos não publicados não entram neste quadro.
+            </p>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dt" style={{ minWidth: 700 }}>
+                <thead>
+                  <tr>
+                    <th>Entrega</th>
+                    <th>Meta</th>
+                    <th>Peso</th>
+                    {data.monthLabels.map((label) => (
+                      <th key={label} style={{ textAlign: "center" }}>{label}</th>
                     ))}
-                    <td>{formatValue(indicator, indicator.partial)}</td>
-                    <td><ResultBadge pass={indicator.partialPass} /></td>
+                    <th>Parcial</th>
+                    <th>Consolidado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.indicators.map((indicator) => (
+                    <tr key={indicator.key}>
+                      <td>{indicator.label.toUpperCase()}</td>
+                      <td>{formatMeta(indicator)}</td>
+                      <td>{indicator.peso.toFixed(2)}%</td>
+                      {indicator.months.map((month) => (
+                        <td key={month.key} style={{ textAlign: "center" }}>
+                          <Dot state={month.pass === null ? "X" : month.pass ? "G" : "R"} />
+                        </td>
+                      ))}
+                      <td>{formatValue(indicator, indicator.partial)}</td>
+                      <td><ResultBadge pass={indicator.partialPass} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        <div className="g2">
-          <div className="card">
-            <div className="ct">Legenda · Indicadores gerais</div>
+          <div className="g2 indicator-subgrid">
+            <div className="indicator-subcard">
+              <div className="ct">Legenda · Indicadores gerais</div>
 
-            <p className="ps" style={{ margin: "-6px 0 10px" }}>
-              Faixas de leitura do atendimento consolidado.
+              <p className="ps" style={{ margin: "-6px 0 10px" }}>
+                Faixas de leitura do atendimento consolidado.
+              </p>
+
+              <LegendRow
+                dot={<Dot state="G" />}
+                title="≥ 95%"
+                subtitle="Valor atendido"
+              />
+
+              <LegendRow
+                dot={<Dot state="A" />}
+                title="70% a 94,99%"
+                subtitle="Atenção"
+              />
+
+              <LegendRow
+                dot={<Dot state="R" />}
+                title="< 70%"
+                subtitle="Fora da meta"
+              />
+            </div>
+
+            <div className="indicator-subcard">
+              <div className="ct">Legenda · Indicadores setoriais</div>
+
+              <p className="ps" style={{ margin: "-6px 0 10px" }}>
+                Faixas de leitura para os indicadores setoriais (por unidade).
+              </p>
+
+              <LegendRow
+                dot={<span className="dot" style={{ background: "#609346" }} />}
+                title="≥ 95%"
+                subtitle="Valor atendido"
+              />
+
+              <LegendRow
+                dot={<span className="dot" style={{ background: "#168A86" }} />}
+                title="90% a 94,99%"
+                subtitle="90%"
+              />
+
+              <LegendRow
+                dot={<span className="dot" style={{ background: "#1382C4" }} />}
+                title="80% a 89,99%"
+                subtitle="80%"
+              />
+
+              <LegendRow
+                dot={<span className="dot" style={{ background: "#EAA239" }} />}
+                title="70% a 79,99%"
+                subtitle="70%"
+              />
+
+              <LegendRow
+                dot={<span className="dot" style={{ background: "#CC5121" }} />}
+                title="< 70%"
+                subtitle="Sem setorial"
+              />
+            </div>
+          </div>
+
+          <div className="indicator-subcard">
+            <div className="ct">Desempenho mensal (% da meta atingida)</div>
+            <p className="ps" style={{ margin: "-6px 0 12px" }}>
+              Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha tracejada
+              marca 100% da meta.
             </p>
 
-            <LegendRow
-              dot={<Dot state="G" />}
-              title="≥ 95%"
-              subtitle="Valor atendido"
-            />
-
-            <LegendRow
-              dot={<Dot state="A" />}
-              title="70% a 94,99%"
-              subtitle="Atenção"
-            />
-
-            <LegendRow
-              dot={<Dot state="R" />}
-              title="< 70%"
-              subtitle="Fora da meta"
-            />
-          </div>
-
-          <div className="card">
-            <div className="ct">Legenda · Indicadores setoriais</div>
-
-            <p className="ps" style={{ margin: "-6px 0 10px" }}>
-              Faixas de leitura para os indicadores setoriais (por unidade).
-            </p>
-
-            <LegendRow
-              dot={<span className="dot" style={{ background: "#609346" }} />}
-              title="≥ 95%"
-              subtitle="Valor atendido"
-            />
-
-            <LegendRow
-              dot={<span className="dot" style={{ background: "#168A86" }} />}
-              title="90% a 94,99%"
-              subtitle="90%"
-            />
-
-            <LegendRow
-              dot={<span className="dot" style={{ background: "#1382C4" }} />}
-              title="80% a 89,99%"
-              subtitle="80%"
-            />
-
-            <LegendRow
-              dot={<span className="dot" style={{ background: "#EAA239" }} />}
-              title="70% a 79,99%"
-              subtitle="70%"
-            />
-
-            <LegendRow
-              dot={<span className="dot" style={{ background: "#CC5121" }} />}
-              title="< 70%"
-              subtitle="Sem setorial"
-            />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="ct">Desempenho mensal (% da meta atingida)</div>
-          <p className="ps" style={{ margin: "-6px 0 12px" }}>
-            Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha tracejada
-            marca 100% da meta.
-          </p>
-
-          <div className="cw" style={{ height: 340, minWidth: 0 }}>
+            <div className="cw" style={{ height: 340, minWidth: 0 }}>
             {data.monthLabels.length ? (
               <ResponsiveContainer
                 width="100%"
@@ -423,6 +445,7 @@ export function DashboardOverview() {
               </div>
             )}
           </div>
+          </div>
         </div>
       </div>
     </div>
@@ -439,20 +462,17 @@ function LegendRow({
   subtitle: string;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
-      {dot}
+    <div className="legend-row">
+      <span className="legend-row-dot">{dot}</span>
       <div>
-  <strong>{title}</strong>
-
-  {subtitle ? (
-    <>
-      <br />
-      <span style={{ color: "#999", fontSize: 11 }}>
-        {subtitle}
-      </span>
-    </>
-  ) : null}
-</div>
+        <strong>{title}</strong>
+        {subtitle ? (
+          <>
+            <br />
+            <span style={{ color: "#999", fontSize: 11 }}>{subtitle}</span>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

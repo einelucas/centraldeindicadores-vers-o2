@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FileDown } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -14,6 +15,8 @@ import {
   YAxis,
 } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
+import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { IdpPublishedPayload } from "@/features/idp/publications";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 
@@ -53,6 +56,13 @@ export function IdpPublishedPanel() {
   const [data, setData] = useState<PublicationResponse["publication"]>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
+
+  const handleExportPdf = useCallback(
+    () => exportPdf(`IDP_painel_${new Date().toISOString().slice(0, 10)}.pdf`),
+    [exportPdf],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,8 +86,27 @@ export function IdpPublishedPanel() {
     return () => window.removeEventListener("idp:published", refresh);
   }, [load]);
 
+  const exportButton = (
+    <ToolbarSlotContent>
+      <button
+        type="button"
+        disabled={exporting}
+        onClick={() => void handleExportPdf()}
+        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+      >
+        <FileDown className="size-3.5" />
+        {exporting ? "Gerando PDF…" : "Exportar PDF"}
+      </button>
+    </ToolbarSlotContent>
+  );
+
   if (loading && !data) {
-    return <div className="painel-frontend"><div className="content"><div className="empty"><p className="ps">Carregando painel publicado…</p></div></div></div>;
+    return (
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content"><div className="empty"><p className="ps">Carregando painel publicado…</p></div></div>
+      </div>
+    );
   }
   if (error && !data) return <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />;
   if (!data) return <PublishedPanelPlaceholder />;
@@ -92,17 +121,15 @@ export function IdpPublishedPanel() {
     .map((item) => ({ name: item.n.replace(/^\d+\s*-\s*/, ""), aderencia: item.v }));
 
   return (
-    <div className="painel-frontend">
-      <div className="content" style={{ padding: "14px 0 0" }}>
-        <div className="ph">Aderência do Cronograma — Avanço Físico (RSO)</div>
-        <div className="ps rdo-panel-summary">
-          <span className="rdo-panel-target">META: &gt;{d.meta}%</span>
-          <span>Resultado: <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong></span>
-          <span style={{ color: "#bbb" }}>
-            — competência {competenceLabel(selectedYear, selectedMonth)} · {d.documentosAtivos ?? d.unidades.length} RSO(s) ativo(s) · publicado em {formatPublishedAt(data.publishedAt)} por {data.publishedBy.name} · versão {data.version}
-          </span>
+    <div className="painel-frontend" ref={panelRef}>
+      {exportButton}
+      {exportError ? (
+        <div className="content" style={{ padding: "8px 0 0" }}>
+          <p className="ps" style={{ color: RED }}>{exportError}</p>
         </div>
+      ) : null}
 
+      <div className="content" style={{ padding: "14px 0 0" }}>
         <div className="mgrid">
           <PanelMetric label="Execução geral" value={`${result}%`} meta={`Meta >${d.meta}%`} tone={resultOk ? "G" : "R"} ok={resultOk} />
           <PanelMetric label="Civil" value={disciplineValue(d.civil)} meta="Por disciplina" tone={(d.civil ?? 0) >= d.meta ? "G" : "A"} ok={d.civil !== null && d.civil !== undefined && d.civil >= d.meta} />
@@ -110,42 +137,40 @@ export function IdpPublishedPanel() {
           <PanelMetric label="Elétrica" value={disciplineValue(d.eletrica ?? d.eia)} meta="Por disciplina" tone={(d.eletrica ?? d.eia ?? 0) >= d.meta ? "G" : "A"} ok={(d.eletrica ?? d.eia ?? 0) >= d.meta} />
         </div>
 
-        <div className="g2">
-          <div className="card">
-            <div className="ct">Aderência mensal (%)</div>
-            <div className="cw" style={{ height: 230 }}>
-              {d.mensal?.length ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={d.mensal} margin={{ top: 8, right: 12, bottom: 2, left: -16 }}>
-                    <CartesianGrid stroke="#f4f4f4" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontFamily: "Montserrat", fontSize: 10 }} />
-                    <YAxis tick={{ fontFamily: "Montserrat", fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-                    <Tooltip formatter={(value) => [value === null ? "Sem dados" : `${value}%`, "Aderência"]} />
-                    <ReferenceLine y={d.meta} stroke={RED} strokeDasharray="5 4" />
-                    <Line connectNulls={false} type="monotone" dataKey="v" stroke={BLUE} strokeWidth={2} dot={{ r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : <p className="ps">Sem dados mensais publicados.</p>}
-            </div>
+        {/* Container do indicador: agrupa os gráficos e a leitura por unidade
+            que pertencem a este mesmo indicador — mesma hierarquia usada no
+            painel do RDO. */}
+        <div className="card indicator-card">
+          <div className="ph">Aderência do Cronograma — Avanço Físico (RSO)</div>
+          <div className="ps rdo-panel-summary">
+            <span className="rdo-panel-target">META: &gt;{d.meta}%</span>
+            <span>Resultado: <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong></span>
+            <span style={{ color: "#bbb" }}>
+              — competência {competenceLabel(selectedYear, selectedMonth)} · {d.documentosAtivos ?? d.unidades.length} RSO(s) ativo(s) · publicado em {formatPublishedAt(data.publishedAt)} por {data.publishedBy.name} · versão {data.version}
+            </span>
           </div>
 
-          <div className="panel-col">
-            <div className="card panel-compact">
-              <div className="ct">Execução por unidade — RSO utilizado</div>
-              {d.unidades.length ? d.unidades.map((unit) => {
-                const ok = unit.v >= d.meta;
-                return (
-                  <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
-                    <div className="uname">{unit.n}<small className="idp-panel-rso">{unit.rsoNumero ? `RSO ${unit.rsoNumero}` : ""}</small></div>
-                    <div className="utrack"><div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} /></div>
-                    <div className="uval" style={{ color: ok ? GREEN : RED }}>{Math.round(unit.v)}%</div>
-                  </div>
-                );
-              }) : <p className="ps">Sem unidades publicadas.</p>}
+          <div className="g2 indicator-subgrid">
+            <div className="indicator-subcard">
+              <div className="ct">Aderência mensal (%)</div>
+              <div className="cw" style={{ height: 160 }}>
+                {d.mensal?.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={d.mensal} margin={{ top: 8, right: 12, bottom: 2, left: -16 }}>
+                      <CartesianGrid stroke="#f4f4f4" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontFamily: "Montserrat", fontSize: 10 }} />
+                      <YAxis tick={{ fontFamily: "Montserrat", fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
+                      <Tooltip formatter={(value) => [value === null ? "Sem dados" : `${value}%`, "Aderência"]} />
+                      <ReferenceLine y={d.meta} stroke={RED} strokeDasharray="5 4" />
+                      <Line connectNulls={false} type="monotone" dataKey="v" stroke={BLUE} strokeWidth={2} dot={{ r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <p className="ps">Sem dados mensais publicados.</p>}
+              </div>
             </div>
 
             {chartData.length ? (
-              <div className="card">
+              <div className="indicator-subcard">
                 <div className="ct">Aderência por disciplina (%)</div>
                 <div className="cw" style={{ height: 160 }}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -161,6 +186,20 @@ export function IdpPublishedPanel() {
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="indicator-subcard">
+            <div className="ct">Execução por unidade — RSO utilizado</div>
+            {d.unidades.length ? d.unidades.map((unit) => {
+              const ok = unit.v >= d.meta;
+              return (
+                <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
+                  <div className="uname">{unit.n}<small className="idp-panel-rso">{unit.rsoNumero ? `RSO ${unit.rsoNumero}` : ""}</small></div>
+                  <div className="utrack"><div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} /></div>
+                  <div className="uval" style={{ color: ok ? GREEN : RED }}>{Math.round(unit.v)}%</div>
+                </div>
+              );
+            }) : <p className="ps">Sem unidades publicadas.</p>}
           </div>
         </div>
       </div>

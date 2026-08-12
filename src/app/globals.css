@@ -66,7 +66,7 @@ body {
 main {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 26px 20px 60px;
+  padding: 14px 20px 60px;
 }
 .panel {
   display: none;
@@ -1026,6 +1026,48 @@ footer.app {
   flex-direction: column;
   gap: 11px;
 }
+/* Container maior de um indicador (título + subgráficos + leitura por
+   unidade agrupados), no lugar de vários .card soltos lado a lado — cada
+   gráfico/leitura fica num subcard dentro dele, igual à hierarquia
+   "indicador → cards" do RDO no hub de referência. Mesmo branco do resto do
+   site; a diferenciação entre os dois níveis vem da borda + sombra do
+   subcard. */
+.painel-frontend .indicator-card {
+  padding: 18px 20px 20px;
+  border: 1px solid var(--borda);
+}
+.painel-frontend .indicator-subgrid {
+  margin-bottom: 14px;
+}
+.painel-frontend .indicator-subcard {
+  background: #fff;
+  border: 1px solid #d8dce2;
+  border-radius: 9px;
+  padding: 13px 15px;
+  box-shadow: 0 1px 3px rgba(20, 30, 50, 0.1), 0 1px 2px rgba(20, 30, 50, 0.06);
+}
+/* Cada linha de legenda vira seu próprio cartão pequeno, com a bolinha numa
+   coluna de largura fixa — garante que todas as bolinhas fiquem alinhadas
+   verticalmente entre si, não só dentro da própria linha. */
+.painel-frontend .legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.painel-frontend .legend-row:last-child {
+  margin-bottom: 0;
+}
+.painel-frontend .legend-row-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  flex-shrink: 0;
+}
 .painel-frontend .panel-col .card {
   margin-bottom: 0;
 }
@@ -1164,10 +1206,10 @@ textarea {
   animation: fade 0.25s ease;
 }
 .module-workspace > .subtab-content {
-  padding-top: 26px;
+  padding-top: 16px;
 }
 .module-workspace > .subtab-content.panel-view {
-  padding-top: 14px;
+  padding-top: 6px;
 }
 
 .admin-hub-grid {
@@ -1499,7 +1541,6 @@ table.data,
 
 /* ===== Celulares pequenos: 320px a 479px ===== */
 @media (max-width: 479px) {
-
   main {
     width: calc(100% - 20px);
     padding-top: 16px;
@@ -1667,7 +1708,6 @@ table.data,
 
 /* ===== Celulares grandes: 480px a 767px ===== */
 @media (min-width: 480px) and (max-width: 767px) {
-
   main {
     width: calc(100% - 28px);
     padding-top: 20px;
@@ -1715,7 +1755,6 @@ table.data,
 
 /* ===== Tablets: 768px a 1023px ===== */
 @media (min-width: 768px) and (max-width: 1023px) {
-
   main {
     width: calc(100% - 36px);
     padding-top: 22px;
@@ -1752,7 +1791,6 @@ table.data,
 
 /* ===== Notebooks: 1024px a 1439px ===== */
 @media (min-width: 1024px) and (max-width: 1439px) {
-
   main {
     width: min(calc(100% - 48px), 1360px);
   }
@@ -1781,7 +1819,6 @@ table.data,
 
 /* ===== Desktops: 1440px a 1919px ===== */
 @media (min-width: 1440px) and (max-width: 1919px) {
-
   main {
     width: min(calc(100% - 64px), 1360px);
   }
@@ -1818,10 +1855,9 @@ table.data,
 
 /* ===== Full HD e 2K: 1920px a 2559px ===== */
 @media (min-width: 1920px) and (max-width: 2559px) {
-
   main {
     width: min(calc(100% - 96px), 1360px);
-    padding-top: 30px;
+    padding-top: 16px;
   }
 
   .app-toolbar-shell {
@@ -1898,14 +1934,13 @@ table.data,
 
 /* ===== Ultrawide: 2560px ou mais ===== */
 @media (min-width: 2560px) {
-
   .app-toolbar-shell {
     width: min(calc(100% - 140px), 1360px);
   }
 
   main {
     width: min(calc(100% - 140px), 1360px);
-    padding-top: 34px;
+    padding-top: 18px;
     padding-bottom: 80px;
   }
 
@@ -1993,7 +2028,6 @@ table.data,
 
 /* ===== Orientação horizontal em dispositivos baixos ===== */
 @media (max-height: 650px) and (min-width: 700px) {
-
   main {
     padding-top: 18px;
     padding-bottom: 32px;
@@ -2249,11 +2283,15 @@ table.data,
   border: 1px solid var(--borda);
   border-radius: 14px;
   background: #fff;
-  box-shadow: 0 6px 20px rgba(31, 52, 80, .045);
+  box-shadow: 0 6px 20px rgba(31, 52, 80, 0.045);
 }
 
-.idp-section-card .subtitle-block.first { margin-top: 0; }
-.idp-section-card .subtitle-block.first h3 { margin-top: 0; }
+.idp-section-card .subtitle-block.first {
+  margin-top: 0;
+}
+.idp-section-card .subtitle-block.first h3 {
+  margin-top: 0;
+}
 
 .idp-rso-preview-list {
   display: grid;
@@ -2321,7 +2359,7 @@ table.data,
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: 0.04em;
 }
 
 .idp-rso-edit-grid input,
@@ -2421,15 +2459,21 @@ table.data,
   margin-top: 18px;
 }
 
-.idp-expandable-row { cursor: pointer; }
-.idp-expandable-row:hover td { background: #f5f8fc !important; }
+.idp-expandable-row {
+  cursor: pointer;
+}
+.idp-expandable-row:hover td {
+  background: #f5f8fc !important;
+}
 
 .idp-chevron {
   display: inline-block;
-  transition: transform .16s ease;
+  transition: transform 0.16s ease;
   color: #60728b;
 }
-.idp-chevron.is-open { transform: rotate(90deg); }
+.idp-chevron.is-open {
+  transform: rotate(90deg);
+}
 
 .idp-detail-row td {
   background: #f8fafc !important;
@@ -2451,22 +2495,42 @@ table.data,
   font-weight: 700;
 }
 
-.idp-empty-state { margin-top: 18px; }
-.idp-panel-rso { display: block; margin-top: 2px; color: #8b97a8; font-size: 9px; font-weight: 600; }
+.idp-empty-state {
+  margin-top: 18px;
+}
+.idp-panel-rso {
+  display: block;
+  margin-top: 2px;
+  color: #8b97a8;
+  font-size: 9px;
+  font-weight: 600;
+}
 
 @media (max-width: 1200px) {
-  .idp-rso-edit-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
-  .idp-control-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
-  .idp-metric-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+  .idp-rso-edit-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+  .idp-control-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+  .idp-metric-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
-  .idp-section-card { padding: 13px; }
+  .idp-section-card {
+    padding: 13px;
+  }
   .idp-rso-edit-grid,
   .idp-control-grid,
-  .idp-metric-grid { grid-template-columns: 1fr; }
+  .idp-metric-grid {
+    grid-template-columns: 1fr;
+  }
   .idp-rso-preview-head,
-  .idp-rso-preview-card.is-error { flex-direction: column; }
+  .idp-rso-preview-card.is-error {
+    flex-direction: column;
+  }
 }
 /*
  ---break---

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
+import { FileDown } from "lucide-react";
+import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import {
   CartesianGrid,
   Cell,
@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import type { RncPublishedPayload } from "@/features/rnc/publications";
 
 interface PublicationResponse {
@@ -57,40 +58,13 @@ export function RncPublishedPanel() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
 
-  const handleExportPdf = useCallback(async () => {
-    if (!panelRef.current) return;
-
-    setExporting(true);
-    setExportError(null);
-
-    try {
-      const canvas = await html2canvas(panelRef.current, {
-        backgroundColor: "#eff2f7",
-        scale: 2,
-        useCORS: true,
-      });
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: canvas.width >= canvas.height ? "landscape" : "portrait",
-        unit: "px",
-        format: [canvas.width, canvas.height],
-      });
-
-      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-      pdf.save(`RNC_painel_${new Date().toISOString().slice(0, 10)}.pdf`);
-    } catch (err) {
-      setExportError(
-        err instanceof Error ? err.message : "Falha ao gerar o PDF do painel.",
-      );
-    } finally {
-      setExporting(false);
-    }
-  }, []);
+  const handleExportPdf = useCallback(
+    () => exportPdf(`RNC_painel_${new Date().toISOString().slice(0, 10)}.pdf`),
+    [exportPdf],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,9 +101,24 @@ export function RncPublishedPanel() {
     };
   }, [load]);
 
+  const exportButton = (
+    <ToolbarSlotContent>
+      <button
+        type="button"
+        disabled={exporting}
+        onClick={() => void handleExportPdf()}
+        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+      >
+        <FileDown className="size-3.5" />
+        {exporting ? "Gerando PDF…" : "Exportar PDF"}
+      </button>
+    </ToolbarSlotContent>
+  );
+
   if (loading && !publication) {
     return (
       <div className="painel-frontend">
+        {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
           <div className="empty">
             <p className="ps">Carregando painel publicado…</p>
@@ -162,81 +151,59 @@ export function RncPublishedPanel() {
 
   return (
     <div className="painel-frontend" ref={panelRef}>
-      <div className="content" style={{ padding: "14px 0 0" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div className="ph">RNC — Tempo para Resolução</div>
-
-          <button
-            className="btn btn-gold"
-            type="button"
-            disabled={exporting}
-            data-html2canvas-ignore="true"
-            onClick={() => void handleExportPdf()}
-          >
-            {exporting ? "Gerando PDF…" : "Baixar PDF"}
-          </button>
-        </div>
-
-        {exportError ? (
+      {exportButton}
+      {exportError ? (
+        <div className="content" style={{ padding: "8px 0 0" }}>
           <p className="ps" style={{ color: RED }}>
             {exportError}
           </p>
-        ) : null}
+        </div>
+      ) : null}
 
-        <div className="ps rdo-panel-summary">
-          <span className="rdo-panel-target">META: ≤{data.meta} dias</span>
-
-          <span>
-            Resultado:{" "}
-            <strong
-              style={{
-                color: resultOk ? GREEN : RED,
-                fontSize: 14,
-              }}
-            >
-              {result.toFixed(1).replace(".", ",")} dias
-            </strong>
-          </span>
-
-          <span style={{ color: "#bbb" }}>
-            — quanto menor, melhor — publicado em {formatPublishedAt(publication.publishedAt)} por{" "}
-            {publication.publishedBy.name}
-          </span>
+      <div className="content" style={{ padding: "14px 0 0" }}>
+        <div className="mgrid">
+          <PanelMetric
+            label="Resultado"
+            value={`${result.toFixed(1).replace(".", ",")} dias`}
+            meta={`Meta ≤${data.meta} dias`}
+            tone={resultOk ? "G" : "R"}
+            ok={resultOk}
+          />
+          <PanelMetric
+            label="Semestre"
+            value={`${semesterPct}%`}
+            meta={`${data.semestreResolvidas}/${data.semestreTotal} tratadas`}
+            tone="G"
+          />
         </div>
 
-        <p className="ps" style={{ margin: "-4px 0 12px" }}>
-          Prazo médio consolidado calculado pela média simples dos resultados mensais do período selecionado.
-        </p>
+        {/* Container do indicador: agrupa os gráficos e a leitura por unidade
+            que pertencem a este mesmo indicador — mesma hierarquia usada nos
+            painéis do RDO e do IDP. */}
+        <div className="card indicator-card">
+          <div className="ph">RNC — Tempo para Resolução</div>
+          <div className="ps rdo-panel-summary">
+            <span className="rdo-panel-target">META: ≤{data.meta} dias</span>
+            <span>
+              Resultado:{" "}
+              <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>
+                {result.toFixed(1).replace(".", ",")} dias
+              </strong>
+            </span>
+            <span style={{ color: "#bbb" }}>
+              — quanto menor, melhor — publicado em {formatPublishedAt(publication.publishedAt)} por{" "}
+              {publication.publishedBy.name}
+            </span>
+          </div>
+          <p className="ps" style={{ margin: "-4px 0 12px" }}>
+            Prazo médio consolidado calculado pela média simples dos resultados mensais do período
+            selecionado.
+          </p>
 
-        <div className="g2">
-          {/* Coluna esquerda: resultado e gráfico mensal */}
-          <div
-            style={{
-              display: "grid",
-              alignContent: "start",
-              gap: 12,
-            }}
-          >
-            <PanelMetric
-              label="Resultado"
-              value={`${result.toFixed(1).replace(".", ",")} dias`}
-              meta={`Meta ≤${data.meta} dias`}
-              tone={resultOk ? "G" : "R"}
-              ok={resultOk}
-            />
-
-            <div className="card" style={{ marginBottom: 0 }}>
+          <div className="g2 indicator-subgrid">
+            <div className="indicator-subcard">
               <div className="ct">Tempo médio por mês (dias)</div>
-
-              <div className="cw" style={{ height: 220 }}>
+              <div className="cw" style={{ height: 160 }}>
                 {chartMonths.length ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
@@ -276,7 +243,7 @@ export function RncPublishedPanel() {
                       <Legend
                         wrapperStyle={{
                           fontFamily: "Montserrat",
-                          fontSize: 10,
+                          fontSize: 9,
                         }}
                       />
 
@@ -310,38 +277,21 @@ export function RncPublishedPanel() {
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Coluna direita: semestre e origem das não conformidades */}
-          <div
-            style={{
-              display: "grid",
-              alignContent: "start",
-              gap: 12,
-            }}
-          >
-            <PanelMetric
-              label="Semestre"
-              value={`${semesterPct}%`}
-              meta={`${data.semestreResolvidas}/${data.semestreTotal} tratadas`}
-              tone="G"
-            />
-
-            <div className="card" style={{ marginBottom: 0 }}>
+            <div className="indicator-subcard">
               <div className="ct">Origem das não conformidades</div>
-
-              <div className="cw" style={{ height: 260 }}>
+              <div className="cw" style={{ height: 160 }}>
                 {data.ofensores.length ? (
                   <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
+                    <PieChart margin={{ top: 2, right: 4, bottom: 2, left: 4 }}>
                       <Pie
                         data={data.ofensores}
                         dataKey="pct"
                         nameKey="n"
                         cx="50%"
                         cy="45%"
-                        innerRadius={45}
-                        outerRadius={84}
+                        innerRadius={56}
+                        outerRadius={92}
                         paddingAngle={2}
                         label={({ value }) => `${Number(value).toFixed(1)}%`}
                         labelLine={false}
@@ -369,43 +319,43 @@ export function RncPublishedPanel() {
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="card">
-          <div className="ct">Aderência de tratativa por unidade</div>
+          <div className="indicator-subcard">
+            <div className="ct">Aderência de tratativa por unidade</div>
 
-          {data.unidades.length ? (
-            data.unidades.map((unit) => {
-              const ok = unit.v >= 80;
+            {data.unidades.length ? (
+              data.unidades.map((unit) => {
+                const ok = unit.v >= 80;
 
-              return (
-                <div className="urow" key={unit.n}>
-                  <div className="uname">{unit.n}</div>
+                return (
+                  <div className="urow" key={unit.n}>
+                    <div className="uname">{unit.n}</div>
 
-                  <div className="utrack">
+                    <div className="utrack">
+                      <div
+                        className="ufill"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, unit.v))}%`,
+                          background: ok ? GREEN : RED,
+                        }}
+                      />
+                    </div>
+
                     <div
-                      className="ufill"
+                      className="uval"
                       style={{
-                        width: `${Math.min(100, Math.max(0, unit.v))}%`,
-                        background: ok ? GREEN : RED,
+                        color: ok ? GREEN : RED,
                       }}
-                    />
+                    >
+                      {unit.v}%
+                    </div>
                   </div>
-
-                  <div
-                    className="uval"
-                    style={{
-                      color: ok ? GREEN : RED,
-                    }}
-                  >
-                    {unit.v}%
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p className="ps">Sem unidades publicadas.</p>
-          )}
+                );
+              })
+            ) : (
+              <p className="ps">Sem unidades publicadas.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

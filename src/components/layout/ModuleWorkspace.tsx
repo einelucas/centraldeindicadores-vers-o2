@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LayoutGrid, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ToolbarSlotContent } from "./ToolbarSlot";
 
@@ -25,12 +26,13 @@ export function ModuleWorkspace({
           type="button"
           onClick={() => setActive("panel")}
           className={cn(
-            "rounded-lg border px-3.5 py-1.5 text-xs font-bold transition-colors",
+            "flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition-colors",
             active === "panel"
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-background text-muted-foreground hover:text-foreground",
           )}
         >
+          <LayoutGrid className="size-3.5" />
           {panelLabel}
         </button>
         {hasAdministration ? (
@@ -38,12 +40,13 @@ export function ModuleWorkspace({
             type="button"
             onClick={() => setActive("admin")}
             className={cn(
-              "rounded-lg border px-3.5 py-1.5 text-xs font-bold transition-colors",
+              "flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-bold transition-colors",
               active === "admin"
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-background text-muted-foreground hover:text-foreground",
             )}
           >
+            <Settings2 className="size-3.5" />
             Administração
           </button>
         ) : null}
