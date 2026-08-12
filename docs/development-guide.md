@@ -83,7 +83,9 @@ O payload publicado deve conter apenas o necessário para reconstruir o painel. 
 - preserve o estado do usuário durante carregamentos;
 - não associe dados antigos a um novo período durante troca de seleção;
 - desabilite ações enquanto uma operação incompatível estiver em andamento;
-- apresente mensagens de erro com contexto suficiente para correção.
+- apresente mensagens de erro com contexto suficiente para correção;
+- agrupe os gráficos e a leitura por unidade de um mesmo indicador em um único `indicator-card` com `indicator-subcard`s internos (padrão usado em todos os painéis publicados atuais);
+- exponha o botão "Exportar PDF" de cada painel publicado via `ToolbarSlotContent` (`src/components/layout/ToolbarSlot.tsx`) usando `usePanelPdfExport` (`src/lib/exports/panel-screenshot-pdf.ts`), em vez de recriar a lógica de captura por módulo.
 
 ## Commits
 
