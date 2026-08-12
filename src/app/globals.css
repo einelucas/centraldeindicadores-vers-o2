@@ -21,6 +21,32 @@
   --texto: #22262b;
   --texto-suave: #6b7280;
   --borda: #e4e6ea;
+
+  /* Tokens shadcn/ui — mapeados às mesmas cores da marca acima (HSL sem
+     wrapper, formato clássico do Tailwind v3: hsl(var(--primary)) etc). Sem
+     isso os componentes de src/components/ui/* (bg-primary, border, ring...)
+     não têm cor nenhuma — a inicialização padrão do shadcn assume Tailwind
+     v4 (CSS-first, @theme), incompatível com o Tailwind 3.4 deste projeto. */
+  --background: 0 0% 100%;
+  --foreground: 213 12% 15%;
+  --card-hsl: 0 0% 100%;
+  --card-foreground: 213 12% 15%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 213 12% 15%;
+  --primary: 216 45% 34%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 16% 96%;
+  --secondary-foreground: 216 45% 34%;
+  --muted: 220 16% 96%;
+  --muted-foreground: 220 9% 46%;
+  --accent: 36 81% 57%;
+  --accent-foreground: 213 12% 15%;
+  --destructive: 6 63% 46%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 12% 91%;
+  --input: 220 12% 91%;
+  --ring: 216 45% 34%;
+  --radius: 0.5rem;
 }
 * {
   box-sizing: border-box;
@@ -31,108 +57,11 @@ body {
   background: var(--bg);
   color: var(--texto);
 }
-header.app {
-  background: linear-gradient(135deg, var(--azul) 0%, var(--azul-escuro) 100%);
-  color: #fff;
-  padding: 16px 32px;
-  position: relative;
-  overflow: hidden;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 90px;
-}
-
-header.app h1 {
-  margin: 0;
-  font-weight: 800;
-  font-size: 26px;
-  letter-spacing: 0.2px;
-  position: relative;
-  z-index: 2;
-}
-
-nav.tabs {
-  display: flex;
-  gap: 6px;
-  padding: 10px 20px 0;
-  background: var(--card);
-  border-bottom: 1px solid var(--borda);
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-nav.tabs button,
-nav.tabs a {
-  text-decoration: none;
-  display: inline-block;
-  border: none;
-  background: transparent;
-  padding: 12px 16px;
-  font-family: "Montserrat", sans-serif;
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--texto-suave);
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 3px solid transparent;
-  transition: 0.15s;
-}
-nav.tabs button:hover,
-nav.tabs a:hover {
-  color: var(--azul);
-}
-nav.tabs button.active,
-nav.tabs a.active {
-  color: var(--azul);
-  border-bottom-color: var(--laranja);
-}
-nav.tabs button.disabled,
-nav.tabs a.disabled {
-  color: #c7cbd1;
-  cursor: default;
-}
-nav.tabs button.disabled:hover,
-nav.tabs a.disabled:hover {
-  color: #c7cbd1;
-}
-.subtab-nav {
-  display: flex;
-  gap: 8px;
-  padding: 14px 20px 0;
-  background: var(--fundo);
-}
-.subtab-nav button {
-  border: 1px solid var(--borda);
-  background: var(--card);
-  padding: 8px 16px;
-  border-radius: 8px 8px 0 0;
-  font-family: "Montserrat", sans-serif;
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--texto-suave);
-  cursor: pointer;
-}
-.subtab-nav button.active {
-  background: var(--azul);
-  color: #fff;
-  border-color: var(--azul);
-}
 .subtab-content {
   display: none;
 }
 .subtab-content.active {
   display: block;
-}
-nav.tabs button .dot,
-nav.tabs a .dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--laranja);
-  margin-left: 6px;
-  vertical-align: middle;
 }
 main {
   max-width: 1180px;
@@ -543,7 +472,7 @@ footer.app {
 }
 .painel-frontend {
   font-family: "Montserrat", sans-serif;
-  background: #eff2f7;
+  /* Sem cor de fundo própria — herda o --bg do body, igual ao resto do site. */
   min-height: 100vh;
 }
 .painel-frontend .header {
@@ -1227,63 +1156,12 @@ select,
 textarea {
   font: inherit;
 }
-
-.app-header-icon-link {
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-  color: var(--azul);
-  border-radius: 9px;
-}
-
-.app-header-icon-link:hover {
-  background: #f1f4f8;
-  color: var(--azul-escuro);
-}
-
-.app-header-icon-link svg {
-  flex-shrink: 0;
-}
-
-.app-user-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  position: relative;
-  z-index: 2;
-}
-.app-user-name {
-  align-self: center;
-  font-size: 12.5px;
-  color: #d9e1ee;
-  font-weight: 600;
-}
-.app-user-role {
-  display: inline-flex;
-  align-items: center;
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 100px;
-  color: #d9e1ee;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
 .app-header-link {
   text-decoration: none;
 }
 
 .module-workspace {
   animation: fade 0.25s ease;
-}
-.module-workspace > .subtab-nav {
-  margin: -26px -20px 0;
 }
 .module-workspace > .subtab-content {
   padding-top: 26px;
@@ -1439,31 +1317,9 @@ textarea {
 }
 
 @media (max-width: 640px) {
-  header.app {
-    padding: 22px 20px 18px;
-  }
-  header.app h1 {
-    font-size: 22px;
-  }
-  nav.tabs {
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-  nav.tabs button,
-  nav.tabs a {
-    padding: 11px 12px;
-    font-size: 12px;
-  }
   main {
     padding-left: 14px;
     padding-right: 14px;
-  }
-  .module-workspace > .subtab-nav {
-    margin-left: -14px;
-    margin-right: -14px;
-  }
-  .app-user-name {
-    width: 100%;
   }
   .login-card {
     padding: 24px 20px;
@@ -1494,8 +1350,7 @@ textarea {
   font-weight: 800;
 }
 .upload-zone:focus-visible,
-.btn:focus-visible,
-.subtab-nav button:focus-visible {
+.btn:focus-visible {
   outline: 3px solid rgba(0, 124, 197, 0.25);
   outline-offset: 2px;
 }
@@ -1575,6 +1430,13 @@ main {
   padding-right: 0;
 }
 
+/* O container de ícones (TabsNav) segue o mesmo limite de largura do
+   conteúdo principal em cada faixa — só o header preenche a tela toda. */
+.app-toolbar-shell {
+  width: min(100% - 40px, 1180px);
+  margin-inline: auto;
+}
+
 /* Evita que filhos de grids impeçam o encolhimento das colunas. */
 .cards > *,
 .g2 > *,
@@ -1583,21 +1445,6 @@ main {
 .painel-frontend .card,
 .painel-frontend .cw {
   min-width: 0;
-}
-
-/* Abas mantêm navegação horizontal quando não houver espaço. */
-nav.tabs {
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-nav.tabs::-webkit-scrollbar {
-  height: 5px;
-}
-
-nav.tabs::-webkit-scrollbar-thumb {
-  background: #cbd2dc;
-  border-radius: 999px;
 }
 
 /* Campos gerais podem diminuir sem estourar o contêiner. */
@@ -1652,83 +1499,11 @@ table.data,
 
 /* ===== Celulares pequenos: 320px a 479px ===== */
 @media (max-width: 479px) {
-  header.app {
-    min-height: auto;
-    padding: 14px 12px;
-    align-items: flex-start;
-    gap: 12px;
-    flex-direction: column;
-  }
-
-  header.app::after {
-    right: -105px;
-    top: -105px;
-    width: 190px;
-    height: 190px;
-  }
-
-  header.app h1 {
-    max-width: 100%;
-    font-size: clamp(18px, 6vw, 22px);
-    line-height: 1.15;
-  }
-
-  .app-user-actions {
-    width: 100%;
-    gap: 7px;
-    flex-wrap: wrap;
-  }
-
-  .app-user-name {
-    width: 100%;
-    font-size: 11px;
-  }
-
-  .app-user-role {
-    min-height: 26px;
-    padding: 4px 8px;
-    font-size: 9px;
-  }
-
-  .app-header-icon-link {
-    width: 34px;
-    height: 34px;
-  }
-
-  nav.tabs {
-    gap: 2px;
-    padding: 6px 8px 0;
-  }
-
-  nav.tabs button,
-  nav.tabs a {
-    padding: 10px 9px;
-    font-size: 10.5px;
-  }
 
   main {
     width: calc(100% - 20px);
     padding-top: 16px;
     padding-bottom: 36px;
-  }
-
-  .module-workspace > .subtab-nav {
-    margin-top: -16px;
-    margin-left: -10px;
-    margin-right: -10px;
-    padding: 10px 10px 0;
-    overflow-x: auto;
-  }
-
-  .subtab-nav {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-  }
-
-  .subtab-nav button {
-    flex: 0 0 auto;
-    padding: 8px 12px;
-    font-size: 10.5px;
   }
 
   .module-workspace > .subtab-content {
@@ -1892,47 +1667,11 @@ table.data,
 
 /* ===== Celulares grandes: 480px a 767px ===== */
 @media (min-width: 480px) and (max-width: 767px) {
-  header.app {
-    min-height: 78px;
-    padding: 14px 18px;
-    gap: 12px;
-  }
-
-  header.app h1 {
-    font-size: 22px;
-  }
-
-  .app-user-actions {
-    justify-content: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .app-user-name {
-    width: 100%;
-    text-align: right;
-  }
-
-  nav.tabs {
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
-  nav.tabs button,
-  nav.tabs a {
-    padding: 11px 12px;
-    font-size: 11.5px;
-  }
 
   main {
     width: calc(100% - 28px);
     padding-top: 20px;
     padding-bottom: 44px;
-  }
-
-  .module-workspace > .subtab-nav {
-    margin-top: -20px;
-    margin-left: -14px;
-    margin-right: -14px;
   }
 
   .controls-row {
@@ -1976,35 +1715,10 @@ table.data,
 
 /* ===== Tablets: 768px a 1023px ===== */
 @media (min-width: 768px) and (max-width: 1023px) {
-  header.app {
-    min-height: 82px;
-    padding: 15px 22px;
-  }
-
-  header.app h1 {
-    font-size: 23px;
-  }
-
-  nav.tabs {
-    padding-left: 14px;
-    padding-right: 14px;
-  }
-
-  nav.tabs button,
-  nav.tabs a {
-    padding: 11px 13px;
-    font-size: 12px;
-  }
 
   main {
     width: calc(100% - 36px);
     padding-top: 22px;
-  }
-
-  .module-workspace > .subtab-nav {
-    margin-top: -22px;
-    margin-left: -18px;
-    margin-right: -18px;
   }
 
   .cards {
@@ -2038,12 +1752,18 @@ table.data,
 
 /* ===== Notebooks: 1024px a 1439px ===== */
 @media (min-width: 1024px) and (max-width: 1439px) {
+
   main {
-    width: min(calc(100% - 48px), 1240px);
+    width: min(calc(100% - 48px), 1360px);
+  }
+
+  .app-toolbar-shell {
+    width: min(calc(100% - 48px), 1360px);
   }
 
   .painel-frontend .content {
     padding-inline: 0;
+    max-width: 1360px;
   }
 
   .painel-frontend .mgrid {
@@ -2061,22 +1781,17 @@ table.data,
 
 /* ===== Desktops: 1440px a 1919px ===== */
 @media (min-width: 1440px) and (max-width: 1919px) {
-  header.app {
-    padding-left: clamp(32px, 4vw, 72px);
-    padding-right: clamp(32px, 4vw, 72px);
-  }
-
-  nav.tabs {
-    padding-left: clamp(24px, 3.2vw, 62px);
-    padding-right: clamp(24px, 3.2vw, 62px);
-  }
 
   main {
-    width: min(calc(100% - 64px), 1480px);
+    width: min(calc(100% - 64px), 1360px);
+  }
+
+  .app-toolbar-shell {
+    width: min(calc(100% - 64px), 1360px);
   }
 
   .painel-frontend .content {
-    max-width: 1480px;
+    max-width: 1360px;
   }
 
   .painel-frontend .mgrid {
@@ -2103,37 +1818,18 @@ table.data,
 
 /* ===== Full HD e 2K: 1920px a 2559px ===== */
 @media (min-width: 1920px) and (max-width: 2559px) {
-  header.app {
-    min-height: 98px;
-    padding: 18px clamp(56px, 5vw, 110px);
-  }
-
-  header.app h1 {
-    font-size: 29px;
-  }
-
-  nav.tabs {
-    padding-left: clamp(50px, 4.5vw, 100px);
-    padding-right: clamp(50px, 4.5vw, 100px);
-  }
-
-  nav.tabs button,
-  nav.tabs a {
-    padding: 14px 18px;
-    font-size: 14px;
-  }
 
   main {
-    width: min(calc(100% - 96px), 1760px);
+    width: min(calc(100% - 96px), 1360px);
     padding-top: 30px;
   }
 
-  .module-workspace > .subtab-nav {
-    margin-top: -30px;
+  .app-toolbar-shell {
+    width: min(calc(100% - 96px), 1360px);
   }
 
   .painel-frontend .content {
-    max-width: 1760px;
+    max-width: 1360px;
     padding-top: 18px !important;
   }
 
@@ -2202,42 +1898,19 @@ table.data,
 
 /* ===== Ultrawide: 2560px ou mais ===== */
 @media (min-width: 2560px) {
-  header.app {
-    min-height: 108px;
-    padding: 20px clamp(80px, 6vw, 170px);
-  }
 
-  header.app h1 {
-    font-size: 32px;
-  }
-
-  .app-user-name {
-    font-size: 14px;
-  }
-
-  .app-user-role {
-    font-size: 11.5px;
-  }
-
-  nav.tabs {
-    padding-left: clamp(80px, 5.5vw, 155px);
-    padding-right: clamp(80px, 5.5vw, 155px);
-  }
-
-  nav.tabs button,
-  nav.tabs a {
-    padding: 15px 21px;
-    font-size: 15px;
+  .app-toolbar-shell {
+    width: min(calc(100% - 140px), 1360px);
   }
 
   main {
-    width: min(calc(100% - 140px), 2160px);
+    width: min(calc(100% - 140px), 1360px);
     padding-top: 34px;
     padding-bottom: 80px;
   }
 
   .painel-frontend .content {
-    max-width: 2160px;
+    max-width: 1360px;
     padding-top: 20px !important;
   }
 
@@ -2320,11 +1993,6 @@ table.data,
 
 /* ===== Orientação horizontal em dispositivos baixos ===== */
 @media (max-height: 650px) and (min-width: 700px) {
-  header.app {
-    min-height: 68px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
 
   main {
     padding-top: 18px;
@@ -2799,4 +2467,89 @@ table.data,
   .idp-metric-grid { grid-template-columns: 1fr; }
   .idp-rso-preview-head,
   .idp-rso-preview-card.is-error { flex-direction: column; }
+}
+/*
+ ---break---
+ */
+@layer base {
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: var(--font-sans);
+  }
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+  }
+  .dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
 }

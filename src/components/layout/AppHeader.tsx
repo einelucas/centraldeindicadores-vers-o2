@@ -1,55 +1,52 @@
-import Link from "next/link";
+import Image from "next/image";
+import { Bell, Search } from "lucide-react";
 import type { CurrentUser } from "@/server/auth/session";
-import { SignOutButton } from "./SignOutButton";
+import { UserMenu } from "./UserMenu";
 
-const ROLE_LABELS: Record<CurrentUser["role"], string> = {
-  VIEWER: "Visualizador",
-  ANALYST: "Analista",
-  ADMIN: "Administrador",
-};
-
-/** Cabeçalho baseado diretamente no <header class="app"> de referência. */
+/** Cabeçalho no estilo do hub corporativo (identidade visual compartilhada). */
 export function AppHeader({ user }: { user: CurrentUser }) {
   return (
-    <header className="app">
-      <h1>Central de Indicadores</h1>
+    <header className="grid h-14 grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border bg-background px-4 sm:px-6">
+      <div className="flex items-center gap-2.5">
+        <Image
+          src="/brand/logo-inpasa.png"
+          alt="Inpasa"
+          width={2087}
+          height={601}
+          className="h-[30px] w-auto"
+          priority
+        />
+        <div className="hidden sm:block">
+          <p className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">
+            Planejamento
+          </p>
+          <p className="mt-1 text-[15px] font-extrabold leading-none tracking-tight text-foreground">
+            Central de Indicadores
+          </p>
+        </div>
+      </div>
 
-      <div className="app-user-actions">
-        <span className="app-user-name">{user.name}</span>
-        <span className="app-user-role">{ROLE_LABELS[user.role]}</span>
+      <label className="relative mx-auto hidden w-full max-w-md items-center sm:flex">
+        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
+        <input
+          type="search"
+          placeholder="Buscar"
+          className="h-9 w-full rounded-lg border border-border bg-muted/60 pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:bg-background"
+        />
+      </label>
 
-        {user.role === "ADMIN" ? (
-          <Link
-            className="btn app-header-icon-link"
-            href="/dashboard/administracao"
-            aria-label="Administração"
-            title="Administração"
-          >
-            <svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.14.38.36.72.66 1 .3.26.68.4 1.08.4H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51.6Z"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </Link>
-        ) : null}
+      <div className="flex items-center gap-1.5 justify-self-end">
+        <button
+          type="button"
+          aria-label="Notificações"
+          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Bell className="size-[18px]" />
+        </button>
 
-        <SignOutButton />
+        <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+
+        <UserMenu user={user} />
       </div>
     </header>
   );
