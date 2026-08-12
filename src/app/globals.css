@@ -383,6 +383,31 @@ main {
   color: var(--laranja);
 }
 
+.month-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: Montserrat, sans-serif;
+  font-size: 10px;
+  color: var(--texto-suave);
+}
+.month-legend li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.month-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
 table.data {
   width: 100%;
   border-collapse: collapse;

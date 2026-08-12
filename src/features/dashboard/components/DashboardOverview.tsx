@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,18 +17,47 @@ import type {
   GeneralPanelData,
   GeneralPanelIndicator,
 } from "@/features/scorecard/publications";
+import { SCORECARD_PERIOD_MONTHS } from "@/features/scorecard/types";
 
 const BLUE = "#304F7E";
-const CHART_COLORS = [
-  "#304F7E",
-  "#EAA239",
-  "#609346",
-  "#7B5EA7",
-  "#E07B39",
-  "#2E8B57",
-  "#007CC5",
-  "#C0392B",
-];
+
+// Uma cor bem distinta por mês (modelo colorido, no estilo do resto do app:
+// azul, laranja, verde... em vez de um único matiz em degradê), em ordem
+// fixa Jun→Nov — a ordem nunca muda, é o que garante que as cores sigam
+// distinguíveis mesmo sob daltonismo. Croma e luminosidade elevados pra
+// ficar vívido (bem acima do tom pastel do brand default #304F7E).
+// Validado com scripts/validate_palette.js (checks categóricos: banda de
+// luminosidade, piso de croma, separação CVD adjacente ≥8, piso de visão
+// normal ≥15, contraste ≥3:1 — todos OK nesta ordem).
+const MONTH_COLORS = ["#0074ca", "#c37a00", "#008f7b", "#c53732", "#7a4db5", "#48871e"];
+
+function monthColorIndex(monthKey: string): number {
+  const month = Number(monthKey.split("-")[1]);
+  const index = SCORECARD_PERIOD_MONTHS.indexOf(month as (typeof SCORECARD_PERIOD_MONTHS)[number]);
+  return index >= 0 ? index : 0;
+}
+
+function monthColor(monthKey: string): string {
+  return MONTH_COLORS[monthColorIndex(monthKey)] ?? MONTH_COLORS[0] ?? BLUE;
+}
+
+// Legenda própria em vez do <Legend> automático do Recharts: para BarChart,
+// o Recharts às vezes lista as séries na ordem inversa à declarada — no
+// gráfico por mês isso inverte a cronologia e é exatamente a ambiguidade
+// reportada ("Jul" aparecendo antes de "Jun" na legenda). Renderizar a
+// lista nós mesmos garante Jun→Nov sempre na mesma ordem das barras.
+function MonthLegend({ monthKeys, monthLabels }: { monthKeys: string[]; monthLabels: string[] }) {
+  return (
+    <ul className="month-legend">
+      {monthKeys.map((key, index) => (
+        <li key={key}>
+          <span className="month-legend-swatch" style={{ background: monthColor(key) }} />
+          {monthLabels[index]}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -308,6 +338,10 @@ export function DashboardOverview() {
 
         <div className="card">
           <div className="ct">Desempenho mensal (% da meta atingida)</div>
+          <p className="ps" style={{ margin: "-6px 0 12px" }}>
+            Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha tracejada
+            marca 100% da meta.
+          </p>
 
           <div className="cw" style={{ height: 340, minWidth: 0 }}>
             {data.monthLabels.length ? (
@@ -320,6 +354,8 @@ export function DashboardOverview() {
                 <BarChart
                   data={chartData}
                   margin={{ top: 12, right: 20, bottom: 8, left: -4 }}
+                  barGap={3}
+                  maxBarSize={28}
                 >
                   <CartesianGrid stroke="#f4f4f4" vertical={false} />
 
@@ -339,10 +375,24 @@ export function DashboardOverview() {
                     tickFormatter={(value: unknown) => `${value}%`}
                   />
 
+                  <ReferenceLine
+                    y={100}
+                    stroke="#9CA3AF"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{
+                      value: "Meta 100%",
+                      position: "insideTopRight",
+                      fill: "#6b7280",
+                      fontFamily: "Montserrat",
+                      fontSize: 9,
+                    }}
+                  />
+
                   <Tooltip
-                    formatter={(value: unknown) => [
-                      value === null ? "—" : `${Number(value).toFixed(1)}%`,
-                      "% da meta",
+                    formatter={(value: unknown, name: unknown) => [
+                      value === null ? "—" : `${Number(value).toFixed(1)}% da meta`,
+                      String(name),
                     ]}
                     contentStyle={{
                       fontFamily: "Montserrat",
@@ -352,10 +402,8 @@ export function DashboardOverview() {
                   />
 
                   <Legend
-                    wrapperStyle={{
-                      fontFamily: "Montserrat",
-                      fontSize: 10,
-                    }}
+                    verticalAlign="bottom"
+                    content={<MonthLegend monthKeys={data.monthKeys} monthLabels={data.monthLabels} />}
                   />
 
                   {data.monthLabels.map((label, index) => (
@@ -363,8 +411,8 @@ export function DashboardOverview() {
                       key={label}
                       dataKey={`month_${index}`}
                       name={label}
-                      fill={CHART_COLORS[index % CHART_COLORS.length]}
-                      radius={[2, 2, 0, 0]}
+                      fill={monthColor(data.monthKeys[index] ?? "")}
+                      radius={[4, 4, 0, 0]}
                     />
                   ))}
                 </BarChart>

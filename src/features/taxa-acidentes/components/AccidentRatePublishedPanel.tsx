@@ -9,12 +9,14 @@ import {
   Legend,
   Line,
   LineChart,
+  Rectangle,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import type { BarShapeProps } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
 import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/publications";
 import {
@@ -42,6 +44,48 @@ function decimal(value: number): string {
 
 function periodKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+// Uma barra de valor 0 renderiza com altura 0 — visualmente idêntica a "sem
+// dado". Sem essa marca, uma unidade com zero acidentes no período (uma boa
+// notícia) parece que nem foi lida. Desenha um traço fino na base em vez de
+// nada quando o valor é zero.
+const ZERO_STUB_PX = 3;
+
+function ZeroAwareBar(props: BarShapeProps) {
+  const { height, y } = props;
+  if (typeof height === "number" && height < 1 && typeof y === "number") {
+    return <Rectangle {...props} height={ZERO_STUB_PX} y={y - ZERO_STUB_PX} fillOpacity={0.45} />;
+  }
+  return <Rectangle {...props} />;
+}
+
+interface ZeroAwareLabelProps {
+  x?: unknown;
+  y?: unknown;
+  width?: unknown;
+  value?: unknown;
+}
+
+function ZeroAwareLabel({ x, y, width, value }: ZeroAwareLabelProps) {
+  const nx = Number(x);
+  const ny = Number(y);
+  const nw = Number(width);
+  if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nw)) return null;
+  const isZero = Number(value) === 0;
+  return (
+    <text
+      x={nx + nw / 2}
+      y={isZero ? ny - ZERO_STUB_PX - 5 : ny - 6}
+      textAnchor="middle"
+      fontFamily="Montserrat"
+      fontSize={10}
+      fontWeight={700}
+      fill="#475569"
+    >
+      {String(value)}
+    </text>
+  );
 }
 
 export function AccidentRatePublishedPanel() {
@@ -207,7 +251,7 @@ export function AccidentRatePublishedPanel() {
 
             <div className="cw" style={{ height: 290 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.mensal} margin={{ top: 24, right: 20, bottom: 12, left: 0 }}>
+                <LineChart data={data.mensal} margin={{ top: 24, right: 45, bottom: 12, left: 0 }}>
                   <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
 
                   <XAxis
@@ -441,15 +485,9 @@ export function AccidentRatePublishedPanel() {
                       fill={GOLD}
                       radius={[8, 8, 0, 0]}
                       maxBarSize={42}
+                      shape={ZeroAwareBar}
                     >
-                      <LabelList
-                        dataKey="caf"
-                        position="top"
-                        fill="#475569"
-                        fontFamily="Montserrat"
-                        fontSize={10}
-                        fontWeight={700}
-                      />
+                      <LabelList dataKey="caf" content={ZeroAwareLabel} />
                     </Bar>
 
                     <Bar
@@ -458,15 +496,9 @@ export function AccidentRatePublishedPanel() {
                       fill={BLUE}
                       radius={[8, 8, 0, 0]}
                       maxBarSize={42}
+                      shape={ZeroAwareBar}
                     >
-                      <LabelList
-                        dataKey="saf"
-                        position="top"
-                        fill="#475569"
-                        fontFamily="Montserrat"
-                        fontSize={10}
-                        fontWeight={700}
-                      />
+                      <LabelList dataKey="saf" content={ZeroAwareLabel} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
