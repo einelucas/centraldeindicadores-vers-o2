@@ -5,6 +5,7 @@ import { computeRncResult } from "@/features/rnc/calculations";
 import { toRncPublishedPayload } from "@/features/rnc/publications";
 import { loadRncConfiguration } from "@/features/rnc/services";
 import type { RncNormalizedRecord } from "@/features/rnc/types";
+import { periodFromOptionalFields } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -16,6 +17,10 @@ const INDICATOR = "dias_tratativa";
 
 const publishSchema = z.object({
   metaDias: z.number().min(0).max(100000).default(15),
+  periodStartYear: z.number().int().min(2000).max(2200).optional(),
+  periodStartMonth: z.number().int().min(1).max(12).optional(),
+  periodEndYear: z.number().int().min(2000).max(2200).optional(),
+  periodEndMonth: z.number().int().min(1).max(12).optional(),
 });
 
 function isMissingPublicationTable(error: unknown): boolean {
@@ -85,7 +90,8 @@ export async function POST(req: NextRequest) {
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
     const configuration = await prisma.$transaction((tx) => loadRncConfiguration(tx));
-    const result = computeRncResult(records, input.metaDias, configuration.excludedUnits);
+    const period = periodFromOptionalFields(input);
+    const result = computeRncResult(records, input.metaDias, configuration.excludedUnits, period);
     if (result.resultadoDias === null) {
       return NextResponse.json(
         {

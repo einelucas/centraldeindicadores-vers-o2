@@ -42,6 +42,8 @@ model User {
   importJobs ImportJob[]
   auditLogs    AuditLog[]
   publications IndicatorPublication[]
+  justificationsCreated IndicatorJustification[] @relation("JustificationCreatedBy")
+  justificationsUpdated IndicatorJustification[] @relation("JustificationUpdatedBy")
 
   @@index([email])
   @@index([externalUserId])
@@ -206,6 +208,36 @@ model IndicatorPublication {
   @@unique([module, indicator, version])
   @@index([module, indicator, active, publishedAt])
   @@index([publishedById])
+}
+
+// ---------------------------------------------------------------------------
+// ANÁLISES E JUSTIFICATIVAS INTERNAS DOS INDICADORES
+// ---------------------------------------------------------------------------
+
+model IndicatorJustification {
+  id                  String   @id @default(uuid())
+  module              String
+  year                Int
+  month               Int
+  result              Float?
+  target              Float?
+  status              String?
+  evidence            Json?
+  suggestedText       String?
+  text                String
+  sourceImportId      String?
+  sourceImportedAt    DateTime?
+  createdById         String
+  updatedById         String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  createdBy           User     @relation("JustificationCreatedBy", fields: [createdById], references: [id])
+  updatedBy           User     @relation("JustificationUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([module, year, month])
+  @@index([module, year, month])
+  @@index([createdById])
+  @@index([updatedById])
 }
 
 // ---------------------------------------------------------------------------

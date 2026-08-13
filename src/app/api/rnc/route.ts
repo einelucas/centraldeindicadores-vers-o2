@@ -8,6 +8,7 @@ import {
   RNC_EXCLUDED_SETTING,
 } from "@/features/rnc/services";
 import { RNC_DEFAULT_MAX_DIAS, type RncNormalizedRecord } from "@/features/rnc/types";
+import { parsePeriodRangeParams } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -27,6 +28,7 @@ export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
     const metaDias = parseMeta(req.nextUrl.searchParams.get("meta"));
+    const period = parsePeriodRangeParams(req.nextUrl.searchParams);
 
     const [rows, configuration, lastImport] = await Promise.all([
       prisma.rncRecord.findMany({
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       total: rows.length,
       metaDias,
-      result: computeRncResult(records, metaDias, configuration.excludedUnits),
+      result: computeRncResult(records, metaDias, configuration.excludedUnits, period),
       lastImport,
     });
   } catch (error) {

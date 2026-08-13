@@ -38,11 +38,8 @@ describe("Taxa de Acidentes", () => {
     expect(result.latestRate).toBe(8);
     expect(result.latestMonth).toBe(2);
     expect(result.monthly.map((month) => month.month)).toEqual([1, 2]);
-    expect(result.units.map((unit) => unit.unit)).toEqual(["Dourados", "Sinop"]);
-    expect(result.units.map((unit) => unit.label)).toEqual([
-      "Janeiro/2026",
-      "Fevereiro/2026",
-    ]);
+    expect(result.units.map((unit) => unit.unit)).toEqual(["DRD", "SNP"]);
+    expect(result.units.map((unit) => unit.label)).toEqual(["Janeiro/2026", "Fevereiro/2026"]);
   });
 
   it("substitui a mesma competência mensal pela última ocorrência", () => {

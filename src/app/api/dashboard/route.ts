@@ -7,21 +7,13 @@ import {
   type GeneralPanelData,
   type GeneralPanelIndicator,
 } from "@/features/scorecard/publications";
-import {
-  SCORECARD_MAX_POINTS,
-  SCORECARD_MONTHLY_POOL,
-  SCORECARD_PERIOD_MONTHS,
-} from "@/features/scorecard/types";
+import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
+import { enumeratePeriodMonths, getCurrentCycle } from "@/lib/period";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 
-const SCORECARD_YEAR = 2026;
-
-type PanelTargetIndicator = Pick<
-  GeneralPanelIndicator,
-  "key" | "direction" | "meta"
->;
+type PanelTargetIndicator = Pick<GeneralPanelIndicator, "key" | "direction" | "meta">;
 
 function passesSpreadsheetTarget(
   indicator: PanelTargetIndicator,
@@ -29,9 +21,7 @@ function passesSpreadsheetTarget(
 ): boolean | null {
   if (value === null || !Number.isFinite(value)) return null;
 
-  return indicator.direction === "lower"
-    ? value <= indicator.meta
-    : value >= indicator.meta;
+  return indicator.direction === "lower" ? value <= indicator.meta : value >= indicator.meta;
 }
 
 function percentOfSpreadsheetTarget(
@@ -48,23 +38,21 @@ function percentOfSpreadsheetTarget(
 }
 
 /**
- * Reaplica ao Painel Geral a mesma janela e a mesma pontuação da planilha:
- * Jun–Nov/2026, total máximo fixo de 11.582 pontos e regra tudo-ou-nada.
+ * Reaplica ao Painel Geral a mesma janela e a mesma pontuação da planilha: o
+ * ciclo semestral vigente, total máximo fixo de 11.582 pontos e regra
+ * tudo-ou-nada. O Painel Geral não tem filtro de período próprio, então usa
+ * sempre o ciclo ativo na data de hoje.
  */
 function applySpreadsheetScore(data: GeneralPanelData): GeneralPanelData {
-  const allowedMonths = new Set<number>(SCORECARD_PERIOD_MONTHS);
-  const monthKeys = data.monthKeys.filter((key) => {
-    const [yearText, monthText] = key.split("-");
-    return (
-      Number(yearText) === SCORECARD_YEAR &&
-      allowedMonths.has(Number(monthText))
-    );
-  });
+  const allowedKeys = new Set(
+    enumeratePeriodMonths(getCurrentCycle()).map(
+      ({ year, month }) => `${year}-${String(month).padStart(2, "0")}`,
+    ),
+  );
+  const monthKeys = data.monthKeys.filter((key) => allowedKeys.has(key));
 
   const indicators = data.indicators.map((indicator) => {
-    const originalByKey = new Map(
-      indicator.months.map((cell) => [cell.key, cell]),
-    );
+    const originalByKey = new Map(indicator.months.map((cell) => [cell.key, cell]));
 
     const months = monthKeys.map((key) => {
       const original = originalByKey.get(key);
@@ -102,8 +90,7 @@ function applySpreadsheetScore(data: GeneralPanelData): GeneralPanelData {
       total +
       indicator.months.reduce(
         (subtotal, month) =>
-          subtotal +
-          (month.pass ? (indicator.peso / 100) * SCORECARD_MONTHLY_POOL : 0),
+          subtotal + (month.pass ? (indicator.peso / 100) * SCORECARD_MONTHLY_POOL : 0),
         0,
       ),
     0,
@@ -122,17 +109,13 @@ function applySpreadsheetScore(data: GeneralPanelData): GeneralPanelData {
     pontuacaoPrevista,
     pontuacaoPrevistaSemestre: SCORECARD_MAX_POINTS,
     pontosRealizados,
-    atendimentoGeral:
-      pontuacaoPrevista > 0 ? (pontosRealizados / pontuacaoPrevista) * 100 : 0,
+    atendimentoGeral: pontuacaoPrevista > 0 ? (pontosRealizados / pontuacaoPrevista) * 100 : 0,
     indicators,
   };
 }
 
 function isMissingPublicationTable(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2021"
-  );
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021";
 }
 
 /** GET /api/dashboard — Painel Geral 2026 baseado em snapshots publicados. */
@@ -150,9 +133,7 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(
-      applySpreadsheetScore(buildGeneralPanelData(publications)),
-    );
+    return NextResponse.json(applySpreadsheetScore(buildGeneralPanelData(publications)));
   } catch (error) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json({

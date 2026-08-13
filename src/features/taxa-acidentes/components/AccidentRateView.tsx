@@ -9,12 +9,15 @@ import {
   Gauge,
   HardHat,
   Pencil,
+  RotateCw,
+  Save,
   Send,
   Trash2,
   TrendingUp,
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +35,9 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { ExportButtons } from "@/components/exports/ExportButtons";
+import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { MONTH_NAMES } from "@/lib/dates";
+import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import {
   ACCIDENT_RATE_DEFAULT_TARGET,
   type AccidentMonthlyRecord,
@@ -111,17 +116,32 @@ export function AccidentRateView({
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/taxa-acidentes", { cache: "no-store" });
-    if (!response.ok) {
-      throw await responseError(response, "Falha ao carregar a Taxa de Acidentes.");
-    }
-    const body = (await response.json()) as AccidentRateApiResponse;
-    setData(body);
-    setTarget(String(body.target ?? ACCIDENT_RATE_DEFAULT_TARGET));
-    setExcludedUnits(body.excludedUnits ?? []);
-  }, []);
+  const load = useCallback(
+    async (nextPeriod = periodRange) => {
+      const params = new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+      );
+      const suffix = params.toString();
+      const response = await fetch(`/api/taxa-acidentes${suffix ? `?${suffix}` : ""}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Falha ao carregar a Taxa de Acidentes.");
+      }
+      const body = (await response.json()) as AccidentRateApiResponse;
+      setData(body);
+      setTarget(String(body.target ?? ACCIDENT_RATE_DEFAULT_TARGET));
+      setExcludedUnits(body.excludedUnits ?? []);
+    },
+    [periodRange],
+  );
 
   const loadPublication = useCallback(async () => {
     const response = await fetch("/api/publicacoes/taxa-acidentes", {
@@ -136,17 +156,10 @@ export function AccidentRateView({
 
   useEffect(() => {
     void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-  }, [load, loadPublication]);
-
-  const exportRows = useMemo(
-    () =>
-      data?.monthly.map((row) => ({
-        periodo: periodLabel(row.year, row.month),
-        taxa: row.rate,
-        caf: row.caf,
-      })) ?? [],
-    [data],
-  );
+    // Só na montagem: mudar o filtro de período não deve buscar sozinho,
+    // só ao clicar em "Recalcular do banco" (igual aos demais módulos).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const monthlyFilterYears = useMemo(() => {
     const years = new Set((data?.monthly ?? []).map((row) => row.year));
@@ -175,6 +188,11 @@ export function AccidentRateView({
     const years = new Set((data?.units ?? []).map((row) => row.year));
     return Array.from(years).sort((a, b) => b - a);
   }, [data]);
+
+  const periodFilterYears = useMemo(
+    () => Array.from(new Set([...monthlyFilterYears, ...unitFilterYears])).sort((a, b) => b - a),
+    [monthlyFilterYears, unitFilterYears],
+  );
 
   const unitFilterUnits = useMemo(() => {
     const units = new Set(
@@ -484,6 +502,8 @@ export function AccidentRateView({
     try {
       const response = await fetch("/api/publicacoes/taxa-acidentes", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(periodToOptionalFields(periodRange)),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o indicador.");
@@ -524,62 +544,118 @@ export function AccidentRateView({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>Meta de frequência (≤)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.1"
-              value={target}
-              onChange={(event) => setTarget(event.target.value)}
-              className="w-24"
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Filtros</Label>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="accidentRateTarget">Meta de frequência (≤)</Label>
+                <Input
+                  id="accidentRateTarget"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={target}
+                  onChange={(event) => setTarget(event.target.value)}
+                  className="w-24"
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Período</Label>
+            <PeriodRangeFilter
+              value={periodRange}
+              onChange={setPeriodRange}
+              yearsInData={periodFilterYears}
+              label=""
             />
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void saveTarget()}>
-            Salvar meta
-          </Button>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
-            Recalcular do banco
-          </Button>
-          <ExportButtons
-            fileName="taxa-acidentes"
-            title="Taxa de Acidentes"
-            subtitle={`Meta de frequência ≤ ${target}`}
-            rows={exportRows}
-            columns={[
-              { header: "Mês", value: (row) => row.periodo },
-              { header: "Taxa de Frequência", value: (row) => row.taxa },
-              { header: "Acidentes CAF", value: (row) => row.caf },
-            ]}
-          />
-          {canClear ? (
-            <Button variant="destructive" size="sm" disabled={busy} onClick={() => void clearAll()}>
-              <Trash2 className="size-3.5" />
-              Limpar tudo
-            </Button>
-          ) : null}
-          <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
-            <Ban className="size-3.5" />
-            Ignorar unidades
-            {excludedUnits.length ? (
-              <Badge variant="outline" className="ml-0.5">
-                {excludedUnits.length}
-              </Badge>
-            ) : null}
-          </Button>
-        </div>
-        {canPublish ? (
-          <Button
-            variant="success"
-            disabled={busy || !data?.monthly.length}
-            onClick={() => void publish()}
-          >
-            <Send className="size-3.5" />
-            Publicar no Painel
-          </Button>
-        ) : null}
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Ações</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void saveTarget()}
+              >
+                <Save className="size-3.5" />
+                Salvar meta
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void load()}
+              >
+                <RotateCw className="size-3.5" />
+                Recalcular
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setUnitDialogOpen(true)}
+              >
+                <Ban className="size-3.5" />
+                Ignorar unidades
+                {excludedUnits.length ? (
+                  <Badge variant="outline" className="ml-0.5">
+                    {excludedUnits.length}
+                  </Badge>
+                ) : null}
+              </Button>
+              <IndicatorAnalysisDialog
+                module="taxa-acidentes"
+                moduleLabel="Taxa de Acidentes"
+                target={
+                  Number.isFinite(Number(target)) && Number(target) >= 0
+                    ? Number(target)
+                    : ACCIDENT_RATE_DEFAULT_TARGET
+                }
+                targetUnit="absolute"
+                years={periodFilterYears}
+                defaultYear={data?.result?.latestYear ?? undefined}
+                defaultMonth={data?.result?.latestMonth ?? undefined}
+                triggerClassName="w-full"
+              />
+              {canClear ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => void clearAll()}
+                >
+                  <Trash2 className="size-3.5" />
+                  Limpar tudo
+                </Button>
+              ) : null}
+              {canPublish ? (
+                <Button
+                  variant="success"
+                  size="sm"
+                  className="w-full"
+                  disabled={busy || !data?.monthly.length}
+                  onClick={() => void publish()}
+                >
+                  <Send className="size-3.5" />
+                  Publicar no Painel
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Card>
       </div>
 
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">

@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,8 +40,10 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
+import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import {
   FIVES_DEFAULT_EXCLUDED,
   FIVES_DEFAULT_TARGET,
@@ -127,6 +130,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [excludedUnits, setExcludedUnits] = useState<string[]>([...FIVES_DEFAULT_EXCLUDED]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
   const [data, setData] = useState<FiveSApiResponse | null>(null);
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -141,16 +145,30 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/cinco-s", { cache: "no-store" });
-    if (!response.ok) {
-      throw await responseError(response, "Falha ao carregar os dados do 5S.");
-    }
-    const body = (await response.json()) as FiveSApiResponse;
-    setData(body);
-    setTarget(body.threshold * 100);
-    setExcludedUnits(body.excludedUnits);
-  }, []);
+  const load = useCallback(
+    async (nextPeriod = periodRange) => {
+      const params = new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+      );
+      const suffix = params.toString();
+      const response = await fetch(`/api/cinco-s${suffix ? `?${suffix}` : ""}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Falha ao carregar os dados do 5S.");
+      }
+      const body = (await response.json()) as FiveSApiResponse;
+      setData(body);
+      setTarget(body.threshold * 100);
+      setExcludedUnits(body.excludedUnits);
+    },
+    [periodRange],
+  );
 
   const loadPublication = useCallback(async () => {
     const response = await fetch("/api/publicacoes/cinco-s", {
@@ -165,7 +183,10 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
 
   useEffect(() => {
     void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-  }, [load, loadPublication]);
+    // Só na montagem: mudar o filtro de período não deve buscar sozinho,
+    // só ao clicar em "Recalcular" (igual aos demais módulos).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const units = useMemo(() => {
     if (!data) return [];
@@ -455,7 +476,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       const response = await fetch("/api/publicacoes/cinco-s", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target, excludedUnits }),
+        body: JSON.stringify({ target, excludedUnits, ...periodToOptionalFields(periodRange) }),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o 5S.");
@@ -620,65 +641,114 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="fiveSTarget">Meta global (%)</Label>
-            <Input
-              id="fiveSTarget"
-              type="number"
-              min={0}
-              max={100}
-              step={0.1}
-              value={target}
-              onChange={(event) => setTarget(Number(event.target.value))}
-              className="w-24"
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Filtros</Label>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="fiveSTarget">Meta global (%)</Label>
+                <Input
+                  id="fiveSTarget"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={target}
+                  onChange={(event) => setTarget(Number(event.target.value))}
+                  className="w-24"
+                />
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Período</Label>
+            <PeriodRangeFilter
+              value={periodRange}
+              onChange={setPeriodRange}
+              yearsInData={availableYears}
+              label=""
             />
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => void recalculate()}>
-            <RotateCw className="size-3.5" />
-            Recalcular
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!result?.unitMonths.length || busy}
-            onClick={() => result && exportFiveSPdf(result)}
-          >
-            <Download className="size-3.5" />
-            Baixar PDF
-          </Button>
-          {canClear ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={!data?.total || busy}
-              onClick={() => void clearAll()}
-            >
-              <Trash2 className="size-3.5" />
-              Limpar tudo
-            </Button>
-          ) : null}
-          <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
-            <Ban className="size-3.5" />
-            Ignorar unidades
-            {excludedUnits.length ? (
-              <Badge variant="outline" className="ml-0.5">
-                {excludedUnits.length}
-              </Badge>
-            ) : null}
-          </Button>
-        </div>
-        {canPublish ? (
-          <Button
-            variant="success"
-            disabled={!result || result.geral === null || busy}
-            onClick={() => void publish()}
-          >
-            <Send className="size-3.5" />
-            Publicar no Painel
-          </Button>
-        ) : null}
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <Label>Ações</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={busy}
+                onClick={() => void recalculate()}
+              >
+                <RotateCw className="size-3.5" />
+                Recalcular
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setUnitDialogOpen(true)}
+              >
+                <Ban className="size-3.5" />
+                Ignorar unidades
+                {excludedUnits.length ? (
+                  <Badge variant="outline" className="ml-0.5">
+                    {excludedUnits.length}
+                  </Badge>
+                ) : null}
+              </Button>
+              <IndicatorAnalysisDialog
+                module="cinco-s"
+                moduleLabel="5S"
+                target={target}
+                years={availableYears}
+                defaultYear={result?.latestYear ?? undefined}
+                defaultMonth={result?.latestMonth ?? undefined}
+                triggerClassName="w-full"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={!result?.unitMonths.length || busy}
+                onClick={() => result && exportFiveSPdf(result)}
+              >
+                <Download className="size-3.5" />
+                Baixar PDF
+              </Button>
+              {canClear ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                  disabled={!data?.total || busy}
+                  onClick={() => void clearAll()}
+                >
+                  <Trash2 className="size-3.5" />
+                  Limpar tudo
+                </Button>
+              ) : null}
+              {canPublish ? (
+                <Button
+                  variant="success"
+                  size="sm"
+                  className="w-full"
+                  disabled={!result || result.geral === null || busy}
+                  onClick={() => void publish()}
+                >
+                  <Send className="size-3.5" />
+                  Publicar no Painel
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </Card>
       </div>
 
       {publication ? (

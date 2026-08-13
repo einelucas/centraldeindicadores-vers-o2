@@ -20,6 +20,7 @@ import type { RdoPublishedPayload } from "@/features/rdo/publications";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
+import { formatPeriodRangeLabel } from "@/lib/period";
 
 interface PublicationResponse {
   publication: null | {
@@ -101,14 +102,18 @@ export function RdoPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          <div className="empty"><p className="ps">Carregando painel publicado…</p></div>
+          <div className="empty">
+            <p className="ps">Carregando painel publicado…</p>
+          </div>
         </div>
       </div>
     );
   }
 
   if (error && !data) {
-    return <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />;
+    return (
+      <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />
+    );
   }
 
   if (!data) return <PublishedPanelPlaceholder />;
@@ -129,16 +134,39 @@ export function RdoPublishedPanel() {
       {exportButton}
       {exportError ? (
         <div className="content" style={{ padding: "8px 0 0" }}>
-          <p className="ps" style={{ color: RED }}>{exportError}</p>
+          <p className="ps" style={{ color: RED }}>
+            {exportError}
+          </p>
         </div>
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
         <div className="mgrid">
-          <PanelMetric label="Resultado" value={`${result}%`} meta={`Meta >${d.meta}%`} tone={resultOk ? "G" : "R"} ok={resultOk} />
-          <PanelMetric label="Relatórios aprovados" value={d.aprovados.toLocaleString("pt-BR")} meta={`De ${d.emitidos.toLocaleString("pt-BR")} emitidos`} tone="G" />
-          <PanelMetric label="Em revisão" value={`${d.emRevisaoPct.toFixed(1)}%`} meta={`${reviewingCount.toLocaleString("pt-BR")} relatórios`} tone="A" />
-          <PanelMetric label="Preenchendo" value={`${d.preenchendoPct.toFixed(1)}%`} meta={`${fillingCount.toLocaleString("pt-BR")} relatórios`} tone="A" />
+          <PanelMetric
+            label="Resultado"
+            value={`${result}%`}
+            meta={`Meta >${d.meta}%`}
+            tone={resultOk ? "G" : "R"}
+            ok={resultOk}
+          />
+          <PanelMetric
+            label="Relatórios aprovados"
+            value={d.aprovados.toLocaleString("pt-BR")}
+            meta={`De ${d.emitidos.toLocaleString("pt-BR")} emitidos`}
+            tone="G"
+          />
+          <PanelMetric
+            label="Em revisão"
+            value={`${d.emRevisaoPct.toFixed(1)}%`}
+            meta={`${reviewingCount.toLocaleString("pt-BR")} relatórios`}
+            tone="A"
+          />
+          <PanelMetric
+            label="Preenchendo"
+            value={`${d.preenchendoPct.toFixed(1)}%`}
+            meta={`${fillingCount.toLocaleString("pt-BR")} relatórios`}
+            tone="A"
+          />
         </div>
 
         {/* Container do indicador: agrupa os gráficos e a leitura por unidade
@@ -149,10 +177,12 @@ export function RdoPublishedPanel() {
           <div className="ps rdo-panel-summary">
             <span className="rdo-panel-target">META: &gt;{d.meta}%</span>
             <span>
-              Resultado: <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong>
+              Resultado:{" "}
+              <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong>
             </span>
             <span style={{ color: "#bbb" }}>
               — publicado em {formatPublishedAt(data.publishedAt)} por {data.publishedBy.name}
+              {d.periodo ? ` · Período: ${formatPeriodRangeLabel(d.periodo)}` : ""}
             </span>
           </div>
 
@@ -174,7 +204,9 @@ export function RdoPublishedPanel() {
                       label={({ value }) => `${value}%`}
                       labelLine={false}
                     >
-                      {statusChartData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                      {statusChartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
                     </Pie>
                     <Tooltip formatter={(value, name) => [`${value}%`, name]} />
                     <Legend
@@ -196,11 +228,31 @@ export function RdoPublishedPanel() {
                   <LineChart data={d.mensal} margin={{ top: 8, right: 12, bottom: 2, left: -16 }}>
                     <CartesianGrid stroke="#f4f4f4" vertical={false} />
                     <XAxis dataKey="label" tick={{ fontFamily: "Montserrat", fontSize: 10 }} />
-                    <YAxis tick={{ fontFamily: "Montserrat", fontSize: 10 }} tickFormatter={(v) => `${v}%`} />
+                    <YAxis
+                      tick={{ fontFamily: "Montserrat", fontSize: 10 }}
+                      tickFormatter={(v) => `${v}%`}
+                    />
                     <Tooltip formatter={(value) => [`${value}%`, "Aprovação"]} />
                     <Legend wrapperStyle={{ fontFamily: "Montserrat", fontSize: 10 }} />
-                    <ReferenceLine y={d.meta} stroke={GOLD} strokeDasharray="5 4" label={{ value: `Meta (${d.meta}%)`, position: "insideTopRight", fontSize: 9 }} />
-                    <Line type="monotone" dataKey="v" name="Aprovação (%)" stroke={BLUE} strokeWidth={2} dot={{ r: 5, fill: BLUE }} activeDot={{ r: 6 }} />
+                    <ReferenceLine
+                      y={d.meta}
+                      stroke={GOLD}
+                      strokeDasharray="5 4"
+                      label={{
+                        value: `Meta (${d.meta}%)`,
+                        position: "insideTopRight",
+                        fontSize: 9,
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="v"
+                      name="Aprovação (%)"
+                      stroke={BLUE}
+                      strokeWidth={2}
+                      dot={{ r: 5, fill: BLUE }}
+                      activeDot={{ r: 6 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -209,18 +261,30 @@ export function RdoPublishedPanel() {
 
           <div className="indicator-subcard">
             <div className="ct">Aprovação por unidade</div>
-            {d.unidades.length ? d.unidades.map((unit) => {
-              const ok = unit.v >= d.meta;
-              return (
-                <div className="urow" key={unit.n}>
-                  <div className="uname">{unit.n}</div>
-                  <div className="utrack">
-                    <div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} />
+            {d.unidades.length ? (
+              d.unidades.map((unit) => {
+                const ok = unit.v >= d.meta;
+                return (
+                  <div className="urow" key={unit.n}>
+                    <div className="uname">{unit.n}</div>
+                    <div className="utrack">
+                      <div
+                        className="ufill"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, unit.v))}%`,
+                          background: ok ? GREEN : RED,
+                        }}
+                      />
+                    </div>
+                    <div className="uval" style={{ color: ok ? GREEN : RED }}>
+                      {unit.v}%
+                    </div>
                   </div>
-                  <div className="uval" style={{ color: ok ? GREEN : RED }}>{unit.v}%</div>
-                </div>
-              );
-            }) : <p className="ps">Sem unidades publicadas.</p>}
+                );
+              })
+            ) : (
+              <p className="ps">Sem unidades publicadas.</p>
+            )}
           </div>
         </div>
       </div>
@@ -228,7 +292,13 @@ export function RdoPublishedPanel() {
   );
 }
 
-function PanelMetric({ label, value, meta, tone, ok }: {
+function PanelMetric({
+  label,
+  value,
+  meta,
+  tone,
+  ok,
+}: {
   label: string;
   value: string;
   meta: string;

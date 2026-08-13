@@ -3,6 +3,7 @@ import {
   ACCIDENT_RATE_SCORECARD_WEIGHT,
   type AccidentRateResult,
 } from "@/features/taxa-acidentes/types";
+import type { PeriodRange } from "@/lib/period";
 
 export interface AccidentRatePublishedMonth {
   label: string;
@@ -31,6 +32,8 @@ export interface AccidentRatePublishedPayload {
   desempenhoMes: number;
   referenceYear: number;
   referenceMonth: number;
+  /** Intervalo de período usado no cálculo publicado; `null` = sem restrição. */
+  periodo?: PeriodRange | null;
   mensal: AccidentRatePublishedMonth[];
   unidades: AccidentRatePublishedUnit[];
 }
@@ -59,6 +62,7 @@ export function toAccidentRatePublishedPayload(
     desempenhoMes: result.latestRate,
     referenceYear: result.latestYear,
     referenceMonth: result.latestMonth,
+    periodo: result.period,
     mensal: result.monthly.map((month) => ({
       label: month.label,
       taxa: month.rate,

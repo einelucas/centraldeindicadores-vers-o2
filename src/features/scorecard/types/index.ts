@@ -3,15 +3,15 @@
 /** Pontuação máxima do ciclo de seis meses. */
 export const SCORECARD_MAX_POINTS = 11_582;
 
-/** Meses que formam o ciclo: junho a novembro. */
-export const SCORECARD_PERIOD_MONTHS = [6, 7, 8, 9, 10, 11] as const;
-
-/** Quantidade de meses considerada no ciclo. */
-export const SCORECARD_PERIOD_LENGTH = SCORECARD_PERIOD_MONTHS.length;
+/**
+ * Quantidade de meses de um ciclo padrão. O ciclo em si agora é livre
+ * (ver `src/lib/period.ts`), mas o pool mensal continua fixo em 1/6 dos
+ * 11.582 pontos — mesma regra de negócio da planilha original.
+ */
+export const SCORECARD_PERIOD_LENGTH = 6;
 
 /** Pontuação máxima disponível em cada mês do ciclo. */
-export const SCORECARD_MONTHLY_POOL =
-  SCORECARD_MAX_POINTS / SCORECARD_PERIOD_LENGTH;
+export const SCORECARD_MONTHLY_POOL = SCORECARD_MAX_POINTS / SCORECARD_PERIOD_LENGTH;
 
 /** Definição de um indicador do scorecard. */
 export interface ScorecardIndicator {

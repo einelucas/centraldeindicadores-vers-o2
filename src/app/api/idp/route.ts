@@ -3,11 +3,8 @@ import { Prisma } from "@prisma/client";
 import { computeIdpResult } from "@/features/idp/calculations";
 import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp/configuration";
 import { storedIdpRowToRecord } from "@/features/idp/services";
-import {
-  IDP_DEFAULT_MONTH_END,
-  IDP_DEFAULT_MONTH_START,
-  IDP_DEFAULT_TARGET,
-} from "@/features/idp/types";
+import { IDP_DEFAULT_MONTH_START, IDP_DEFAULT_TARGET } from "@/features/idp/types";
+import { normalizePeriodRange } from "@/lib/period";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
@@ -23,6 +20,13 @@ function boundedMonth(value: string | null, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) return fallback;
   return Math.max(1, Math.min(12, parsed));
+}
+
+function boundedYear(value: string | null, fallback: number): number {
+  if (value === null || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 2000 || parsed > 2200) return fallback;
+  return parsed;
 }
 
 function dateIso(value: Date | null): string | null {
@@ -104,14 +108,22 @@ export async function GET(req: NextRequest) {
     const latestMonthForYear = monthsForYear.length ? Math.max(...monthsForYear) : latest.month;
     const selectedMonth = boundedMonth(searchParams.get("month"), latestMonthForYear);
 
-    let historyMonthStart = boundedMonth(searchParams.get("historyStart"), IDP_DEFAULT_MONTH_START);
-    let historyMonthEnd = boundedMonth(
+    const historyMonthStartRaw = boundedMonth(
+      searchParams.get("historyStart"),
+      IDP_DEFAULT_MONTH_START,
+    );
+    const historyMonthEndRaw = boundedMonth(
       searchParams.get("historyEnd"),
       Math.max(selectedMonth, IDP_DEFAULT_MONTH_START),
     );
-    if (historyMonthEnd < historyMonthStart) {
-      [historyMonthStart, historyMonthEnd] = [historyMonthEnd, historyMonthStart];
-    }
+    const historyStartYear = boundedYear(searchParams.get("historyStartYear"), selectedYear);
+    const historyEndYear = boundedYear(searchParams.get("historyEndYear"), selectedYear);
+    const historyRange = normalizePeriodRange({
+      startYear: historyStartYear,
+      startMonth: historyMonthStartRaw,
+      endYear: historyEndYear,
+      endMonth: historyMonthEndRaw,
+    });
 
     const result = computeIdpResult(
       records,
@@ -120,8 +132,10 @@ export async function GET(req: NextRequest) {
       {
         selectedYear,
         selectedMonth,
-        historyMonthStart,
-        historyMonthEnd,
+        historyStartYear: historyRange.startYear,
+        historyMonthStart: historyRange.startMonth,
+        historyEndYear: historyRange.endYear,
+        historyMonthEnd: historyRange.endMonth,
       },
       excludedUnits,
     );
@@ -134,8 +148,10 @@ export async function GET(req: NextRequest) {
       years: years.length ? years : [selectedYear],
       selectedYear,
       selectedMonth,
-      historyMonthStart,
-      historyMonthEnd,
+      historyStartYear: historyRange.startYear,
+      historyMonthStart: historyRange.startMonth,
+      historyEndYear: historyRange.endYear,
+      historyMonthEnd: historyRange.endMonth,
       excludedDisciplines,
       result,
       documents: rows.map((row) => ({
@@ -178,13 +194,17 @@ export async function GET(req: NextRequest) {
         years: [selectedYear],
         selectedYear,
         selectedMonth,
+        historyStartYear: selectedYear,
         historyMonthStart: IDP_DEFAULT_MONTH_START,
+        historyEndYear: selectedYear,
         historyMonthEnd: selectedMonth,
         excludedDisciplines: [],
         result: computeIdpResult([], IDP_DEFAULT_TARGET, [], {
           selectedYear,
           selectedMonth,
+          historyStartYear: selectedYear,
           historyMonthStart: IDP_DEFAULT_MONTH_START,
+          historyEndYear: selectedYear,
           historyMonthEnd: selectedMonth,
         }),
         documents: [],

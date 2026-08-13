@@ -12,6 +12,7 @@
  */
 
 import { MONTH_NAMES } from "@/lib/dates";
+import { isWithinPeriodRange, type PeriodRange } from "@/lib/period";
 import {
   RDO_DEFAULT_TARGET,
   RDO_STATUS,
@@ -38,6 +39,7 @@ export function computeRdoResult(
   records: readonly RdoNormalizedRecord[],
   threshold: number = RDO_DEFAULT_TARGET,
   excludedUnits: readonly string[] = [],
+  period: PeriodRange | null = null,
 ): RdoResult {
   const excludedNormalized = Array.from(
     new Set(excludedUnits.map((value) => value.trim()).filter(Boolean)),
@@ -57,6 +59,15 @@ export function computeRdoResult(
     const unit = (r.empresaNome ?? "").toString().trim();
     // Fiel ao HTML: precisa de data válida e unidade.
     if (!r.dataReferencia || isNaN(r.dataReferencia.getTime()) || !unit) continue;
+    // Corte estrutural: fora do período selecionado, o registro nem entra
+    // em nenhuma tabela (diferente da exclusão de unidade, que mantém a
+    // linha visível). Sem período definido, nada é restringido.
+    if (
+      period &&
+      !isWithinPeriodRange(r.dataReferencia.getFullYear(), r.dataReferencia.getMonth() + 1, period)
+    ) {
+      continue;
+    }
 
     // A tabela por unidade continua mostrando todas, inclusive as ignoradas.
     const u = byUnit.get(unit) ?? { emitidos: 0, aprovados: 0 };
@@ -111,6 +122,7 @@ export function computeRdoResult(
   return {
     threshold,
     excludedUnits: excludedNormalized,
+    period,
     totalEmitidos,
     totalAprovados,
     totalRevisar,

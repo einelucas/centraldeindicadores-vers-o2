@@ -133,7 +133,9 @@ export interface IdpDetailedResult {
   excludedUnits: string[];
   selectedYear: number;
   selectedMonth: number;
+  historyStartYear: number;
   historyMonthStart: number;
+  historyEndYear: number;
   historyMonthEnd: number;
   aderenciaGeral: number;
   unitRows: IdpUnitExecutionRow[];

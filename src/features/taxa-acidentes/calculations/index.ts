@@ -10,6 +10,7 @@ import {
   type AccidentRateResult,
   type AccidentUnitRecord,
 } from "@/features/taxa-acidentes/types";
+import { isWithinPeriodRange, type PeriodRange } from "@/lib/period";
 
 function monthLabel(year: number, month: number): string {
   return `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`;
@@ -30,6 +31,7 @@ export function computeAccidentRateResult(
   unitRecords: readonly AccidentUnitRecord[],
   target: number,
   excludedUnits: readonly string[] = [],
+  period: PeriodRange | null = null,
 ): AccidentRateResult {
   const excludedNormalized = Array.from(
     new Set(excludedUnits.map(normalizeAccidentUnitCode).filter(Boolean)),
@@ -38,6 +40,7 @@ export function computeAccidentRateResult(
 
   const monthByKey = new Map<string, AccidentMonthlyInput>();
   for (const record of monthlyRecords) {
+    if (!isWithinPeriodRange(record.year, record.month, period)) continue;
     monthByKey.set(`${record.year}-${String(record.month).padStart(2, "0")}`, record);
   }
 
@@ -56,7 +59,8 @@ export function computeAccidentRateResult(
 
   const totalCaf = monthly.reduce((sum, record) => sum + record.caf, 0);
 
-  const units = [...unitRecords]
+  const units = unitRecords
+    .filter((record) => isWithinPeriodRange(record.year, record.month, period))
     .map((record) => ({
       ...record,
       unit: normalizeAccidentUnitCode(record.unit),
@@ -72,6 +76,7 @@ export function computeAccidentRateResult(
   return {
     target,
     excludedUnits: excludedNormalized,
+    period,
     result,
     totalCaf,
     totalUnitCaf: includedUnits.reduce((sum, record) => sum + record.caf, 0),

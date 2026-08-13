@@ -1,5 +1,7 @@
 /** Tipos do módulo 5S. */
 
+import type { PeriodRange } from "@/lib/period";
+
 /** Área auditada dentro de uma unidade. */
 export interface FiveSArea {
   divisao: string | null;
@@ -40,6 +42,7 @@ export interface FiveSMonthResult {
 export interface FiveSResult {
   threshold: number;
   excludedUnits: string[];
+  period: PeriodRange | null;
   periodLabel: string;
   latestYear: number | null;
   latestMonth: number | null;

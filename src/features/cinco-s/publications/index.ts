@@ -3,6 +3,7 @@ import {
   FIVES_SCORECARD_WEIGHT,
   type FiveSResult,
 } from "@/features/cinco-s/types";
+import type { PeriodRange } from "@/lib/period";
 
 export interface FiveSPublishedUnit {
   n: string;
@@ -23,17 +24,15 @@ export interface FiveSPublishedPayload {
   referenceYear: number;
   referenceMonth: number;
   excludedUnits: string[];
+  /** Intervalo de período usado no cálculo publicado; `null` = sem restrição. */
+  periodo?: PeriodRange | null;
   unidades: FiveSPublishedUnit[];
   mensal: FiveSPublishedMonth[];
 }
 
 /** Converte somente o resultado calculado com registros reais do Neon. */
 export function toFiveSPublishedPayload(result: FiveSResult): FiveSPublishedPayload {
-  if (
-    result.geral === null ||
-    result.latestYear === null ||
-    result.latestMonth === null
-  ) {
+  if (result.geral === null || result.latestYear === null || result.latestMonth === null) {
     throw new Error("O último período não possui unidades elegíveis para publicação.");
   }
 
@@ -45,12 +44,11 @@ export function toFiveSPublishedPayload(result: FiveSResult): FiveSPublishedPayl
     referenceYear: result.latestYear,
     referenceMonth: result.latestMonth,
     excludedUnits: result.excludedUnits,
+    periodo: result.period,
     unidades: result.unitMonths
       .filter(
         (item) =>
-          item.year === result.latestYear &&
-          item.month === result.latestMonth &&
-          !item.excluded,
+          item.year === result.latestYear && item.month === result.latestMonth && !item.excluded,
       )
       .map((item) => ({ n: item.unit, v: item.aderencia * 100 }))
       .sort((a, b) => b.v - a.v),

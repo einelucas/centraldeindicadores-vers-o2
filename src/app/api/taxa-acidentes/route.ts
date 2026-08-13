@@ -9,6 +9,7 @@ import {
   saveAccidentTarget,
 } from "@/features/taxa-acidentes/services";
 import { normalizeAccidentUnitCode } from "@/features/taxa-acidentes/utils/units";
+import { parsePeriodRangeParams } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
@@ -65,10 +66,11 @@ function missingTables(error: unknown): boolean {
   );
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
-    const data = await prisma.$transaction((tx) => loadAccidentRateData(tx));
+    const period = parsePeriodRangeParams(req.nextUrl.searchParams);
+    const data = await prisma.$transaction((tx) => loadAccidentRateData(tx, period));
     return NextResponse.json(data);
   } catch (error) {
     if (missingTables(error)) {

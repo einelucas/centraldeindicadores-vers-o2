@@ -9,10 +9,8 @@ import {
   normalizeExcludedUnits,
   recalcFiveSIndicators,
 } from "@/features/cinco-s/services";
-import type {
-  FiveSArea,
-  FiveSNormalizedRecord,
-} from "@/features/cinco-s/types";
+import type { FiveSArea, FiveSNormalizedRecord } from "@/features/cinco-s/types";
+import { periodFromOptionalFields } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -25,6 +23,10 @@ const INDICATOR = "aderencia";
 const publishSchema = z.object({
   target: z.number().min(0).max(100).default(95),
   excludedUnits: z.array(z.string().max(100)).max(100).default(["SP", "CSC"]),
+  periodStartYear: z.number().int().min(2000).max(2200).optional(),
+  periodStartMonth: z.number().int().min(1).max(12).optional(),
+  periodEndYear: z.number().int().min(2000).max(2200).optional(),
+  periodEndMonth: z.number().int().min(1).max(12).optional(),
 });
 
 function isMissingPublicationTable(error: unknown): boolean {
@@ -78,10 +80,7 @@ export async function POST(req: NextRequest) {
       orderBy: [{ year: "asc" }, { month: "asc" }, { unit: "asc" }],
     });
     if (!rows.length) {
-      return NextResponse.json(
-        { error: "Não há registros de 5S para publicar." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Não há registros de 5S para publicar." }, { status: 400 });
     }
 
     const records: FiveSNormalizedRecord[] = rows.map((row) => {
@@ -94,7 +93,8 @@ export async function POST(req: NextRequest) {
         raw,
       };
     });
-    const result = computeFiveSResult(records, excludedUnits, threshold);
+    const period = periodFromOptionalFields(input);
+    const result = computeFiveSResult(records, excludedUnits, threshold, period);
     if (result.geral === null) {
       return NextResponse.json(
         {
@@ -108,53 +108,51 @@ export async function POST(req: NextRequest) {
     const payload = toFiveSPublishedPayload(result);
     const status = payload.resultado >= payload.meta ? "OK" : "FORA";
 
-    const publication = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        await tx.appSetting.upsert({
-          where: { key: FIVES_TARGET_SETTING },
-          create: { key: FIVES_TARGET_SETTING, value: toJsonValue(threshold) },
-          update: { value: toJsonValue(threshold) },
-        });
-        await tx.appSetting.upsert({
-          where: { key: FIVES_EXCLUDED_SETTING },
-          create: {
-            key: FIVES_EXCLUDED_SETTING,
-            value: toJsonValue(excludedUnits),
-          },
-          update: { value: toJsonValue(excludedUnits) },
-        });
-        await recalcFiveSIndicators(tx);
+    const publication = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.appSetting.upsert({
+        where: { key: FIVES_TARGET_SETTING },
+        create: { key: FIVES_TARGET_SETTING, value: toJsonValue(threshold) },
+        update: { value: toJsonValue(threshold) },
+      });
+      await tx.appSetting.upsert({
+        where: { key: FIVES_EXCLUDED_SETTING },
+        create: {
+          key: FIVES_EXCLUDED_SETTING,
+          value: toJsonValue(excludedUnits),
+        },
+        update: { value: toJsonValue(excludedUnits) },
+      });
+      await recalcFiveSIndicators(tx);
 
-        const latest = await tx.indicatorPublication.findFirst({
-          where: { module: MODULE, indicator: INDICATOR },
-          orderBy: { version: "desc" },
-          select: { version: true },
-        });
-        const version = (latest?.version ?? 0) + 1;
+      const latest = await tx.indicatorPublication.findFirst({
+        where: { module: MODULE, indicator: INDICATOR },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      const version = (latest?.version ?? 0) + 1;
 
-        await tx.indicatorPublication.updateMany({
-          where: { module: MODULE, indicator: INDICATOR, active: true },
-          data: { active: false },
-        });
+      await tx.indicatorPublication.updateMany({
+        where: { module: MODULE, indicator: INDICATOR, active: true },
+        data: { active: false },
+      });
 
-        return tx.indicatorPublication.create({
-          data: {
-            module: MODULE,
-            indicator: INDICATOR,
-            version,
-            target: payload.meta,
-            result: payload.resultado,
-            status,
-            payload: toJsonValue(payload),
-            active: true,
-            publishedById: user.id,
-          },
-          include: {
-            publishedBy: { select: { id: true, name: true, email: true } },
-          },
-        });
-      },
-    );
+      return tx.indicatorPublication.create({
+        data: {
+          module: MODULE,
+          indicator: INDICATOR,
+          version,
+          target: payload.meta,
+          result: payload.resultado,
+          status,
+          payload: toJsonValue(payload),
+          active: true,
+          publishedById: user.id,
+        },
+        include: {
+          publishedBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+    });
 
     await recordAudit({
       userId: user.id,
@@ -183,8 +181,7 @@ export async function POST(req: NextRequest) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json(
         {
-          error:
-            "A tabela de publicações ainda não foi criada. Execute pnpm db:upgrade:rdo.",
+          error: "A tabela de publicações ainda não foi criada. Execute pnpm db:upgrade:rdo.",
         },
         { status: 503 },
       );

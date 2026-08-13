@@ -1,5 +1,7 @@
 /** Tipos do módulo RNC (Registro de Não Conformidade). */
 
+import type { PeriodRange } from "@/lib/period";
+
 export interface RncNormalizedRecord {
   statusRnc: string;
   unidade: string;
@@ -29,6 +31,14 @@ export interface RncUnitAggregate {
   criadas: number;
   tratadas: number;
   aderencia: number;
+  /** Média apenas das RNCs solucionadas com tempo de tratativa numérico. */
+  diasMedios: number | null;
+  /** Mediana da mesma amostra usada em diasMedios. */
+  diasMedianos: number | null;
+  tratativasComTempo: number;
+  maiorTempoTratativa: number | null;
+  principalOfensor: string | null;
+  principalOfensorCount: number;
   excluded: boolean;
 }
 
@@ -43,6 +53,7 @@ export interface RncOfensorAggregate {
 export interface RncResult {
   metaDias: number;
   excludedUnits: string[];
+  period: PeriodRange | null;
   totalCriadas: number;
   totalTratadas: number;
   aderenciaTotal: number;

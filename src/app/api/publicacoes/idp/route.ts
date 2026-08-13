@@ -6,6 +6,7 @@ import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp
 import { toIdpPublishedPayload } from "@/features/idp/publications";
 import { storedIdpRowToRecord } from "@/features/idp/services";
 import { IDP_DEFAULT_TARGET } from "@/features/idp/types";
+import { enumeratePeriodMonths, normalizePeriodRange } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -20,6 +21,8 @@ const publishSchema = z.object({
   month: z.number().int().min(1).max(12),
   historyStart: z.number().int().min(1).max(12),
   historyEnd: z.number().int().min(1).max(12),
+  historyStartYear: z.number().int().min(2000).max(2200).optional(),
+  historyEndYear: z.number().int().min(2000).max(2200).optional(),
   threshold: z
     .number()
     .min(0)
@@ -69,13 +72,25 @@ export async function POST(req: NextRequest) {
     const user = await requirePermission("indicators:publish");
     const input = publishSchema.parse(await req.json());
     const thresholdFraction = input.threshold / 100;
-    const historyStart = Math.min(input.historyStart, input.historyEnd);
-    const historyEnd = Math.max(input.historyStart, input.historyEnd);
+    const historyRange = normalizePeriodRange({
+      startYear: input.historyStartYear ?? input.year,
+      startMonth: input.historyStart,
+      endYear: input.historyEndYear ?? input.year,
+      endMonth: input.historyEnd,
+    });
+    const referenceYears = Array.from(
+      new Set([...enumeratePeriodMonths(historyRange).map((item) => item.year), input.year]),
+    );
 
     const [rows, excludedDisciplines, excludedUnits] = await Promise.all([
       prisma.idpRsoRecord.findMany({
-        where: { referenceYear: input.year },
-        orderBy: [{ referenceMonth: "asc" }, { unit: "asc" }, { rsoNumero: "asc" }],
+        where: { referenceYear: { in: referenceYears } },
+        orderBy: [
+          { referenceYear: "asc" },
+          { referenceMonth: "asc" },
+          { unit: "asc" },
+          { rsoNumero: "asc" },
+        ],
       }),
       loadIdpExcludedDisciplines(prisma),
       loadIdpExcludedUnits(prisma),
@@ -83,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     if (!rows.length) {
       return NextResponse.json(
-        { error: "Não há RSOs no ano selecionado para publicar." },
+        { error: "Não há RSOs no período selecionado para publicar." },
         { status: 400 },
       );
     }
@@ -96,8 +111,10 @@ export async function POST(req: NextRequest) {
       {
         selectedYear: input.year,
         selectedMonth: input.month,
-        historyMonthStart: historyStart,
-        historyMonthEnd: historyEnd,
+        historyStartYear: historyRange.startYear,
+        historyMonthStart: historyRange.startMonth,
+        historyEndYear: historyRange.endYear,
+        historyMonthEnd: historyRange.endMonth,
       },
       excludedUnits,
     );

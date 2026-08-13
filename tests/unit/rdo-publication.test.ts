@@ -5,6 +5,7 @@ import type { RdoResult } from "@/features/rdo/types";
 const result: RdoResult = {
   threshold: 0.8,
   excludedUnits: [],
+  period: null,
   totalEmitidos: 10,
   totalAprovados: 8,
   totalRevisar: 1,

@@ -13,11 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
-import type {
-  GeneralPanelData,
-  GeneralPanelIndicator,
-} from "@/features/scorecard/publications";
-import { SCORECARD_PERIOD_MONTHS } from "@/features/scorecard/types";
+import type { GeneralPanelData, GeneralPanelIndicator } from "@/features/scorecard/publications";
 
 const BLUE = "#304F7E";
 
@@ -31,14 +27,8 @@ const BLUE = "#304F7E";
 // normal ≥15, contraste ≥3:1 — todos OK nesta ordem).
 const MONTH_COLORS = ["#0074ca", "#c37a00", "#008f7b", "#c53732", "#7a4db5", "#48871e"];
 
-function monthColorIndex(monthKey: string): number {
-  const month = Number(monthKey.split("-")[1]);
-  const index = SCORECARD_PERIOD_MONTHS.indexOf(month as (typeof SCORECARD_PERIOD_MONTHS)[number]);
-  return index >= 0 ? index : 0;
-}
-
-function monthColor(monthKey: string): string {
-  return MONTH_COLORS[monthColorIndex(monthKey)] ?? MONTH_COLORS[0] ?? BLUE;
+function monthColor(index: number): string {
+  return MONTH_COLORS[index % MONTH_COLORS.length] ?? BLUE;
 }
 
 // Legenda própria em vez do <Legend> automático do Recharts: para BarChart,
@@ -51,7 +41,7 @@ function MonthLegend({ monthKeys, monthLabels }: { monthKeys: string[]; monthLab
     <ul className="month-legend">
       {monthKeys.map((key, index) => (
         <li key={key}>
-          <span className="month-legend-swatch" style={{ background: monthColor(key) }} />
+          <span className="month-legend-swatch" style={{ background: monthColor(index) }} />
           {monthLabels[index]}
         </li>
       ))}
@@ -81,10 +71,7 @@ function unitSuffix(indicator: Pick<GeneralPanelIndicator, "unit">): string {
   return indicator.unit;
 }
 
-function formatValue(
-  indicator: Pick<GeneralPanelIndicator, "unit">,
-  value: number | null,
-): string {
+function formatValue(indicator: Pick<GeneralPanelIndicator, "unit">, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
   if (indicator.unit === "dias") return `${value.toFixed(1)} dias`;
   if (indicator.unit === "%") return `${value.toFixed(1)}%`;
@@ -97,7 +84,20 @@ function formatMeta(indicator: GeneralPanelIndicator): string {
 }
 
 function Dot({ state }: { state: "G" | "A" | "R" | "X" }) {
-  return <span className={`dot ${state}`} aria-label={state === "G" ? "Dentro da meta" : state === "R" ? "Fora da meta" : state === "A" ? "Atenção" : "Sem dados"} />;
+  return (
+    <span
+      className={`dot ${state}`}
+      aria-label={
+        state === "G"
+          ? "Dentro da meta"
+          : state === "R"
+            ? "Fora da meta"
+            : state === "A"
+              ? "Atenção"
+              : "Sem dados"
+      }
+    />
+  );
 }
 
 function ResultBadge({ pass }: { pass: boolean | null }) {
@@ -122,7 +122,10 @@ function SummaryMetric({
   color?: string;
 }) {
   return (
-    <div className={`mc${state ? ` ${state}` : ""}`} style={color ? { borderLeftColor: color } : undefined}>
+    <div
+      className={`mc${state ? ` ${state}` : ""}`}
+      style={color ? { borderLeftColor: color } : undefined}
+    >
       <div className="ml">{label}</div>
       <div className={`mv${state ? ` ${state}` : ""}`} style={color ? { color } : undefined}>
         {value}
@@ -189,14 +192,21 @@ export function DashboardOverview() {
     return (
       <div className="painel-frontend">
         <div className="content" style={{ padding: "14px 0 0" }}>
-          <div className="empty"><p className="ps">Carregando Painel Geral…</p></div>
+          <div className="empty">
+            <p className="ps">Carregando Painel Geral…</p>
+          </div>
         </div>
       </div>
     );
   }
 
   if (error && !data) {
-    return <PublishedPanelPlaceholder title="Não foi possível carregar o Painel Geral" description={error} />;
+    return (
+      <PublishedPanelPlaceholder
+        title="Não foi possível carregar o Painel Geral"
+        description={error}
+      />
+    );
   }
 
   if (!data?.hasData) {
@@ -247,16 +257,28 @@ export function DashboardOverview() {
             (RDO, IDP, RNC, 5S, Taxa de Acidentes). */}
         <div className="card indicator-card">
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-            <div className="ph" style={{ margin: 0 }}>Resumo Executivo</div>
+            <div className="ph" style={{ margin: 0 }}>
+              Resumo Executivo
+            </div>
             <span style={{ fontSize: 11, color: "#999" }}>
               Referência: {formatDate(data.referenceDate)}
+              {data.monthLabels.length ? (
+                <>
+                  {" "}
+                  · Período: {data.monthLabels[0]}
+                  {data.monthLabels.length > 1
+                    ? ` – ${data.monthLabels[data.monthLabels.length - 1]}`
+                    : ""}
+                </>
+              ) : null}
             </span>
           </div>
 
           <div className="indicator-subcard" style={{ marginTop: 14, marginBottom: 14 }}>
             <div className="ct">Resultado geral do PPR Obras</div>
             <p className="ps" style={{ margin: "-6px 0 12px" }}>
-              Leitura consolidada dos indicadores e pesos mensais. Dados administrativos não publicados não entram neste quadro.
+              Leitura consolidada dos indicadores e pesos mensais. Dados administrativos não
+              publicados não entram neste quadro.
             </p>
             <div style={{ overflowX: "auto" }}>
               <table className="dt" style={{ minWidth: 700 }}>
@@ -266,7 +288,9 @@ export function DashboardOverview() {
                     <th>Meta</th>
                     <th>Peso</th>
                     {data.monthLabels.map((label) => (
-                      <th key={label} style={{ textAlign: "center" }}>{label}</th>
+                      <th key={label} style={{ textAlign: "center" }}>
+                        {label}
+                      </th>
                     ))}
                     <th>Parcial</th>
                     <th>Consolidado</th>
@@ -284,7 +308,9 @@ export function DashboardOverview() {
                         </td>
                       ))}
                       <td>{formatValue(indicator, indicator.partial)}</td>
-                      <td><ResultBadge pass={indicator.partialPass} /></td>
+                      <td>
+                        <ResultBadge pass={indicator.partialPass} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -300,23 +326,11 @@ export function DashboardOverview() {
                 Faixas de leitura do atendimento consolidado.
               </p>
 
-              <LegendRow
-                dot={<Dot state="G" />}
-                title="≥ 95%"
-                subtitle="Valor atendido"
-              />
+              <LegendRow dot={<Dot state="G" />} title="≥ 95%" subtitle="Valor atendido" />
 
-              <LegendRow
-                dot={<Dot state="A" />}
-                title="70% a 94,99%"
-                subtitle="Atenção"
-              />
+              <LegendRow dot={<Dot state="A" />} title="70% a 94,99%" subtitle="Atenção" />
 
-              <LegendRow
-                dot={<Dot state="R" />}
-                title="< 70%"
-                subtitle="Fora da meta"
-              />
+              <LegendRow dot={<Dot state="R" />} title="< 70%" subtitle="Fora da meta" />
             </div>
 
             <div className="indicator-subcard">
@@ -361,90 +375,87 @@ export function DashboardOverview() {
           <div className="indicator-subcard">
             <div className="ct">Desempenho mensal (% da meta atingida)</div>
             <p className="ps" style={{ margin: "-6px 0 12px" }}>
-              Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha tracejada
-              marca 100% da meta.
+              Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha
+              tracejada marca 100% da meta.
             </p>
 
             <div className="cw" style={{ height: 340, minWidth: 0 }}>
-            {data.monthLabels.length ? (
-              <ResponsiveContainer
-                width="100%"
-                height="100%"
-                minWidth={0}
-                debounce={100}
-              >
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 12, right: 20, bottom: 8, left: -4 }}
-                  barGap={3}
-                  maxBarSize={28}
-                >
-                  <CartesianGrid stroke="#f4f4f4" vertical={false} />
+              {data.monthLabels.length ? (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={100}>
+                  <BarChart
+                    data={chartData}
+                    margin={{ top: 12, right: 20, bottom: 8, left: -4 }}
+                    barGap={3}
+                    maxBarSize={28}
+                  >
+                    <CartesianGrid stroke="#f4f4f4" vertical={false} />
 
-                  <XAxis
-                    dataKey="indicador"
-                    tick={{
-                      fontFamily: "Montserrat",
-                      fontSize: 9,
-                    }}
-                  />
-
-                  <YAxis
-                    tick={{
-                      fontFamily: "Montserrat",
-                      fontSize: 10,
-                    }}
-                    tickFormatter={(value: unknown) => `${value}%`}
-                  />
-
-                  <ReferenceLine
-                    y={100}
-                    stroke="#9CA3AF"
-                    strokeDasharray="4 4"
-                    strokeWidth={1.5}
-                    label={{
-                      value: "Meta 100%",
-                      position: "insideTopRight",
-                      fill: "#6b7280",
-                      fontFamily: "Montserrat",
-                      fontSize: 9,
-                    }}
-                  />
-
-                  <Tooltip
-                    formatter={(value: unknown, name: unknown) => [
-                      value === null ? "—" : `${Number(value).toFixed(1)}% da meta`,
-                      String(name),
-                    ]}
-                    contentStyle={{
-                      fontFamily: "Montserrat",
-                      fontSize: 11,
-                      borderRadius: 8,
-                    }}
-                  />
-
-                  <Legend
-                    verticalAlign="bottom"
-                    content={<MonthLegend monthKeys={data.monthKeys} monthLabels={data.monthLabels} />}
-                  />
-
-                  {data.monthLabels.map((label, index) => (
-                    <Bar
-                      key={label}
-                      dataKey={`month_${index}`}
-                      name={label}
-                      fill={monthColor(data.monthKeys[index] ?? "")}
-                      radius={[4, 4, 0, 0]}
+                    <XAxis
+                      dataKey="indicador"
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 9,
+                      }}
                     />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty">
-                <p className="ps">Nenhuma série mensal publicada.</p>
-              </div>
-            )}
-          </div>
+
+                    <YAxis
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 10,
+                      }}
+                      tickFormatter={(value: unknown) => `${value}%`}
+                    />
+
+                    <ReferenceLine
+                      y={100}
+                      stroke="#9CA3AF"
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                      label={{
+                        value: "Meta 100%",
+                        position: "insideTopRight",
+                        fill: "#6b7280",
+                        fontFamily: "Montserrat",
+                        fontSize: 9,
+                      }}
+                    />
+
+                    <Tooltip
+                      formatter={(value: unknown, name: unknown) => [
+                        value === null ? "—" : `${Number(value).toFixed(1)}% da meta`,
+                        String(name),
+                      ]}
+                      contentStyle={{
+                        fontFamily: "Montserrat",
+                        fontSize: 11,
+                        borderRadius: 8,
+                      }}
+                    />
+
+                    <Legend
+                      verticalAlign="bottom"
+                      content={
+                        <MonthLegend monthKeys={data.monthKeys} monthLabels={data.monthLabels} />
+                      }
+                    />
+
+                    {data.monthLabels.map((label, index) => (
+                      <Bar
+                        key={label}
+                        dataKey={`month_${index}`}
+                        name={label}
+                        fill={monthColor(index)}
+                        radius={[4, 4, 0, 0]}
+                      />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="empty">
+                  <p className="ps">Nenhuma série mensal publicada.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -26,7 +26,8 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "db:upgrade:rdo": "prisma db execute --file prisma/manual/001_add_indicator_publications.sql --schema prisma/schema.prisma",
     "db:upgrade:accidents": "prisma db execute --file prisma/manual/004_accident_rate.sql --schema prisma/schema.prisma",
-    "db:upgrade:idp-rso": "prisma db execute --file prisma/manual/005_idp_rso_versions.sql --schema prisma/schema.prisma"
+    "db:upgrade:idp-rso": "prisma db execute --file prisma/manual/005_idp_rso_versions.sql --schema prisma/schema.prisma",
+    "db:upgrade:justifications": "prisma db execute --file prisma/manual/006_indicator_justifications.sql --schema prisma/schema.prisma"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

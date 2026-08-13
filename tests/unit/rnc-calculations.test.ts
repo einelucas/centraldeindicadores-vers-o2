@@ -6,10 +6,7 @@ function monthsWith(diasMedios: Array<number | null>) {
   return diasMedios.map((value) => ({ diasMedios: value }));
 }
 
-function recordsForMonth(
-  monthIndex: number,
-  tempoTratativas: number[],
-): RncNormalizedRecord[] {
+function recordsForMonth(monthIndex: number, tempoTratativas: number[]): RncNormalizedRecord[] {
   return tempoTratativas.map((tempoTratativa, index) =>
     rec({
       dataCriacao: new Date(2026, monthIndex, index + 1),
@@ -133,11 +130,48 @@ describe("RNC cálculos", () => {
   });
 });
 
+describe("RNC por unidade — evidências da análise", () => {
+  it("calcula média, mediana, maior prazo e ofensor dentro de cada unidade", () => {
+    const result = computeRncResult(
+      [
+        rec({
+          dataCriacao: new Date("2026-06-01"),
+          dataSolucao: new Date("2026-06-11"),
+          tempoTratativa: 10,
+          unidade: "X",
+          ofensor: "Fornecedor",
+        }),
+        rec({
+          dataCriacao: new Date("2026-06-02"),
+          dataSolucao: new Date("2026-07-02"),
+          tempoTratativa: 30,
+          unidade: "X",
+          ofensor: "Fornecedor",
+        }),
+        rec({
+          dataCriacao: new Date("2026-06-03"),
+          dataSolucao: new Date("2026-06-23"),
+          tempoTratativa: 20,
+          unidade: "X",
+          ofensor: "Execução",
+        }),
+      ],
+      15,
+    );
+
+    const unit = result.units.find((item) => item.name === "X")!;
+    expect(unit.diasMedios).toBe(20);
+    expect(unit.diasMedianos).toBe(20);
+    expect(unit.maiorTempoTratativa).toBe(30);
+    expect(unit.tratativasComTempo).toBe(3);
+    expect(unit.principalOfensor).toBe("Fornecedor");
+    expect(unit.principalOfensorCount).toBe(2);
+  });
+});
+
 describe("averageMonthlyRncDays — média simples dos resultados mensais", () => {
   it("caso 1 — Jun 28,5 e Jul 11,3 consolidam para 19,9", () => {
-    expect(
-      averageMonthlyRncDays(monthsWith([28.5, 11.3])),
-    ).toBeCloseTo(19.9, 10);
+    expect(averageMonthlyRncDays(monthsWith([28.5, 11.3]))).toBeCloseTo(19.9, 10);
   });
 
   it("caso 2 — mês sem resultado válido não entra na soma nem no denominador", () => {
@@ -164,10 +198,7 @@ describe("averageMonthlyRncDays — média simples dos resultados mensais", () =
 
   it("valida o cenário oficial: 14 RNCs a 28,5 dias em Jun e 10 RNCs a 11,3 dias em Jul", () => {
     const result = computeRncResult(
-      [
-        ...recordsForMonth(5, Array(14).fill(28.5)),
-        ...recordsForMonth(6, Array(10).fill(11.3)),
-      ],
+      [...recordsForMonth(5, Array(14).fill(28.5)), ...recordsForMonth(6, Array(10).fill(11.3))],
       15,
     );
     expect(result.resultadoDias).toBeCloseTo(19.9, 10);

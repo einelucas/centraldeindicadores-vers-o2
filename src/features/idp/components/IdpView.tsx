@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,9 +41,11 @@ import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { normalizedUnitKey } from "@/features/idp/calculations";
+import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { parseIdpFile } from "@/features/idp/importers";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
+import { normalizePeriodRange, toMonthIndex, type PeriodRange } from "@/lib/period";
 
 interface DocumentRow {
   id: string;
@@ -79,7 +82,9 @@ interface ApiResponse {
   years: number[];
   selectedYear: number;
   selectedMonth: number;
+  historyStartYear: number;
   historyMonthStart: number;
+  historyEndYear: number;
   historyMonthEnd: number;
   excludedDisciplines: string[];
   result: IdpDetailedResult;
@@ -136,6 +141,20 @@ function competenceLabel(year: number, month: number): string {
   return `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`;
 }
 
+/** Expande o intervalo do gráfico para incluir uma competência recém-importada, se necessário. */
+function expandRangeToInclude(range: PeriodRange, year: number, month: number): PeriodRange {
+  const idx = toMonthIndex(year, month);
+  const startIdx = toMonthIndex(range.startYear, range.startMonth);
+  const endIdx = toMonthIndex(range.endYear, range.endMonth);
+  if (idx >= startIdx && idx <= endIdx) return range;
+  return normalizePeriodRange({
+    startYear: idx < startIdx ? year : range.startYear,
+    startMonth: idx < startIdx ? month : range.startMonth,
+    endYear: idx > endIdx ? year : range.endYear,
+    endMonth: idx > endIdx ? month : range.endMonth,
+  });
+}
+
 function shortDate(value: string | null): string {
   if (!value) return "—";
   const [year, month, day] = value.split("-");
@@ -173,8 +192,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [threshold, setThreshold] = useState(90);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [historyMonthStart, setHistoryMonthStart] = useState(1);
-  const [historyMonthEnd, setHistoryMonthEnd] = useState(12);
+  const [historyRange, setHistoryRange] = useState<PeriodRange>(() => ({
+    startYear: new Date().getFullYear(),
+    startMonth: 1,
+    endYear: new Date().getFullYear(),
+    endMonth: 12,
+  }));
   const [selectedUnit, setSelectedUnit] = useState("");
   const [excludedDisciplinesDraft, setExcludedDisciplinesDraft] = useState("");
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
@@ -193,8 +216,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     filters?: Partial<{
       year: number;
       month: number;
-      historyStart: number;
-      historyEnd: number;
+      history: PeriodRange;
       threshold: number;
     }>,
     useCurrentSelection = true,
@@ -203,14 +225,16 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     const params = new URLSearchParams();
     const year = filters?.year ?? (useCurrentSelection ? selectedYear : undefined);
     const month = filters?.month ?? (useCurrentSelection ? selectedMonth : undefined);
-    const historyStart =
-      filters?.historyStart ?? (useCurrentSelection ? historyMonthStart : undefined);
-    const historyEnd = filters?.historyEnd ?? (useCurrentSelection ? historyMonthEnd : undefined);
+    const history = filters?.history ?? (useCurrentSelection ? historyRange : undefined);
     const target = filters?.threshold ?? (useCurrentSelection ? threshold : undefined);
     if (year !== undefined) params.set("year", String(year));
     if (month !== undefined) params.set("month", String(month));
-    if (historyStart !== undefined) params.set("historyStart", String(historyStart));
-    if (historyEnd !== undefined) params.set("historyEnd", String(historyEnd));
+    if (history !== undefined) {
+      params.set("historyStart", String(history.startMonth));
+      params.set("historyEnd", String(history.endMonth));
+      params.set("historyStartYear", String(history.startYear));
+      params.set("historyEndYear", String(history.endYear));
+    }
     if (target !== undefined) params.set("threshold", String(target));
     const suffix = params.toString();
     const response = await fetch(`/api/idp${suffix ? `?${suffix}` : ""}`, { cache: "no-store" });
@@ -219,8 +243,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     setData(body);
     setSelectedYear(body.selectedYear);
     setSelectedMonth(body.selectedMonth);
-    setHistoryMonthStart(body.historyMonthStart);
-    setHistoryMonthEnd(body.historyMonthEnd);
+    setHistoryRange({
+      startYear: body.historyStartYear,
+      startMonth: body.historyMonthStart,
+      endYear: body.historyEndYear,
+      endMonth: body.historyMonthEnd,
+    });
     setThreshold(body.threshold * 100);
     setExcludedDisciplinesDraft(body.excludedDisciplines.join("\n"));
     setExcludedUnits(body.result.excludedUnits);
@@ -406,8 +434,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         await load({
           year: importedCompetence.year,
           month: importedCompetence.month,
-          historyStart: Math.min(historyMonthStart, importedCompetence.month),
-          historyEnd: Math.max(historyMonthEnd, importedCompetence.month),
+          history: expandRangeToInclude(
+            historyRange,
+            importedCompetence.year,
+            importedCompetence.month,
+          ),
           threshold,
         });
       } else {
@@ -431,8 +462,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         body: JSON.stringify({
           year: selectedYear,
           month: selectedMonth,
-          historyStart: historyMonthStart,
-          historyEnd: historyMonthEnd,
+          historyStart: historyRange.startMonth,
+          historyEnd: historyRange.endMonth,
+          historyStartYear: historyRange.startYear,
+          historyEndYear: historyRange.endYear,
           threshold,
         }),
       });
@@ -880,33 +913,14 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                 no gráfico de tendência do Painel publicado. &ldquo;Meta&rdquo; define a aderência
                 mínima para marcar &ldquo;Dentro da meta&rdquo; aqui e no Painel.
               </p>
-              <div className="mt-3 grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Gráfico — de</Label>
-                  <Select
-                    value={historyMonthStart}
-                    onChange={(event) => setHistoryMonthStart(Number(event.target.value))}
-                  >
-                    {MONTH_NAMES_FULL.map((month, index) => (
-                      <option key={month} value={index + 1}>
-                        {month}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Gráfico — até</Label>
-                  <Select
-                    value={historyMonthEnd}
-                    onChange={(event) => setHistoryMonthEnd(Number(event.target.value))}
-                  >
-                    {MONTH_NAMES_FULL.map((month, index) => (
-                      <option key={month} value={index + 1}>
-                        {month}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <PeriodRangeFilter
+                  value={historyRange}
+                  onChange={(next) => next && setHistoryRange(next)}
+                  yearsInData={data?.years ?? []}
+                  showQuickActions={false}
+                  label="Intervalo do gráfico"
+                />
                 <div className="flex flex-col gap-1.5">
                   <Label>Meta (%)</Label>
                   <Input
@@ -915,14 +929,15 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                     max={200}
                     value={threshold}
                     onChange={(event) => setThreshold(Number(event.target.value))}
+                    className="w-24"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -931,8 +946,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   void load({
                     year: selectedYear,
                     month: selectedMonth,
-                    historyStart: historyMonthStart,
-                    historyEnd: historyMonthEnd,
+                    history: historyRange,
                     threshold,
                   })
                 }
@@ -940,6 +954,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                 <RotateCw className="size-3.5" />
                 Recalcular
               </Button>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {result?.activeDocuments ? (
                 <Button variant="outline" size="sm" onClick={() => exportIdpPdf(result)}>
                   <Download className="size-3.5" />
@@ -966,17 +982,26 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   </Badge>
                 ) : null}
               </Button>
+              <IndicatorAnalysisDialog
+                module="idp"
+                moduleLabel="IDP — Cronograma"
+                target={threshold}
+                years={data?.years ?? []}
+                defaultYear={selectedYear}
+                defaultMonth={selectedMonth}
+              />
+              {canPublish ? (
+                <Button
+                  variant="success"
+                  size="sm"
+                  disabled={busy || !result?.activeDocuments}
+                  onClick={() => void publish()}
+                >
+                  <Send className="size-3.5" />
+                  Publicar
+                </Button>
+              ) : null}
             </div>
-            {canPublish ? (
-              <Button
-                variant="success"
-                disabled={busy || !result?.activeDocuments}
-                onClick={() => void publish()}
-              >
-                <Send className="size-3.5" />
-                Publicar
-              </Button>
-            ) : null}
           </div>
           {publication ? (
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">

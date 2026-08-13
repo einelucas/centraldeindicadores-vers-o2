@@ -1,5 +1,7 @@
 /** Tipos do módulo RDO (Relatório Diário de Obra). */
 
+import type { PeriodRange } from "@/lib/period";
+
 /** Registro RDO normalizado, pronto para chave/hash e persistência. */
 export interface RdoNormalizedRecord {
   dataReferencia: Date;
@@ -37,6 +39,7 @@ export interface RdoMonthAggregate {
 export interface RdoResult {
   threshold: number;
   excludedUnits: string[];
+  period: PeriodRange | null;
   totalEmitidos: number;
   totalAprovados: number;
   totalRevisar: number;

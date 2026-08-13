@@ -22,6 +22,7 @@ import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPla
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/publications";
+import { formatPeriodRangeLabel } from "@/lib/period";
 import {
   compareAccidentUnits,
   normalizeAccidentUnitCode,
@@ -210,7 +211,9 @@ export function AccidentRatePublishedPanel() {
       {exportButton}
       {exportError ? (
         <div className="content" style={{ padding: "8px 0 0" }}>
-          <p className="ps" style={{ color: RED }}>{exportError}</p>
+          <p className="ps" style={{ color: RED }}>
+            {exportError}
+          </p>
         </div>
       ) : null}
 
@@ -281,6 +284,7 @@ export function AccidentRatePublishedPanel() {
               — quanto menor, melhor — versão {publication.version}, publicada por{" "}
               {publication.publishedBy.name} em{" "}
               {new Date(publication.publishedAt).toLocaleString("pt-BR")}
+              {data.periodo ? ` · Período: ${formatPeriodRangeLabel(data.periodo)}` : ""}
             </span>
           </div>
 
@@ -290,7 +294,10 @@ export function AccidentRatePublishedPanel() {
 
               <div className="cw" style={{ height: 160 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.mensal} margin={{ top: 24, right: 45, bottom: 12, left: 0 }}>
+                  <LineChart
+                    data={data.mensal}
+                    margin={{ top: 24, right: 45, bottom: 12, left: 0 }}
+                  >
                     <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
 
                     <XAxis

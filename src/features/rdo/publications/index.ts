@@ -1,4 +1,5 @@
 import { RDO_SCORECARD_POINTS, RDO_SCORECARD_WEIGHT, type RdoResult } from "@/features/rdo/types";
+import type { PeriodRange } from "@/lib/period";
 
 export interface RdoPublishedUnit {
   n: string;
@@ -19,6 +20,8 @@ export interface RdoPublishedPayload {
   emitidos: number;
   emRevisaoPct: number;
   preenchendoPct: number;
+  /** Intervalo de período usado no cálculo publicado; `null` = sem restrição. */
+  periodo?: PeriodRange | null;
   unidades: RdoPublishedUnit[];
   mensal: RdoPublishedMonth[];
 }
@@ -50,6 +53,7 @@ export function toRdoPublishedPayload(
     emitidos: result.totalEmitidos,
     emRevisaoPct: roundPercent((result.totalRevisar / result.totalEmitidos) * 100),
     preenchendoPct: roundPercent((result.totalPreenchendo / result.totalEmitidos) * 100),
+    periodo: result.period,
     unidades: result.units
       .filter((unit) => unit.emitidos > 0 && !unit.excluded)
       .map((unit) => ({

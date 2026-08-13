@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,8 +39,10 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRncFiles } from "@/features/rnc/importers";
 import { exportRncPdf } from "@/features/rnc/exports/pdf";
+import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import {
   RNC_DEFAULT_MAX_DIAS,
   type RncNormalizedRecord,
@@ -117,15 +120,25 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(
-    async (meta = metaDias) => {
+    async (meta = metaDias, nextPeriod = periodRange) => {
       setError(null);
-      const response = await fetch(`/api/rnc?meta=${encodeURIComponent(meta)}`, {
+      const params = new URLSearchParams({
+        meta: String(meta),
+        ...Object.fromEntries(
+          Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+      });
+      const response = await fetch(`/api/rnc?${params.toString()}`, {
         cache: "no-store",
       });
       if (!response.ok) {
@@ -140,7 +153,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
         return keys.includes(current) ? current : (keys.at(-1) ?? "");
       });
     },
-    [metaDias],
+    [metaDias, periodRange],
   );
 
   async function loadPublication() {
@@ -331,7 +344,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
       const response = await fetch("/api/publicacoes/rnc", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metaDias }),
+        body: JSON.stringify({ metaDias, ...periodToOptionalFields(periodRange) }),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o RNC.");
@@ -561,86 +574,131 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {result && data && data.total > 0 ? (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="rncMonthSelect">Mês</Label>
-                <Select
-                  id="rncMonthSelect"
-                  value={selectedMonth}
-                  onChange={(event) => setSelectedMonth(event.target.value)}
-                  className="w-40"
-                >
-                  {result.months.map((month) => (
-                    <option
-                      key={monthKey(month.year, month.month)}
-                      value={monthKey(month.year, month.month)}
+          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
+                <Label>Filtros</Label>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="rncMonthSelect">Mês</Label>
+                    <Select
+                      id="rncMonthSelect"
+                      value={selectedMonth}
+                      onChange={(event) => setSelectedMonth(event.target.value)}
+                      className="w-40"
                     >
-                      {month.label}
-                    </option>
-                  ))}
-                </Select>
+                      {result.months.map((month) => (
+                        <option
+                          key={monthKey(month.year, month.month)}
+                          value={monthKey(month.year, month.month)}
+                        >
+                          {month.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="rncMeta">Meta (dias, ≤)</Label>
+                    <Input
+                      id="rncMeta"
+                      type="number"
+                      min={0}
+                      value={metaDias}
+                      onChange={(event) => setMetaDias(Number(event.target.value))}
+                      className="w-24"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="rncMeta">Meta (dias, ≤)</Label>
-                <Input
-                  id="rncMeta"
-                  type="number"
-                  min={0}
-                  value={metaDias}
-                  onChange={(event) => setMetaDias(Number(event.target.value))}
-                  className="w-24"
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
+                <Label>Período</Label>
+                <PeriodRangeFilter
+                  value={periodRange}
+                  onChange={setPeriodRange}
+                  yearsInData={availableYears}
+                  label=""
                 />
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => void load(metaDias).catch((err: Error) => setError(err.message))}
-              >
-                <RotateCw className="size-3.5" />
-                Recalcular
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => exportRncPdf(result)}
-              >
-                <Download className="size-3.5" />
-                Baixar PDF
-              </Button>
-              {canClear ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void clearAll()}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar tudo
-                </Button>
-              ) : null}
-              <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
-                <Ban className="size-3.5" />
-                Ignorar unidades
-                {excludedUnits.length ? (
-                  <Badge variant="outline" className="ml-0.5">
-                    {excludedUnits.length}
-                  </Badge>
-                ) : null}
-              </Button>
-            </div>
-            {canPublish ? (
-              <Button
-                variant="success"
-                disabled={busy || result.resultadoDias === null}
-                onClick={() => void publish()}
-              >
-                <Send className="size-3.5" />
-                Publicar no Painel
-              </Button>
-            ) : null}
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
+                <Label>Ações</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => void load(metaDias).catch((err: Error) => setError(err.message))}
+                  >
+                    <RotateCw className="size-3.5" />
+                    Recalcular
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setUnitDialogOpen(true)}
+                  >
+                    <Ban className="size-3.5" />
+                    Ignorar unidades
+                    {excludedUnits.length ? (
+                      <Badge variant="outline" className="ml-0.5">
+                        {excludedUnits.length}
+                      </Badge>
+                    ) : null}
+                  </Button>
+                  <IndicatorAnalysisDialog
+                    module="rnc"
+                    moduleLabel="RNC"
+                    target={metaDias}
+                    years={availableYears}
+                    defaultYear={selected?.year}
+                    defaultMonth={selected ? selected.month + 1 : undefined}
+                    triggerClassName="w-full"
+                    targetUnit="absolute"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => exportRncPdf(result)}
+                  >
+                    <Download className="size-3.5" />
+                    Baixar PDF
+                  </Button>
+                  {canClear ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      disabled={busy}
+                      onClick={() => void clearAll()}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Limpar tudo
+                    </Button>
+                  ) : null}
+                  {canPublish ? (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      className="w-full"
+                      disabled={busy || result.resultadoDias === null}
+                      onClick={() => void publish()}
+                    >
+                      <Send className="size-3.5" />
+                      Publicar no Painel
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
           </div>
 
           {publication ? (

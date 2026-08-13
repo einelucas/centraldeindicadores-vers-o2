@@ -5,6 +5,7 @@ import { computeRdoResult } from "@/features/rdo/calculations";
 import { toRdoPublishedPayload } from "@/features/rdo/publications";
 import { loadRdoConfiguration } from "@/features/rdo/services";
 import type { RdoNormalizedRecord } from "@/features/rdo/types";
+import { periodFromOptionalFields } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -20,6 +21,10 @@ function isMissingPublicationTable(error: unknown): boolean {
 
 const publishSchema = z.object({
   threshold: z.number().min(0).max(100).default(76),
+  periodStartYear: z.number().int().min(2000).max(2200).optional(),
+  periodStartMonth: z.number().int().min(1).max(12).optional(),
+  periodEndYear: z.number().int().min(2000).max(2200).optional(),
+  periodEndMonth: z.number().int().min(1).max(12).optional(),
 });
 
 function serializePublication(publication: {
@@ -102,7 +107,13 @@ export async function POST(req: NextRequest) {
     }));
 
     const configuration = await prisma.$transaction((tx) => loadRdoConfiguration(tx));
-    const result = computeRdoResult(records, thresholdFraction, configuration.excludedUnits);
+    const period = periodFromOptionalFields(input);
+    const result = computeRdoResult(
+      records,
+      thresholdFraction,
+      configuration.excludedUnits,
+      period,
+    );
 
     if (result.totalEmitidos <= 0) {
       return NextResponse.json(

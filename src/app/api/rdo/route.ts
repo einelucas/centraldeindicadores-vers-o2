@@ -9,6 +9,7 @@ import {
   recalcRdoIndicators,
 } from "@/features/rdo/services";
 import { RDO_DEFAULT_TARGET, type RdoNormalizedRecord } from "@/features/rdo/types";
+import { parsePeriodRangeParams } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
     const threshold = Number.isFinite(parsedThreshold)
       ? Math.min(1, Math.max(0, parsedThreshold))
       : RDO_DEFAULT_TARGET;
+    const period = parsePeriodRangeParams(searchParams);
 
     const where: Prisma.RdoRecordWhereInput = {};
     if (unidade) where.empresaNome = unidade;
@@ -116,7 +118,7 @@ export async function GET(req: NextRequest) {
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
 
-    const result = computeRdoResult(records, threshold, configuration.excludedUnits);
+    const result = computeRdoResult(records, threshold, configuration.excludedUnits, period);
 
     const unidades = Array.from(
       new Set(allForOptions.map((row) => row.empresaNome).filter(Boolean)),

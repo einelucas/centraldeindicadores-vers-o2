@@ -1,5 +1,7 @@
 /** Tipos e constantes do módulo Taxa de Acidentes. */
 
+import type { PeriodRange } from "@/lib/period";
+
 export const ACCIDENT_RATE_DEFAULT_TARGET = 7.5;
 export const ACCIDENT_RATE_SCORECARD_WEIGHT = 0.2;
 export const ACCIDENT_RATE_SCORECARD_POINTS = 2_316.4;
@@ -41,6 +43,7 @@ export interface AccidentUnitResult extends AccidentUnitRecord {
 export interface AccidentRateResult {
   target: number;
   excludedUnits: string[];
+  period: PeriodRange | null;
   result: number | null;
   totalCaf: number;
   totalUnitCaf: number;

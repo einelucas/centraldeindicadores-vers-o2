@@ -12,6 +12,7 @@
  */
 
 import { MONTH_NAMES } from "@/lib/dates";
+import { isWithinPeriodRange, type PeriodRange } from "@/lib/period";
 import {
   RNC_DEFAULT_MAX_DIAS,
   RNC_STATUS_TRATADA,
@@ -42,10 +43,19 @@ export function averageMonthlyRncDays(
   return validDays.reduce((sum, value) => sum + value, 0) / validDays.length;
 }
 
+function median(values: readonly number[]): number | null {
+  if (!values.length) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(ordered.length / 2);
+  if (ordered.length % 2) return ordered[middle] ?? null;
+  return ((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2;
+}
+
 export function computeRncResult(
   records: readonly RncNormalizedRecord[],
   metaDias: number = RNC_DEFAULT_MAX_DIAS,
   excludedUnits: readonly string[] = [],
+  period: PeriodRange | null = null,
 ): RncResult {
   const excludedNormalized = Array.from(
     new Set(excludedUnits.map(normalizeRncUnitCode).filter(Boolean)),
@@ -63,7 +73,15 @@ export function computeRncResult(
       m: number;
     }
   >();
-  const byUnit = new Map<string, { criadas: number; tratadas: number }>();
+  const byUnit = new Map<
+    string,
+    {
+      criadas: number;
+      tratadas: number;
+      temposTratativa: number[];
+      ofensores: Map<string, number>;
+    }
+  >();
   const byOfensor = new Map<string, number>();
 
   let totalCriadas = 0;
@@ -71,6 +89,18 @@ export function computeRncResult(
 
   for (const record of records) {
     if (!record.dataCriacao || isNaN(record.dataCriacao.getTime())) continue;
+    // Corte estrutural: fora do período selecionado, o registro nem entra
+    // em nenhuma tabela. Sem período definido, nada é restringido.
+    if (
+      period &&
+      !isWithinPeriodRange(
+        record.dataCriacao.getFullYear(),
+        record.dataCriacao.getMonth() + 1,
+        period,
+      )
+    ) {
+      continue;
+    }
 
     const status = String(record.statusRnc ?? "")
       .trim()
@@ -81,9 +111,23 @@ export function computeRncResult(
 
     // A tabela por unidade continua mostrando todas, inclusive as ignoradas.
     if (unidade) {
-      const unit = byUnit.get(unidade) ?? { criadas: 0, tratadas: 0 };
+      const unit = byUnit.get(unidade) ?? {
+        criadas: 0,
+        tratadas: 0,
+        temposTratativa: [],
+        ofensores: new Map<string, number>(),
+      };
       unit.criadas++;
       if (status === RNC_STATUS_TRATADA) unit.tratadas++;
+      unit.ofensores.set(ofensor, (unit.ofensores.get(ofensor) ?? 0) + 1);
+      if (
+        record.dataSolucao &&
+        !isNaN(record.dataSolucao.getTime()) &&
+        record.tempoTratativa !== null &&
+        Number.isFinite(record.tempoTratativa)
+      ) {
+        unit.temposTratativa.push(record.tempoTratativa);
+      }
       byUnit.set(unidade, unit);
     }
 
@@ -133,13 +177,25 @@ export function computeRncResult(
 
   const units: RncUnitAggregate[] = Array.from(byUnit.entries())
     .sort((a, b) => b[1].criadas - a[1].criadas)
-    .map(([name, data]) => ({
-      name,
-      criadas: data.criadas,
-      tratadas: data.tratadas,
-      aderencia: data.criadas ? data.tratadas / data.criadas : 0,
-      excluded: excludeSet.has(name),
-    }));
+    .map(([name, data]) => {
+      const principalOfensor = Array.from(data.ofensores.entries()).sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "pt-BR"),
+      )[0];
+      const tratativaSum = data.temposTratativa.reduce((sum, value) => sum + value, 0);
+      return {
+        name,
+        criadas: data.criadas,
+        tratadas: data.tratadas,
+        aderencia: data.criadas ? data.tratadas / data.criadas : 0,
+        diasMedios: data.temposTratativa.length ? tratativaSum / data.temposTratativa.length : null,
+        diasMedianos: median(data.temposTratativa),
+        tratativasComTempo: data.temposTratativa.length,
+        maiorTempoTratativa: data.temposTratativa.length ? Math.max(...data.temposTratativa) : null,
+        principalOfensor: principalOfensor?.[0] ?? null,
+        principalOfensorCount: principalOfensor?.[1] ?? 0,
+        excluded: excludeSet.has(name),
+      };
+    });
 
   const totalOfensor = Array.from(byOfensor.values()).reduce((sum, value) => sum + value, 0);
   const ofensores: RncOfensorAggregate[] = Array.from(byOfensor.entries())
@@ -155,6 +211,7 @@ export function computeRncResult(
   return {
     metaDias,
     excludedUnits: excludedNormalized,
+    period,
     totalCriadas,
     totalTratadas,
     aderenciaTotal: totalCriadas ? totalTratadas / totalCriadas : 0,

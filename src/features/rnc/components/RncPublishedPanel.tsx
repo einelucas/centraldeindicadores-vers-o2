@@ -20,6 +20,7 @@ import {
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import type { RncPublishedPayload } from "@/features/rnc/publications";
+import { formatPeriodRangeLabel } from "@/lib/period";
 
 interface PublicationResponse {
   publication: null | {
@@ -193,6 +194,7 @@ export function RncPublishedPanel() {
             <span style={{ color: "#bbb" }}>
               — quanto menor, melhor — publicado em {formatPublishedAt(publication.publishedAt)} por{" "}
               {publication.publishedBy.name}
+              {data.periodo ? ` · Período: ${formatPeriodRangeLabel(data.periodo)}` : ""}
             </span>
           </div>
           <p className="ps" style={{ margin: "-4px 0 12px" }}>

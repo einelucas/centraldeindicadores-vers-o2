@@ -14,6 +14,7 @@ import {
   normalizeExcludedUnits,
   recalcFiveSIndicators,
 } from "@/features/cinco-s/services";
+import { parsePeriodRangeParams } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
@@ -60,9 +61,10 @@ async function readSettings(): Promise<{
 }
 
 /** GET /api/cinco-s — calcula exclusivamente com os registros persistidos. */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
+    const period = parsePeriodRangeParams(req.nextUrl.searchParams);
     const [rows, settings, lastImport] = await Promise.all([
       prisma.fiveSRecord.findMany({
         orderBy: [{ year: "asc" }, { month: "asc" }, { unit: "asc" }],
@@ -92,7 +94,7 @@ export async function GET() {
       total: rows.length,
       threshold: settings.threshold,
       excludedUnits: settings.excludedUnits,
-      result: computeFiveSResult(records, settings.excludedUnits, settings.threshold),
+      result: computeFiveSResult(records, settings.excludedUnits, settings.threshold, period),
       lastImport,
     });
   } catch (error) {

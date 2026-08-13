@@ -17,6 +17,7 @@ import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPla
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { FiveSPublishedPayload } from "@/features/cinco-s/publications";
+import { formatPeriodRangeLabel } from "@/lib/period";
 import { formatFiveSUnitLabel } from "@/features/cinco-s/utils/units";
 
 interface PublicationResponse {
@@ -183,6 +184,7 @@ export function FiveSPublishedPanel() {
             <span style={{ color: "#bbb" }}>
               — publicado em {formatPublishedAt(publication.publishedAt)} por{" "}
               {publication.publishedBy.name}
+              {data.periodo ? ` · Período: ${formatPeriodRangeLabel(data.periodo)}` : ""}
             </span>
           </div>
 

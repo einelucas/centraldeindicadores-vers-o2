@@ -27,11 +27,14 @@ import {
   type IdpUnitExecutionRow,
 } from "@/features/idp/types";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { enumeratePeriodMonths, normalizePeriodRange, type PeriodRange } from "@/lib/period";
 
 export interface IdpPeriodOptions {
   selectedYear?: number;
   selectedMonth?: number;
+  historyStartYear?: number;
   historyMonthStart?: number;
+  historyEndYear?: number;
   historyMonthEnd?: number;
 }
 
@@ -253,28 +256,22 @@ function buildUnitRows(
 
 function monthlyResult(
   entries: readonly IdpNormalizedRecord[],
-  selectedYear: number,
-  monthStart: number,
-  monthEnd: number,
+  range: PeriodRange,
   excludeSet: ReadonlySet<string>,
 ): IdpMonthlyAggregate[] {
-  const rows: IdpMonthlyAggregate[] = [];
-
-  for (let month = monthStart; month <= monthEnd; month += 1) {
-    const activeEntries = selectLatestRsoByUnit(recordsInCompetence(entries, selectedYear, month));
+  return enumeratePeriodMonths(range).map(({ year, month }) => {
+    const activeEntries = selectLatestRsoByUnit(recordsInCompetence(entries, year, month));
     const unitRows = buildUnitRows(activeEntries, excludeSet).filter((unit) => !unit.excluded);
-    rows.push({
-      year: selectedYear,
+    return {
+      year,
       month,
-      label: `${MONTH_NAMES_FULL[month - 1] ?? month}/${selectedYear}`,
+      label: `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`,
       aderencia: unitRows.length ? average(unitRows.map((unit) => unit.aderencia)) : null,
       activeDocuments: unitRows.length,
       totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
       totalRealMedio: unitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
-    });
-  }
-
-  return rows;
+    };
+  });
 }
 
 function boundedMonth(value: number | undefined, fallback: number): number {
@@ -313,11 +310,22 @@ export function computeIdpResult(
     latest?.year === selectedYear ? latest.month : IDP_DEFAULT_MONTH_END,
   );
 
-  let historyMonthStart = boundedMonth(options.historyMonthStart, IDP_DEFAULT_MONTH_START);
-  let historyMonthEnd = boundedMonth(options.historyMonthEnd, selectedMonth);
-  if (historyMonthEnd < historyMonthStart) {
-    [historyMonthStart, historyMonthEnd] = [historyMonthEnd, historyMonthStart];
-  }
+  const historyStartYear =
+    Number.isInteger(options.historyStartYear) && (options.historyStartYear ?? 0) >= 2000
+      ? options.historyStartYear!
+      : selectedYear;
+  const historyEndYear =
+    Number.isInteger(options.historyEndYear) && (options.historyEndYear ?? 0) >= 2000
+      ? options.historyEndYear!
+      : selectedYear;
+  const historyMonthStartRaw = boundedMonth(options.historyMonthStart, IDP_DEFAULT_MONTH_START);
+  const historyMonthEndRaw = boundedMonth(options.historyMonthEnd, selectedMonth);
+  const historyRange = normalizePeriodRange({
+    startYear: historyStartYear,
+    startMonth: historyMonthStartRaw,
+    endYear: historyEndYear,
+    endMonth: historyMonthEndRaw,
+  });
 
   const competenceEntries = recordsInCompetence(entries, selectedYear, selectedMonth);
   const activeEntries = selectLatestRsoByUnit(competenceEntries);
@@ -337,8 +345,10 @@ export function computeIdpResult(
     excludedUnits: excludedNormalized,
     selectedYear,
     selectedMonth,
-    historyMonthStart,
-    historyMonthEnd,
+    historyStartYear: historyRange.startYear,
+    historyMonthStart: historyRange.startMonth,
+    historyEndYear: historyRange.endYear,
+    historyMonthEnd: historyRange.endMonth,
     aderenciaGeral,
     unitRows,
     disciplineRows,
@@ -347,7 +357,7 @@ export function computeIdpResult(
     activeDocuments: activeEntries.length,
     totalPrevistoMedio: includedUnitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
     totalRealMedio: includedUnitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
-    monthly: monthlyResult(entries, selectedYear, historyMonthStart, historyMonthEnd, excludeSet),
+    monthly: monthlyResult(entries, historyRange, excludeSet),
   };
 }
 

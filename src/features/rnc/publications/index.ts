@@ -1,5 +1,6 @@
 import type { RncResult } from "@/features/rnc/types";
 import { RNC_SCORECARD_POINTS, RNC_SCORECARD_WEIGHT } from "@/features/rnc/types";
+import type { PeriodRange } from "@/lib/period";
 
 export interface RncPublishedUnit {
   n: string;
@@ -23,6 +24,8 @@ export interface RncPublishedPayload {
   resultado: number;
   semestreResolvidas: number;
   semestreTotal: number;
+  /** Intervalo de período usado no cálculo publicado; `null` = sem restrição. */
+  periodo?: PeriodRange | null;
   unidades: RncPublishedUnit[];
   mensal: RncPublishedMonth[];
   ofensores: RncPublishedOffender[];
@@ -47,6 +50,7 @@ export function toRncPublishedPayload(result: RncResult): RncPublishedPayload {
     resultado: result.resultadoDias,
     semestreResolvidas: result.totalTratadas,
     semestreTotal: result.totalCriadas,
+    periodo: result.period,
     unidades: result.units
       .filter((unit) => !unit.excluded)
       .map((unit) => ({

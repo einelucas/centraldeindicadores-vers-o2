@@ -10,6 +10,7 @@ import {
   compareAccidentUnits,
   normalizeAccidentUnitCode,
 } from "@/features/taxa-acidentes/utils/units";
+import type { PeriodRange } from "@/lib/period";
 import { toJsonValue } from "@/server/database/json";
 
 export const ACCIDENT_TARGET_SETTING_KEY = "taxa-acidentes.target";
@@ -97,7 +98,10 @@ export function unitRowsToRecords(
     .sort((a, b) => a.year - b.year || a.month - b.month || compareAccidentUnits(a.unit, b.unit));
 }
 
-export async function loadAccidentRateData(tx: Prisma.TransactionClient) {
+export async function loadAccidentRateData(
+  tx: Prisma.TransactionClient,
+  period: PeriodRange | null = null,
+) {
   const [monthlyRows, unitRows, target, excludedUnits] = await Promise.all([
     tx.accidentMonthlyRecord.findMany({
       orderBy: [{ year: "asc" }, { month: "asc" }],
@@ -121,7 +125,7 @@ export async function loadAccidentRateData(tx: Prisma.TransactionClient) {
 
   const monthly = monthlyRowsToRecords(monthlyRows);
   const units = unitRowsToRecords(unitRows);
-  const result = computeAccidentRateResult(monthly, units, target, excludedUnits);
+  const result = computeAccidentRateResult(monthly, units, target, excludedUnits, period);
 
   return { monthly, units, target, excludedUnits, result };
 }

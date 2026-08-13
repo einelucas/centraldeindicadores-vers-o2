@@ -15,6 +15,8 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
+import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,9 +35,11 @@ import {
 import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
 import { exportRdoPdf } from "@/features/rdo/exports/pdf";
 import type { RdoNormalizedRecord, RdoResult } from "@/features/rdo/types";
+import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 
 interface ApiResponse {
   total: number;
@@ -88,11 +92,23 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
 
   const load = useCallback(
-    async (nextThreshold = threshold) => {
+    async (nextThreshold = threshold, nextPeriod = periodRange) => {
       setError(null);
-      const response = await fetch(`/api/rdo?threshold=${encodeURIComponent(nextThreshold)}`, {
+      const params = new URLSearchParams({
+        threshold: String(nextThreshold),
+        ...Object.fromEntries(
+          Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+      });
+      const response = await fetch(`/api/rdo?${params.toString()}`, {
         cache: "no-store",
       });
       if (!response.ok) throw new Error("Falha ao carregar os dados do RDO.");
@@ -100,7 +116,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
       setData(body);
       setExcludedUnits(body.result.excludedUnits);
     },
-    [threshold],
+    [periodRange, threshold],
   );
 
   const loadPublication = useCallback(async () => {
@@ -251,7 +267,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
       const response = await fetch("/api/publicacoes/rdo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold }),
+        body: JSON.stringify({ threshold, ...periodToOptionalFields(periodRange) }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -269,30 +285,38 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
     }
   }
 
-  async function clearAll() {
-    if (
-      !window.confirm(
-        "Excluir todos os registros administrativos de RDO? O painel já publicado continuará preservado.",
-      )
-    )
-      return;
+  function openClearDialog() {
+    setClearPeriod(null);
+    setClearDialogOpen(true);
+  }
+
+  async function executeClear() {
     setBusy(true);
     setError(null);
     try {
+      const body = clearPeriod
+        ? {
+            periodStartYear: clearPeriod.startYear,
+            periodStartMonth: clearPeriod.startMonth,
+            periodEndYear: clearPeriod.endYear,
+            periodEndMonth: clearPeriod.endMonth,
+          }
+        : { all: true as const };
       const response = await fetch("/api/rdo/registros", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: true }),
+        body: JSON.stringify(body),
       });
-      const body = (await response.json().catch(() => ({}))) as {
+      const responseBody = (await response.json().catch(() => ({}))) as {
         error?: string;
         deleted?: number;
       };
-      if (!response.ok) throw new Error(body.error ?? "Falha ao limpar os registros.");
-      setMessage(`${body.deleted ?? 0} registro(s) removido(s).`);
+      if (!response.ok) throw new Error(responseBody.error ?? "Falha ao limpar os registros.");
+      setMessage(`${responseBody.deleted ?? 0} registro(s) removido(s).`);
       setFiles([]);
       setDuplicates(0);
       setProgress(null);
+      setClearDialogOpen(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao limpar os registros.");
@@ -323,6 +347,22 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
     if (!result) return [];
     return Array.from(new Set(result.months.map((month) => month.month))).sort((a, b) => a - b);
   }, [result]);
+  const fetchClearAffectedCount = useCallback(async (period: PeriodRange | null) => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(period)).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ),
+    );
+    const response = await fetch(`/api/rdo/registros?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Falha ao calcular os registros afetados.");
+    const body = (await response.json()) as { count: number };
+    return body.count;
+  }, []);
   const filteredMonths = useMemo(() => {
     if (!result) return [];
     return result.months.filter((month) => {
@@ -439,9 +479,9 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       {result && data.total > 0 ? (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
                 <Label htmlFor="rdoThreshold">Meta de aderência (%)</Label>
                 <Input
                   id="rdoThreshold"
@@ -453,46 +493,92 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
                   className="w-24"
                 />
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => void load(threshold).catch((err: Error) => setError(err.message))}
-              >
-                <RotateCw className="size-3.5" />
-                Recalcular
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => exportRdoPdf(result, threshold)}>
-                <Download className="size-3.5" />
-                Baixar PDF
-              </Button>
-              {canClear ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void clearAll()}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar tudo
-                </Button>
-              ) : null}
-              <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
-                <Ban className="size-3.5" />
-                Ignorar unidades
-                {excludedUnits.length ? (
-                  <Badge variant="outline" className="ml-0.5">
-                    {excludedUnits.length}
-                  </Badge>
-                ) : null}
-              </Button>
-            </div>
-            {canPublish ? (
-              <Button variant="success" disabled={busy} onClick={() => void publish()}>
-                <Send className="size-3.5" />
-                Publicar no Painel
-              </Button>
-            ) : null}
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
+                <Label>Período</Label>
+                <PeriodRangeFilter
+                  value={periodRange}
+                  onChange={setPeriodRange}
+                  yearsInData={availableYears}
+                  label=""
+                />
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="flex flex-col gap-3">
+                <Label>Ações</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() =>
+                      void load(threshold).catch((err: Error) => setError(err.message))
+                    }
+                  >
+                    <RotateCw className="size-3.5" />
+                    Recalcular
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setUnitDialogOpen(true)}
+                  >
+                    <Ban className="size-3.5" />
+                    Ignorar unidades
+                    {excludedUnits.length ? (
+                      <Badge variant="outline" className="ml-0.5">
+                        {excludedUnits.length}
+                      </Badge>
+                    ) : null}
+                  </Button>
+                  <IndicatorAnalysisDialog
+                    module="rdo"
+                    moduleLabel="RDO"
+                    target={threshold}
+                    years={availableYears}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => exportRdoPdf(result, threshold)}
+                  >
+                    <Download className="size-3.5" />
+                    Baixar PDF
+                  </Button>
+                  {canClear ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      disabled={busy}
+                      onClick={openClearDialog}
+                    >
+                      <Trash2 className="size-3.5" />
+                      Limpar tudo
+                    </Button>
+                  ) : null}
+                  {canPublish ? (
+                    <Button
+                      variant="success"
+                      size="sm"
+                      className="w-full"
+                      disabled={busy}
+                      onClick={() => void publish()}
+                    >
+                      <Send className="size-3.5" />
+                      Publicar no Painel
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
           </div>
 
           {duplicates > 0 ? (
@@ -741,6 +827,20 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
         busy={unitDialogBusy}
         onSave={(next) => void saveExcludedUnits(next)}
         description="Unidades marcadas continuam visíveis na tabela por unidade, mas ficam de fora dos totais, da aderência média e do painel publicado."
+      />
+
+      <ClearRecordsDialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="Limpar registros do RDO"
+        description="Exclui permanentemente os registros da base administrativa do RDO no banco de dados. O painel já publicado não é afetado."
+        periodRange={clearPeriod}
+        onPeriodRangeChange={setClearPeriod}
+        yearsInData={availableYears}
+        fetchAffectedCount={fetchClearAffectedCount}
+        affectedLabel="registro(s) de RDO"
+        busy={busy}
+        onConfirm={() => void executeClear()}
       />
     </div>
   );

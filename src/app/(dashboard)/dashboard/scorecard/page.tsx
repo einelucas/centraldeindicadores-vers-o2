@@ -9,6 +9,7 @@ export const metadata = { title: "Scorecard — Central de Indicadores" };
 export default async function ScorecardPage() {
   const user = await getCurrentUser();
   const canAdmin = user !== null && user.role !== "VIEWER";
+  const canClearHistory = user?.role === "ADMIN";
 
   return (
     <ModuleWorkspace
@@ -21,7 +22,7 @@ export default async function ScorecardPage() {
               title="Scorecard consolidado (Administração)"
               description="Consolida as publicações de RDO, IDP, RNC, 5S e Taxa de Acidentes com os pesos e metas vigentes para o ciclo de junho a novembro."
             />
-            <ScorecardView />
+            <ScorecardView canClearHistory={canClearHistory} />
           </>
         ) : null
       }

@@ -41,7 +41,9 @@ export interface IdpPublishedPayload {
   eia?: number | null;
   selectedYear: number;
   selectedMonth: number;
+  historyStartYear?: number;
   historyMonthStart: number;
+  historyEndYear?: number;
   historyMonthEnd: number;
   /** Mantidos para compatibilidade com o Scorecard e snapshots antigos. */
   monthStart: number;
@@ -86,7 +88,9 @@ export function toIdpPublishedPayload(
     eletrica: disciplineValue(result, "04 - Elétrica"),
     selectedYear: result.selectedYear,
     selectedMonth: result.selectedMonth,
+    historyStartYear: result.historyStartYear,
     historyMonthStart: result.historyMonthStart,
+    historyEndYear: result.historyEndYear,
     historyMonthEnd: result.historyMonthEnd,
     monthStart: result.historyMonthStart,
     monthEnd: result.historyMonthEnd,

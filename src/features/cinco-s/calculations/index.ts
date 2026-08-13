@@ -10,10 +10,8 @@
  */
 
 import { MONTH_NAMES } from "@/lib/dates";
-import {
-  compareFiveSUnits,
-  normalizeFiveSUnitCode,
-} from "@/features/cinco-s/utils/units";
+import { isWithinPeriodRange, type PeriodRange } from "@/lib/period";
+import { compareFiveSUnits, normalizeFiveSUnitCode } from "@/features/cinco-s/utils/units";
 import {
   FIVES_DEFAULT_TARGET,
   type FiveSArea,
@@ -48,23 +46,22 @@ export function computeFiveSResult(
   records: readonly FiveSNormalizedRecord[],
   excluded: readonly string[] = [],
   threshold: number = FIVES_DEFAULT_TARGET,
+  period: PeriodRange | null = null,
 ): FiveSResult {
-  const excludedUnits = Array.from(
-    new Set(excluded.map(normalizeFiveSUnitCode).filter(Boolean)),
-  );
+  const excludedUnits = Array.from(new Set(excluded.map(normalizeFiveSUnitCode).filter(Boolean)));
   const excludeSet = new Set(excludedUnits);
 
   // A identidade lógica do módulo é unidade + ano + mês. Em caso de registros
   // repetidos no array, a última ocorrência representa a versão mais recente.
-  const unique = new Map<
-    string,
-    { record: FiveSNormalizedRecord; usesOfficialCode: boolean }
-  >();
+  const unique = new Map<string, { record: FiveSNormalizedRecord; usesOfficialCode: boolean }>();
   for (const record of records) {
     const unit = normalizeFiveSUnitCode(record.unit);
     if (!unit || !record.areas.length) continue;
     if (!Number.isInteger(record.year) || !Number.isInteger(record.month)) continue;
     if (record.month < 1 || record.month > 12) continue;
+    // Corte estrutural: fora do período selecionado, o registro nem entra
+    // em nenhuma tabela. Sem período definido, nada é restringido.
+    if (period && !isWithinPeriodRange(record.year, record.month, period)) continue;
 
     const key = `${unit}|||${monthKey(record.year, record.month)}`;
     const usesOfficialCode = record.unit.trim().toUpperCase() === unit;
@@ -90,12 +87,7 @@ export function computeFiveSResult(
       excluded: excludeSet.has(record.unit),
       areas: record.areas,
     }))
-    .sort(
-      (a, b) =>
-        a.year - b.year ||
-        a.month - b.month ||
-        compareFiveSUnits(a.unit, b.unit),
-    );
+    .sort((a, b) => a.year - b.year || a.month - b.month || compareFiveSUnits(a.unit, b.unit));
 
   const monthKeys = Array.from(
     new Set(unitMonths.map((item) => monthKey(item.year, item.month))),
@@ -106,19 +98,14 @@ export function computeFiveSResult(
     const year = Number(yearText);
     const month = Number(monthText);
     const values = unitMonths
-      .filter(
-        (item) =>
-          item.year === year && item.month === month && !item.excluded,
-      )
+      .filter((item) => item.year === year && item.month === month && !item.excluded)
       .map((item) => item.aderencia);
 
     return {
       year,
       month,
       label: monthLabel(year, month),
-      geral: values.length
-        ? values.reduce((sum, value) => sum + value, 0) / values.length
-        : null,
+      geral: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null,
       unitsCount: values.length,
     };
   });
@@ -129,6 +116,7 @@ export function computeFiveSResult(
   return {
     threshold,
     excludedUnits,
+    period,
     periodLabel: latest?.label ?? "—",
     latestYear: latest?.year ?? null,
     latestMonth: latest?.month ?? null,
