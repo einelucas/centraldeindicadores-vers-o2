@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -14,6 +15,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +85,9 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [unitFilter, setUnitFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState("all");
+  const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitDialogBusy, setUnitDialogBusy] = useState(false);
 
   const load = useCallback(
     async (nextThreshold = threshold) => {
@@ -91,7 +96,9 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
         cache: "no-store",
       });
       if (!response.ok) throw new Error("Falha ao carregar os dados do RDO.");
-      setData((await response.json()) as ApiResponse);
+      const body = (await response.json()) as ApiResponse;
+      setData(body);
+      setExcludedUnits(body.result.excludedUnits);
     },
     [threshold],
   );
@@ -106,6 +113,38 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   useEffect(() => {
     void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const unitOptions = useMemo(() => {
+    const codes = new Set<string>([
+      ...(data?.result.units.map((unit) => unit.name) ?? []),
+      ...excludedUnits,
+    ]);
+    codes.delete("");
+    return Array.from(codes)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((code) => ({ code, label: code }));
+  }, [data, excludedUnits]);
+
+  async function saveExcludedUnits(next: string[]) {
+    setUnitDialogBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/rdo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ excludedUnits: next }),
+      });
+      if (!response.ok) throw new Error("Falha ao salvar as unidades ignoradas.");
+      setExcludedUnits(next);
+      setUnitDialogOpen(false);
+      await load();
+      setMessage("Unidades ignoradas atualizadas e indicador recalculado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar as unidades ignoradas.");
+    } finally {
+      setUnitDialogBusy(false);
+    }
+  }
 
   async function processFiles(fileList: FileList | File[]) {
     const selected = Array.from(fileList);
@@ -126,6 +165,10 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
           parsed.perFile.find((file) => file.error)?.error ?? "Nenhum registro válido encontrado.",
         );
       }
+
+      const known = new Set(unitOptions.map((option) => option.code));
+      const detected = new Set(valid.map((record) => record.empresaNome.trim()));
+      const hasNewUnit = Array.from(detected).some((code) => code && !known.has(code));
 
       const batches = chunk(valid, DEFAULT_IMPORT_BATCH_SIZE);
       setProgress({
@@ -191,6 +234,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
         `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s).`,
       );
       await load();
+      if (hasNewUnit) setUnitDialogOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na importação.");
     } finally {
@@ -433,6 +477,15 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
                   Limpar tudo
                 </Button>
               ) : null}
+              <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+                <Ban className="size-3.5" />
+                Ignorar unidades
+                {excludedUnits.length ? (
+                  <Badge variant="outline" className="ml-0.5">
+                    {excludedUnits.length}
+                  </Badge>
+                ) : null}
+              </Button>
             </div>
             {canPublish ? (
               <Button variant="success" disabled={busy} onClick={() => void publish()}>
@@ -542,8 +595,14 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
                             {formatPct(unit.aderencia)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={ok ? "success" : "destructive"}>
-                              {ok ? "Dentro da meta" : "Abaixo da meta"}
+                            <Badge
+                              variant={unit.excluded ? "outline" : ok ? "success" : "destructive"}
+                            >
+                              {unit.excluded
+                                ? "Ignorada"
+                                : ok
+                                  ? "Dentro da meta"
+                                  : "Abaixo da meta"}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -673,6 +732,16 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
           </CardDescription>
         </Card>
       )}
+
+      <UnitExclusionDialog
+        open={unitDialogOpen}
+        onOpenChange={setUnitDialogOpen}
+        units={unitOptions}
+        excluded={excludedUnits}
+        busy={unitDialogBusy}
+        onSave={(next) => void saveExcludedUnits(next)}
+        description="Unidades marcadas continuam visíveis na tabela por unidade, mas ficam de fora dos totais, da aderência média e do painel publicado."
+      />
     </div>
   );
 }

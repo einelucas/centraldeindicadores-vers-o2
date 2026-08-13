@@ -37,12 +37,15 @@ export function calculateRdoAdherence(approved: number, issued: number): number 
 export function computeRdoResult(
   records: readonly RdoNormalizedRecord[],
   threshold: number = RDO_DEFAULT_TARGET,
+  excludedUnits: readonly string[] = [],
 ): RdoResult {
+  const excludedNormalized = Array.from(
+    new Set(excludedUnits.map((value) => value.trim()).filter(Boolean)),
+  );
+  const excludeSet = new Set(excludedNormalized);
+
   const byUnit = new Map<string, { emitidos: number; aprovados: number }>();
-  const byMonth = new Map<
-    string,
-    { emitidos: number; aprovados: number; y: number; m: number }
-  >();
+  const byMonth = new Map<string, { emitidos: number; aprovados: number; y: number; m: number }>();
 
   let totalEmitidos = 0;
   let totalAprovados = 0;
@@ -55,15 +58,18 @@ export function computeRdoResult(
     // Fiel ao HTML: precisa de data válida e unidade.
     if (!r.dataReferencia || isNaN(r.dataReferencia.getTime()) || !unit) continue;
 
-    totalEmitidos++;
-    if (status === RDO_STATUS.APROVADO) totalAprovados++;
-    else if (status === RDO_STATUS.REVISAR) totalRevisar++;
-    else if (status === RDO_STATUS.PREENCHENDO) totalPreenchendo++;
-
+    // A tabela por unidade continua mostrando todas, inclusive as ignoradas.
     const u = byUnit.get(unit) ?? { emitidos: 0, aprovados: 0 };
     u.emitidos++;
     if (status === RDO_STATUS.APROVADO) u.aprovados++;
     byUnit.set(unit, u);
+
+    if (excludeSet.has(unit)) continue;
+
+    totalEmitidos++;
+    if (status === RDO_STATUS.APROVADO) totalAprovados++;
+    else if (status === RDO_STATUS.REVISAR) totalRevisar++;
+    else if (status === RDO_STATUS.PREENCHENDO) totalPreenchendo++;
 
     const y = r.dataReferencia.getFullYear();
     const m = r.dataReferencia.getMonth(); // 0-based, como no HTML
@@ -75,16 +81,19 @@ export function computeRdoResult(
   }
 
   // Unidades ordenadas por emitidos (desc), como no HTML.
-  const unitEntries = Array.from(byUnit.entries()).sort(
-    (a, b) => b[1].emitidos - a[1].emitidos,
-  );
+  const unitEntries = Array.from(byUnit.entries()).sort((a, b) => b[1].emitidos - a[1].emitidos);
   let unitAvgSum = 0;
+  let unitAvgCount = 0;
   const units: RdoUnitAggregate[] = unitEntries.map(([name, d]) => {
     const ad = calculateRdoAdherence(d.aprovados, d.emitidos);
-    unitAvgSum += ad;
-    return { name, emitidos: d.emitidos, aprovados: d.aprovados, aderencia: ad };
+    const excluded = excludeSet.has(name);
+    if (!excluded) {
+      unitAvgSum += ad;
+      unitAvgCount++;
+    }
+    return { name, emitidos: d.emitidos, aprovados: d.aprovados, aderencia: ad, excluded };
   });
-  const unitAvg = units.length ? unitAvgSum / units.length : 0;
+  const unitAvg = unitAvgCount ? unitAvgSum / unitAvgCount : 0;
 
   // Meses ordenados cronologicamente, como no HTML.
   const monthEntries = Array.from(byMonth.entries()).sort(
@@ -101,6 +110,7 @@ export function computeRdoResult(
 
   return {
     threshold,
+    excludedUnits: excludedNormalized,
     totalEmitidos,
     totalAprovados,
     totalRevisar,

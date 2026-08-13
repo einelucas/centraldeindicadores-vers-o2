@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { computeRncResult } from "@/features/rnc/calculations";
 import { toRncPublishedPayload } from "@/features/rnc/publications";
+import { loadRncConfiguration } from "@/features/rnc/services";
 import type { RncNormalizedRecord } from "@/features/rnc/types";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
@@ -83,12 +84,12 @@ export async function POST(req: NextRequest) {
       month: row.month,
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
-    const result = computeRncResult(records, input.metaDias);
+    const configuration = await prisma.$transaction((tx) => loadRncConfiguration(tx));
+    const result = computeRncResult(records, input.metaDias, configuration.excludedUnits);
     if (result.resultadoDias === null) {
       return NextResponse.json(
         {
-          error:
-            "Não há RNC solucionada com Tempo de Tratativa numérico para publicar.",
+          error: "Não há RNC solucionada com Tempo de Tratativa numérico para publicar.",
         },
         { status: 400 },
       );
@@ -97,38 +98,36 @@ export async function POST(req: NextRequest) {
     const payload = toRncPublishedPayload(result);
     const status = payload.resultado <= payload.meta ? "OK" : "FORA";
 
-    const publication = await prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => {
-        const latest = await tx.indicatorPublication.findFirst({
-          where: { module: MODULE, indicator: INDICATOR },
-          orderBy: { version: "desc" },
-          select: { version: true },
-        });
-        const version = (latest?.version ?? 0) + 1;
+    const publication = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const latest = await tx.indicatorPublication.findFirst({
+        where: { module: MODULE, indicator: INDICATOR },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      const version = (latest?.version ?? 0) + 1;
 
-        await tx.indicatorPublication.updateMany({
-          where: { module: MODULE, indicator: INDICATOR, active: true },
-          data: { active: false },
-        });
+      await tx.indicatorPublication.updateMany({
+        where: { module: MODULE, indicator: INDICATOR, active: true },
+        data: { active: false },
+      });
 
-        return tx.indicatorPublication.create({
-          data: {
-            module: MODULE,
-            indicator: INDICATOR,
-            version,
-            target: payload.meta,
-            result: payload.resultado,
-            status,
-            payload: toJsonValue(payload),
-            active: true,
-            publishedById: user.id,
-          },
-          include: {
-            publishedBy: { select: { id: true, name: true, email: true } },
-          },
-        });
-      },
-    );
+      return tx.indicatorPublication.create({
+        data: {
+          module: MODULE,
+          indicator: INDICATOR,
+          version,
+          target: payload.meta,
+          result: payload.resultado,
+          status,
+          payload: toJsonValue(payload),
+          active: true,
+          publishedById: user.id,
+        },
+        include: {
+          publishedBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+    });
 
     await recordAudit({
       userId: user.id,
@@ -156,8 +155,7 @@ export async function POST(req: NextRequest) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json(
         {
-          error:
-            "A tabela de publicações ainda não foi criada. Execute pnpm db:upgrade:rdo.",
+          error: "A tabela de publicações ainda não foi criada. Execute pnpm db:upgrade:rdo.",
         },
         { status: 503 },
       );

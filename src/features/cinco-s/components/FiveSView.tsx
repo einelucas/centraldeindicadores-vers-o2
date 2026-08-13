@@ -1,10 +1,44 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Ban,
+  CalendarDays,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  FilterX,
+  Info,
+  ListChecks,
+  Loader2,
+  Percent,
+  RotateCw,
+  Send,
+  Trash2,
+  UploadCloud,
+  X,
+} from "lucide-react";
+import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import styles from "./FiveSView.module.css";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
 import {
@@ -17,6 +51,7 @@ import {
 import { aderenciaArea } from "@/features/cinco-s/calculations";
 import {
   compareFiveSUnits,
+  FIVES_UNITS,
   formatFiveSUnitLabel,
   normalizeFiveSUnitCode,
 } from "@/features/cinco-s/utils/units";
@@ -69,17 +104,6 @@ async function responseError(response: Response, fallback: string): Promise<Erro
   return new Error(body.error ?? fallback);
 }
 
-function parseExcluded(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(",")
-        .map(normalizeFiveSUnitCode)
-        .filter(Boolean),
-    ),
-  );
-}
-
 function periodKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -97,18 +121,12 @@ function numberText(value: number): string {
     : value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 }
 
-export function FiveSView({
-  canPublish,
-  canClear,
-}: {
-  canPublish: boolean;
-  canClear: boolean;
-}) {
+export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canClear: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState(FIVES_DEFAULT_TARGET * 100);
-  const [excludedText, setExcludedText] = useState(
-    FIVES_DEFAULT_EXCLUDED.join(", "),
-  );
+  const [excludedUnits, setExcludedUnits] = useState<string[]>([...FIVES_DEFAULT_EXCLUDED]);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitDialogBusy, setUnitDialogBusy] = useState(false);
   const [data, setData] = useState<FiveSApiResponse | null>(null);
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -123,11 +141,6 @@ export function FiveSView({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const excludedUnits = useMemo(
-    () => parseExcluded(excludedText),
-    [excludedText],
-  );
-
   const load = useCallback(async () => {
     const response = await fetch("/api/cinco-s", { cache: "no-store" });
     if (!response.ok) {
@@ -136,7 +149,7 @@ export function FiveSView({
     const body = (await response.json()) as FiveSApiResponse;
     setData(body);
     setTarget(body.threshold * 100);
-    setExcludedText(body.excludedUnits.join(", "));
+    setExcludedUnits(body.excludedUnits);
   }, []);
 
   const loadPublication = useCallback(async () => {
@@ -151,10 +164,7 @@ export function FiveSView({
   }, []);
 
   useEffect(() => {
-    void Promise.all([
-      load().catch((err: Error) => setError(err.message)),
-      loadPublication(),
-    ]);
+    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
   }, [load, loadPublication]);
 
   const units = useMemo(() => {
@@ -163,6 +173,42 @@ export function FiveSView({
       new Set(data.result.unitMonths.map((item) => normalizeFiveSUnitCode(item.unit))),
     ).sort(compareFiveSUnits);
   }, [data]);
+
+  const unitOptions = useMemo(() => {
+    const codes = new Set<string>([
+      ...FIVES_UNITS.map((unit) => unit.code),
+      ...units,
+      ...excludedUnits,
+      ...(prepared?.records.map((record) => normalizeFiveSUnitCode(record.unit)) ?? []),
+    ]);
+    codes.delete("");
+    return Array.from(codes)
+      .sort(compareFiveSUnits)
+      .map((code) => ({ code, label: formatFiveSUnitLabel(code) }));
+  }, [excludedUnits, prepared, units]);
+
+  async function saveExcludedUnits(next: string[]) {
+    setUnitDialogBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/cinco-s", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target, excludedUnits: next }),
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Falha ao salvar as unidades ignoradas.");
+      }
+      setExcludedUnits(next);
+      setUnitDialogOpen(false);
+      await load();
+      setMessage("Unidades ignoradas atualizadas e indicador recalculado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar as unidades ignoradas.");
+    } finally {
+      setUnitDialogBusy(false);
+    }
+  }
 
   const periods = useMemo(() => {
     if (!data) return [];
@@ -176,9 +222,7 @@ export function FiveSView({
 
   const availableYears = useMemo(() => {
     if (!data) return [];
-    return Array.from(new Set(data.result.months.map((month) => month.year))).sort(
-      (a, b) => b - a,
-    );
+    return Array.from(new Set(data.result.months.map((month) => month.year))).sort((a, b) => b - a);
   }, [data]);
 
   const availableMonths = useMemo(() => {
@@ -196,8 +240,7 @@ export function FiveSView({
   const filteredMatrixPeriods = useMemo(() => {
     if (!data) return [];
     return data.result.months.filter((period) => {
-      const matchesYear =
-        matrixYearFilter === "all" || period.year === Number(matrixYearFilter);
+      const matchesYear = matrixYearFilter === "all" || period.year === Number(matrixYearFilter);
       const matchesMonth =
         matrixMonthFilter === "all" || period.month === Number(matrixMonthFilter);
       return matchesYear && matchesMonth;
@@ -208,16 +251,10 @@ export function FiveSView({
     if (matrixUnitFilter !== "all" && !units.includes(matrixUnitFilter)) {
       setMatrixUnitFilter("all");
     }
-    if (
-      matrixYearFilter !== "all" &&
-      !availableYears.includes(Number(matrixYearFilter))
-    ) {
+    if (matrixYearFilter !== "all" && !availableYears.includes(Number(matrixYearFilter))) {
       setMatrixYearFilter("all");
     }
-    if (
-      matrixMonthFilter !== "all" &&
-      !availableMonths.includes(Number(matrixMonthFilter))
-    ) {
+    if (matrixMonthFilter !== "all" && !availableMonths.includes(Number(matrixMonthFilter))) {
       setMatrixMonthFilter("all");
     }
   }, [
@@ -247,8 +284,7 @@ export function FiveSView({
     const [year, month] = detailPeriod.split("-").map(Number);
     return (
       data.result.unitMonths.find(
-        (item) =>
-          item.unit === detailUnit && item.year === year && item.month === month,
+        (item) => item.unit === detailUnit && item.year === year && item.month === month,
       ) ?? null
     );
   }, [data, detailPeriod, detailUnit]);
@@ -278,11 +314,7 @@ export function FiveSView({
         count: file.records.length,
         error: file.error,
         periods: Array.from(
-          new Set(
-            file.records.map((record) =>
-              periodLabel(record.year, record.month),
-            ),
-          ),
+          new Set(file.records.map((record) => periodLabel(record.year, record.month))),
         ),
       }));
       setPrepared({
@@ -295,6 +327,12 @@ export function FiveSView({
         setMessage(
           `${parsed.records.length.toLocaleString("pt-BR")} unidade(s)/mês preparada(s). Clique em “Importar arquivos” para gravar no Neon.`,
         );
+        const known = new Set(unitOptions.map((option) => option.code));
+        const detected = new Set(
+          parsed.records.map((record) => normalizeFiveSUnitCode(record.unit)),
+        );
+        const hasNewUnit = Array.from(detected).some((code) => code && !known.has(code));
+        if (hasNewUnit) setUnitDialogOpen(true);
       } else {
         setError("Nenhuma aba válida foi encontrada nos arquivos selecionados.");
       }
@@ -462,16 +500,20 @@ export function FiveSView({
   const latestEligibleUnits = result
     ? result.unitMonths.filter(
         (item) =>
-          item.year === result.latestYear &&
-          item.month === result.latestMonth &&
-          !item.excluded,
+          item.year === result.latestYear && item.month === result.latestMonth && !item.excluded,
       ).length
     : 0;
 
+  const hasMatrixFilters =
+    matrixUnitFilter !== "all" || matrixMonthFilter !== "all" || matrixYearFilter !== "all";
+
   return (
-    <div>
+    <div className="flex flex-col gap-4">
       <div
-        className={`upload-zone${dragging ? " drag" : ""}`}
+        className={cn(
+          "flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-card px-6 py-9 text-center transition-colors",
+          dragging ? "border-primary bg-primary/5" : "hover:border-primary/50 hover:bg-muted/30",
+        )}
         onClick={() => inputRef.current?.click()}
         onDragOver={(event) => {
           event.preventDefault();
@@ -483,12 +525,21 @@ export function FiveSView({
           setDragging(false);
           void prepareFiles(event.dataTransfer.files);
         }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") inputRef.current?.click();
+        }}
       >
-        <div className="icon">↑</div>
-        <h4>Arraste o(s) arquivo(s) PPR - 5S aqui, ou clique para escolher</h4>
-        <p>
-          Pode selecionar vários meses. Cada arquivo deve possuir uma aba por
-          unidade e o padrão Divisão, Área, Meta e Nota.
+        <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <UploadCloud className="size-5" />
+        </div>
+        <h4 className="text-sm font-semibold text-foreground">
+          Arraste o(s) arquivo(s) PPR - 5S aqui, ou clique para escolher
+        </h4>
+        <p className="max-w-md text-xs text-muted-foreground">
+          Pode selecionar vários meses. Cada arquivo deve possuir uma aba por unidade e o padrão
+          Divisão, Área, Meta e Nota.
         </p>
         <input
           ref={inputRef}
@@ -496,400 +547,452 @@ export function FiveSView({
           multiple
           accept=".xlsx,.xls,.xltx"
           disabled={busy}
+          className="hidden"
           onChange={(event) => void prepareFiles(event.target.files ?? [])}
         />
       </div>
 
       {busy && !progress ? (
-        <div className="progress-item">
-          <span className="spinner" /> Processando…
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" />
+          Processando…
         </div>
       ) : null}
 
       {prepared ? (
-        <div className="file-list">
+        <div className="flex flex-wrap gap-2">
           {prepared.perFile.map((file) => (
-            <span
+            <Badge
               key={file.fileName}
-              className={`file-pill${file.error ? " error" : ""}`}
+              variant={file.error ? "destructive" : "secondary"}
+              className="gap-1.5 py-1.5 font-medium"
             >
-              {file.fileName} · {file.error ?? `${file.count} unidade(s) · ${file.periods.join(", ")}`}
-            </span>
+              <FileSpreadsheet className="size-3" />
+              {file.fileName} ·{" "}
+              {file.error ?? `${file.count} unidade(s) · ${file.periods.join(", ")}`}
+            </Badge>
           ))}
         </div>
       ) : null}
 
       {prepared?.duplicates ? (
-        <div className="info-box">
-          {prepared.duplicates} unidade(s)/mês repetida(s) na seleção; somente a
-          última versão de cada unidade e período será enviada.
+        <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-xs font-semibold text-accent-foreground">
+          <Info className="size-3.5 shrink-0 text-accent" />
+          {prepared.duplicates} unidade(s)/mês repetida(s) na seleção; somente a última versão de
+          cada unidade e período será enviada.
         </div>
       ) : null}
 
       {progress ? (
-        <div className="info-box">
-          Lote {progress.currentBatch}/{progress.totalBatches} · Inseridos: {progress.inserted} ·
-          Atualizados: {progress.updated} · Ignorados: {progress.ignored} · Rejeitados: {progress.rejected}
+        <div className="rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-3 text-xs font-medium text-primary">
+          <div className="flex items-center gap-1.5">
+            <Loader2 className="size-3.5 shrink-0 animate-spin" />
+            Lote {progress.currentBatch}/{progress.totalBatches} · Inseridos: {progress.inserted} ·
+            Atualizados: {progress.updated} · Ignorados: {progress.ignored} · Rejeitados:{" "}
+            {progress.rejected}
+          </div>
         </div>
       ) : null}
 
-      {error ? <div className="error-box">{error}</div> : null}
-      {message ? <div className="info-box">{message}</div> : null}
+      {error ? (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-sm font-medium text-danger">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </div>
+      ) : null}
+      {message ? (
+        <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/5 px-3.5 py-3 text-sm font-medium text-success">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          {message}
+        </div>
+      ) : null}
 
       {prepared?.records.length ? (
-        <div className="controls-row">
-          <button className="btn" disabled={busy} onClick={() => void importPrepared()}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button disabled={busy} onClick={() => void importPrepared()}>
+            <UploadCloud className="size-3.5" />
             Importar arquivos
-          </button>
-          <button
-            className="btn secondary"
-            disabled={busy}
-            onClick={() => setPrepared(null)}
-          >
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => setPrepared(null)}>
+            <X className="size-3.5" />
             Descartar seleção
-          </button>
+          </Button>
         </div>
       ) : null}
 
-      <div className="controls-row">
-        <label htmlFor="fiveSTarget">Meta global (%)</label>
-        <input
-          id="fiveSTarget"
-          type="number"
-          min={0}
-          max={100}
-          step={0.1}
-          value={target}
-          onChange={(event) => setTarget(Number(event.target.value))}
-        />
-        <button className="btn secondary" disabled={busy} onClick={() => void recalculate()}>
-          Recalcular
-        </button>
-        <button
-          className="btn"
-          disabled={!result?.unitMonths.length || busy}
-          onClick={() => result && exportFiveSPdf(result)}
-        >
-          Baixar PDF
-        </button>
-        {canClear ? (
-          <button className="btn secondary" disabled={!data?.total || busy} onClick={() => void clearAll()}>
-            Limpar tudo
-          </button>
-        ) : null}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="fiveSTarget">Meta global (%)</Label>
+            <Input
+              id="fiveSTarget"
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={target}
+              onChange={(event) => setTarget(Number(event.target.value))}
+              className="w-24"
+            />
+          </div>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void recalculate()}>
+            <RotateCw className="size-3.5" />
+            Recalcular
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!result?.unitMonths.length || busy}
+            onClick={() => result && exportFiveSPdf(result)}
+          >
+            <Download className="size-3.5" />
+            Baixar PDF
+          </Button>
+          {canClear ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={!data?.total || busy}
+              onClick={() => void clearAll()}
+            >
+              <Trash2 className="size-3.5" />
+              Limpar tudo
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+            <Ban className="size-3.5" />
+            Ignorar unidades
+            {excludedUnits.length ? (
+              <Badge variant="outline" className="ml-0.5">
+                {excludedUnits.length}
+              </Badge>
+            ) : null}
+          </Button>
+        </div>
         {canPublish ? (
-          <button
-            className="btn"
-            style={{ background: "var(--verde)" }}
+          <Button
+            variant="success"
             disabled={!result || result.geral === null || busy}
             onClick={() => void publish()}
           >
+            <Send className="size-3.5" />
             Publicar no Painel
-          </button>
+          </Button>
         ) : null}
       </div>
 
       {publication ? (
-        <div style={{ fontSize: 12.5, color: "var(--texto-suave)", marginBottom: 10 }}>
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <CheckCircle2 className="size-3.5 shrink-0 text-success" />
           Última publicação: versão {publication.version}, em{" "}
-          {new Date(publication.publishedAt).toLocaleString("pt-BR")}, por {publication.publishedBy.name}.
+          {new Date(publication.publishedAt).toLocaleString("pt-BR")}, por{" "}
+          {publication.publishedBy.name}.
         </div>
       ) : null}
 
-      <div className="subtitle-block">
-        <h3>Unidades excluídas do consolidado</h3>
-        <p>
-          Essas unidades continuam visíveis na tabela e no detalhamento, mas não
-          entram na média GERAL.
-        </p>
-      </div>
-      <textarea
-        rows={1}
-        value={excludedText}
-        onChange={(event) => setExcludedText(event.target.value)}
-        style={{
-          width: "100%",
-          fontFamily: "Montserrat, sans-serif",
-          fontSize: 13,
-          padding: 10,
-          border: "1px solid var(--borda)",
-          borderRadius: 8,
-        }}
+      <UnitExclusionDialog
+        open={unitDialogOpen}
+        onOpenChange={setUnitDialogOpen}
+        units={unitOptions}
+        excluded={excludedUnits}
+        busy={unitDialogBusy}
+        onSave={(next) => void saveExcludedUnits(next)}
+        description="Unidades marcadas continuam visíveis na tabela e no detalhamento, mas não entram na média GERAL nem no painel publicado."
       />
 
       {result?.unitMonths.length ? (
         <>
-          <div className="cards">
-            <div className={`card${result.passaMeta ? "" : " accent"}`}>
-              <div className="lbl">GERAL ({result.periodLabel})</div>
-              <div className="val">{fmtPct(result.geral)}</div>
-              <div className="sub">
-                <span className={`badge ${result.passaMeta ? "ok" : "fail"}`}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <AdminMetricCard
+              label={`GERAL (${result.periodLabel})`}
+              value={fmtPct(result.geral)}
+              icon={Percent}
+              tone={result.passaMeta ? "success" : "destructive"}
+              badge={
+                <Badge variant={result.passaMeta ? "success" : "destructive"}>
                   {result.passaMeta ? "Dentro da meta" : "Fora da meta"}
-                </span>
-              </div>
-            </div>
-            <div className="card">
-              <div className="lbl">Unidades carregadas</div>
-              <div className="val">{result.unitsCount.toLocaleString("pt-BR")}</div>
-            </div>
-            <div className="card">
-              <div className="lbl">Unidades no GERAL atual</div>
-              <div className="val">{latestEligibleUnits.toLocaleString("pt-BR")}</div>
-            </div>
-            <div className="card">
-              <div className="lbl">Meses carregados</div>
-              <div className="val">{result.monthsCount.toLocaleString("pt-BR")}</div>
-            </div>
+                </Badge>
+              }
+            />
+            <AdminMetricCard
+              label="Unidades carregadas"
+              value={result.unitsCount.toLocaleString("pt-BR")}
+              icon={ListChecks}
+            />
+            <AdminMetricCard
+              label="Unidades no GERAL atual"
+              value={latestEligibleUnits.toLocaleString("pt-BR")}
+              icon={CheckCircle2}
+            />
+            <AdminMetricCard
+              label="Meses carregados"
+              value={result.monthsCount.toLocaleString("pt-BR")}
+              icon={CalendarDays}
+            />
           </div>
 
-          <div className="rdo-tables-stack">
-            <section className="rdo-section-card">
-              <div className="rdo-section-header">
-                <div className="subtitle-block first">
-                  <h3>Por unidade e mês</h3>
-                  <p>
-                    Aderência média das áreas, com filtros independentes por
-                    unidade, mês e ano.
-                  </p>
-                </div>
-                <div className="rdo-section-filters rdo-month-filters">
-                  <label htmlFor="fiveSMatrixUnitFilter">
-                    <span>Unidade</span>
-                    <select
-                      id="fiveSMatrixUnitFilter"
-                      value={matrixUnitFilter}
-                      onChange={(event) => setMatrixUnitFilter(event.target.value)}
-                    >
-                      <option value="all">Todas as unidades</option>
-                      {units.map((unit) => (
-                        <option key={unit} value={unit}>
-                          {formatFiveSUnitLabel(unit)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label htmlFor="fiveSMatrixMonthFilter">
-                    <span>Mês</span>
-                    <select
-                      id="fiveSMatrixMonthFilter"
-                      value={matrixMonthFilter}
-                      onChange={(event) => setMatrixMonthFilter(event.target.value)}
-                    >
-                      <option value="all">Todos os meses</option>
-                      {availableMonths.map((month) => (
-                        <option key={month} value={month}>
-                          {MONTH_NAMES_FULL[month - 1] ?? month}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label htmlFor="fiveSMatrixYearFilter">
-                    <span>Ano</span>
-                    <select
-                      id="fiveSMatrixYearFilter"
-                      value={matrixYearFilter}
-                      onChange={(event) => setMatrixYearFilter(event.target.value)}
-                    >
-                      <option value="all">Todos os anos</option>
-                      {availableYears.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {(matrixUnitFilter !== "all" ||
-                    matrixMonthFilter !== "all" ||
-                    matrixYearFilter !== "all") && (
-                    <button
-                      type="button"
-                      className={`btn secondary ${styles.filterReset}`}
-                      onClick={() => {
-                        setMatrixUnitFilter("all");
-                        setMatrixMonthFilter("all");
-                        setMatrixYearFilter("all");
-                      }}
-                    >
-                      Limpar filtros
-                    </button>
-                  )}
-                </div>
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle>Por unidade e mês</CardTitle>
+                <CardDescription>
+                  Aderência média das áreas, com filtros independentes por unidade, mês e ano.
+                </CardDescription>
               </div>
-              <div className="table-scroll rdo-summary-table-wrap">
-                <table className={`data rdo-summary-table ${styles.matrixTable}`}>
-                  <thead>
-                    <tr>
-                      <th>Unidade</th>
-                      {filteredMatrixPeriods.map((month) => (
-                        <th key={periodKey(month.year, month.month)}>
-                          {month.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredMatrixUnits.length && filteredMatrixPeriods.length ? (
-                      <>
-                        {filteredMatrixUnits.map((unit) => {
-                          const excluded = result.excludedUnits.includes(unit);
-                          return (
-                            <tr key={unit}>
-                              <td>
-                                {formatFiveSUnitLabel(unit)}{" "}
-                                {excluded ? (
-                                  <span className="badge info">excluída</span>
-                                ) : null}
-                              </td>
-                              {filteredMatrixPeriods.map((month) => {
-                                const item = result.unitMonths.find(
-                                  (row) =>
-                                    row.unit === unit &&
-                                    row.year === month.year &&
-                                    row.month === month.month,
-                                );
-                                return (
-                                  <td
-                                    key={periodKey(month.year, month.month)}
-                                    className="num"
-                                  >
-                                    {item ? fmtPct(item.aderencia) : "—"}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                        <tr className="total">
-                          <td>GERAL</td>
-                          {filteredMatrixPeriods.map((month) => (
-                            <td
-                              key={periodKey(month.year, month.month)}
-                              className="num"
-                            >
-                              {fmtPct(month.geral)}
-                            </td>
-                          ))}
-                        </tr>
-                      </>
-                    ) : (
-                      <tr>
-                        <td
-                          className="rdo-empty-row"
-                          colSpan={Math.max(filteredMatrixPeriods.length + 1, 1)}
-                        >
-                          Nenhum resultado encontrado para os filtros selecionados.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="rdo-section-card">
-              <div className="rdo-section-header">
-                <div className="subtitle-block first">
-                  <h3>Detalhamento por unidade</h3>
-                  <p>
-                    Divisão, área, meta, nota e aderência do período selecionado.
-                  </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fiveSMatrixUnitFilter">Unidade</Label>
+                  <Select
+                    id="fiveSMatrixUnitFilter"
+                    value={matrixUnitFilter}
+                    onChange={(event) => setMatrixUnitFilter(event.target.value)}
+                    className="w-44"
+                  >
+                    <option value="all">Todas as unidades</option>
+                    {units.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {formatFiveSUnitLabel(unit)}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
-                <div className="rdo-section-filters">
-                  <label htmlFor="fiveSDetailUnit">
-                    <span>Unidade</span>
-                    <select
-                      id="fiveSDetailUnit"
-                      value={detailUnit}
-                      onChange={(event) => setDetailUnit(event.target.value)}
-                    >
-                      {units.map((unit) => (
-                        <option key={unit} value={unit}>
-                          {formatFiveSUnitLabel(unit)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label htmlFor="fiveSDetailPeriod">
-                    <span>Mês</span>
-                    <select
-                      id="fiveSDetailPeriod"
-                      value={detailPeriod}
-                      onChange={(event) => setDetailPeriod(event.target.value)}
-                    >
-                      {periods.map((period) => (
-                        <option key={period.key} value={period.key}>
-                          {period.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fiveSMatrixMonthFilter">Mês</Label>
+                  <Select
+                    id="fiveSMatrixMonthFilter"
+                    value={matrixMonthFilter}
+                    onChange={(event) => setMatrixMonthFilter(event.target.value)}
+                    className="w-36"
+                  >
+                    <option value="all">Todos os meses</option>
+                    {availableMonths.map((month) => (
+                      <option key={month} value={month}>
+                        {MONTH_NAMES_FULL[month - 1] ?? month}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fiveSMatrixYearFilter">Ano</Label>
+                  <Select
+                    id="fiveSMatrixYearFilter"
+                    value={matrixYearFilter}
+                    onChange={(event) => setMatrixYearFilter(event.target.value)}
+                    className="w-28"
+                  >
+                    <option value="all">Todos</option>
+                    {availableYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                {hasMatrixFilters ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMatrixUnitFilter("all");
+                      setMatrixMonthFilter("all");
+                      setMatrixYearFilter("all");
+                    }}
+                  >
+                    <FilterX className="size-3.5" />
+                    Limpar filtros
+                  </Button>
+                ) : null}
               </div>
-              <div className="table-scroll rdo-summary-table-wrap">
-                <table className="data rdo-summary-table">
-                  <thead>
-                    <tr>
-                      <th>Divisão</th>
-                      <th>Área</th>
-                      <th>Meta</th>
-                      <th>Nota</th>
-                      <th>Aderência</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detailGroups.length ? (
-                      detailGroups.map(([division, areas]) => {
-                        const average =
-                          areas.reduce(
-                            (sum, area) => sum + aderenciaArea(area),
-                            0,
-                          ) / areas.length;
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky left-0 z-10 min-w-[220px] bg-muted/60">
+                      Unidade
+                    </TableHead>
+                    {filteredMatrixPeriods.map((month) => (
+                      <TableHead
+                        className="min-w-[100px] text-right"
+                        key={periodKey(month.year, month.month)}
+                      >
+                        {month.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMatrixUnits.length && filteredMatrixPeriods.length ? (
+                    <>
+                      {filteredMatrixUnits.map((unit) => {
+                        const excluded = result.excludedUnits.includes(unit);
                         return (
-                          <Fragment key={division}>
-                            {areas.map((area, index) => (
-                              <tr key={`${division}-${area.area}-${index}`}>
-                                <td>{division}</td>
-                                <td>{area.area}</td>
-                                <td className="num">{numberText(area.meta)}</td>
-                                <td className="num">{numberText(area.nota)}</td>
-                                <td className="num">
-                                  {fmtPct(aderenciaArea(area))}
-                                </td>
-                              </tr>
-                            ))}
-                            <tr className="total">
-                              <td colSpan={4}>Média {division}</td>
-                              <td className="num">{fmtPct(average)}</td>
-                            </tr>
-                          </Fragment>
+                          <TableRow key={unit}>
+                            <TableCell className="sticky left-0 z-10 min-w-[220px] bg-card font-medium">
+                              {formatFiveSUnitLabel(unit)}{" "}
+                              {excluded ? <Badge variant="outline">excluída</Badge> : null}
+                            </TableCell>
+                            {filteredMatrixPeriods.map((month) => {
+                              const item = result.unitMonths.find(
+                                (row) =>
+                                  row.unit === unit &&
+                                  row.year === month.year &&
+                                  row.month === month.month,
+                              );
+                              return (
+                                <TableCell
+                                  className="text-right tabular-nums"
+                                  key={periodKey(month.year, month.month)}
+                                >
+                                  {item ? fmtPct(item.aderencia) : "—"}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
                         );
-                      })
-                    ) : (
-                      <tr>
-                        <td className="rdo-empty-row" colSpan={5}>
-                          Sem dados reais para esta unidade e mês.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      })}
+                      <TableRow className="bg-muted/40 font-semibold hover:bg-muted/40">
+                        <TableCell className="sticky left-0 z-10 bg-muted/40">GERAL</TableCell>
+                        {filteredMatrixPeriods.map((month) => (
+                          <TableCell
+                            className="text-right tabular-nums"
+                            key={periodKey(month.year, month.month)}
+                          >
+                            {fmtPct(month.geral)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </>
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={Math.max(filteredMatrixPeriods.length + 1, 1)}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        Nenhum resultado encontrado para os filtros selecionados.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-3 space-y-0">
+              <div>
+                <CardTitle>Detalhamento por unidade</CardTitle>
+                <CardDescription>
+                  Divisão, área, meta, nota e aderência do período selecionado.
+                </CardDescription>
               </div>
-            </section>
-          </div>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fiveSDetailUnit">Unidade</Label>
+                  <Select
+                    id="fiveSDetailUnit"
+                    value={detailUnit}
+                    onChange={(event) => setDetailUnit(event.target.value)}
+                    className="w-44"
+                  >
+                    {units.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {formatFiveSUnitLabel(unit)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="fiveSDetailPeriod">Mês</Label>
+                  <Select
+                    id="fiveSDetailPeriod"
+                    value={detailPeriod}
+                    onChange={(event) => setDetailPeriod(event.target.value)}
+                    className="w-40"
+                  >
+                    {periods.map((period) => (
+                      <option key={period.key} value={period.key}>
+                        {period.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Divisão</TableHead>
+                    <TableHead>Área</TableHead>
+                    <TableHead className="text-right">Meta</TableHead>
+                    <TableHead className="text-right">Nota</TableHead>
+                    <TableHead className="text-right">Aderência</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detailGroups.length ? (
+                    detailGroups.map(([division, areas]) => {
+                      const average =
+                        areas.reduce((sum, area) => sum + aderenciaArea(area), 0) / areas.length;
+                      return (
+                        <Fragment key={division}>
+                          {areas.map((area, index) => (
+                            <TableRow key={`${division}-${area.area}-${index}`}>
+                              <TableCell className="font-medium">{division}</TableCell>
+                              <TableCell>{area.area}</TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {numberText(area.meta)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {numberText(area.nota)}
+                              </TableCell>
+                              <TableCell className="text-right tabular-nums">
+                                {fmtPct(aderenciaArea(area))}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="bg-muted/40 font-semibold hover:bg-muted/40">
+                            <TableCell colSpan={4}>Média {division}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {fmtPct(average)}
+                            </TableCell>
+                          </TableRow>
+                        </Fragment>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        Sem dados reais para esta unidade e mês.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
 
           {data?.lastImport ? (
-            <div className="info-box">
-              Última importação: {data.lastImport.fileName} · {data.lastImport.totalFound} encontrado(s), {data.lastImport.totalInserted} inserido(s), {data.lastImport.totalUpdated} atualizado(s), {data.lastImport.totalIgnored} ignorado(s) e {data.lastImport.totalRejected} rejeitado(s).
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Info className="size-3.5 shrink-0" />
+              Última importação: {data.lastImport.fileName} · {data.lastImport.totalFound}{" "}
+              encontrado(s), {data.lastImport.totalInserted} inserido(s),{" "}
+              {data.lastImport.totalUpdated} atualizado(s), {data.lastImport.totalIgnored}{" "}
+              ignorado(s) e {data.lastImport.totalRejected} rejeitado(s).
             </div>
           ) : null}
         </>
       ) : (
-        <div className="placeholder" style={{ marginTop: 20 }}>
-          <span className="tag">Aguardando dados</span>
-          <h3>Nenhuma auditoria 5S importada</h3>
-          <p>Os cards e tabelas serão montados somente após registros reais serem gravados no Neon.</p>
-        </div>
+        <Card className="flex flex-col items-center gap-3 border-dashed px-8 py-14 text-center">
+          <Badge variant="secondary" className="uppercase tracking-wide">
+            Aguardando dados
+          </Badge>
+          <CardTitle className="text-base">Nenhuma auditoria 5S importada</CardTitle>
+          <CardDescription className="max-w-sm">
+            Os cards e tabelas serão montados somente após registros reais serem gravados no Neon.
+          </CardDescription>
+        </Card>
       )}
     </div>
   );

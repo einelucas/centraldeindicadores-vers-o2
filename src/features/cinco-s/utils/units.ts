@@ -24,9 +24,7 @@ export const FIVES_UNITS: readonly FiveSUnitDefinition[] = [
 const UNIT_BY_CODE = new Map<string, FiveSUnitDefinition>(
   FIVES_UNITS.map((unit) => [unit.code, unit]),
 );
-const UNIT_ORDER = new Map<string, number>(
-  FIVES_UNITS.map((unit, index) => [unit.code, index]),
-);
+const UNIT_ORDER = new Map<string, number>(FIVES_UNITS.map((unit, index) => [unit.code, index]));
 
 /**
  * Converte sigla, nome completo ou rótulo combinado para a sigla oficial.
@@ -69,8 +67,8 @@ export function compareFiveSUnits(a: unknown, b: unknown): number {
   const orderA = UNIT_ORDER.get(codeA) ?? Number.MAX_SAFE_INTEGER;
   const orderB = UNIT_ORDER.get(codeB) ?? Number.MAX_SAFE_INTEGER;
 
-  return orderA - orderB || formatFiveSUnitLabel(codeA).localeCompare(
-    formatFiveSUnitLabel(codeB),
-    "pt-BR",
+  return (
+    orderA - orderB ||
+    formatFiveSUnitLabel(codeA).localeCompare(formatFiveSUnitLabel(codeB), "pt-BR")
   );
 }

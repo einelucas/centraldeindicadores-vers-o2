@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { computeRdoResult } from "@/features/rdo/calculations";
 import { toRdoPublishedPayload } from "@/features/rdo/publications";
+import { loadRdoConfiguration } from "@/features/rdo/services";
 import type { RdoNormalizedRecord } from "@/features/rdo/types";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
@@ -100,7 +101,8 @@ export async function POST(req: NextRequest) {
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
 
-    const result = computeRdoResult(records, thresholdFraction);
+    const configuration = await prisma.$transaction((tx) => loadRdoConfiguration(tx));
+    const result = computeRdoResult(records, thresholdFraction, configuration.excludedUnits);
 
     if (result.totalEmitidos <= 0) {
       return NextResponse.json(

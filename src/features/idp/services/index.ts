@@ -5,7 +5,7 @@ import { toJsonValue } from "@/server/database/json";
 import { idpRecordSchema, type IdpRecordInput } from "@/features/idp/schemas";
 import { idpBusinessKey, idpContentHash } from "@/features/idp/utils/keys";
 import { computeIdpResult } from "@/features/idp/calculations";
-import { loadIdpExcludedDisciplines } from "@/features/idp/configuration";
+import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp/configuration";
 import { loadIdpRecords } from "@/features/idp/repositories";
 import { IDP_DEFAULT_TARGET, type IdpNormalizedRecord } from "@/features/idp/types";
 import type { IncrementalRecord } from "@/importers/shared/incremental-upsert";
@@ -41,7 +41,6 @@ function iso(value: Date | null): string | null {
   return value ? value.toISOString().slice(0, 10) : null;
 }
 
-
 function normalizeStoredExecutionPhases(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
 
@@ -50,9 +49,7 @@ function normalizeStoredExecutionPhases(value: unknown): unknown {
 
     const item = phase as Record<string, unknown>;
     const currentLabel =
-      typeof item.label === "string" && item.label.trim() !== ""
-        ? item.label.trim()
-        : null;
+      typeof item.label === "string" && item.label.trim() !== "" ? item.label.trim() : null;
 
     if (currentLabel) return { ...item, label: currentLabel };
 
@@ -182,12 +179,19 @@ export function storedIdpRowToRecord(row: StoredIdpRow): IdpNormalizedRecord {
 
 /** Recalcula o resultado técnico usando a competência mais recente disponível. */
 export async function recalcIdpIndicators(tx: Prisma.TransactionClient): Promise<void> {
-  const [rows, excludedDisciplines] = await Promise.all([
+  const [rows, excludedDisciplines, excludedUnits] = await Promise.all([
     loadIdpRecords(tx),
     loadIdpExcludedDisciplines(tx),
+    loadIdpExcludedUnits(tx),
   ]);
   const records = (rows as StoredIdpRow[]).map(storedIdpRowToRecord);
-  const result = computeIdpResult(records, IDP_DEFAULT_TARGET, excludedDisciplines);
+  const result = computeIdpResult(
+    records,
+    IDP_DEFAULT_TARGET,
+    excludedDisciplines,
+    {},
+    excludedUnits,
+  );
 
   await tx.indicatorResult.deleteMany({
     where: { module: "idp", indicator: "aderencia" },

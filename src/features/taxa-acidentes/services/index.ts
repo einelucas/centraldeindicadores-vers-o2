@@ -13,22 +13,19 @@ import {
 import { toJsonValue } from "@/server/database/json";
 
 export const ACCIDENT_TARGET_SETTING_KEY = "taxa-acidentes.target";
+export const ACCIDENT_EXCLUDED_SETTING_KEY = "taxa-acidentes.excludedUnits";
 
 export function accidentUnitKey(unit: string): string {
   return normalizeForMatch(normalizeAccidentUnitCode(unit));
 }
 
-export async function loadAccidentTarget(
-  tx: Prisma.TransactionClient,
-): Promise<number> {
+export async function loadAccidentTarget(tx: Prisma.TransactionClient): Promise<number> {
   const setting = await tx.appSetting.findUnique({
     where: { key: ACCIDENT_TARGET_SETTING_KEY },
     select: { value: true },
   });
   const configured = Number(setting?.value);
-  return Number.isFinite(configured) && configured >= 0
-    ? configured
-    : ACCIDENT_RATE_DEFAULT_TARGET;
+  return Number.isFinite(configured) && configured >= 0 ? configured : ACCIDENT_RATE_DEFAULT_TARGET;
 }
 
 export async function saveAccidentTarget(
@@ -40,6 +37,33 @@ export async function saveAccidentTarget(
     create: { key: ACCIDENT_TARGET_SETTING_KEY, value: toJsonValue(target) },
     update: { value: toJsonValue(target) },
   });
+}
+
+export function normalizeExcludedUnits(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map(normalizeAccidentUnitCode).filter(Boolean)));
+}
+
+export async function loadAccidentExcludedUnits(tx: Prisma.TransactionClient): Promise<string[]> {
+  const setting = await tx.appSetting.findUnique({
+    where: { key: ACCIDENT_EXCLUDED_SETTING_KEY },
+    select: { value: true },
+  });
+  return Array.isArray(setting?.value)
+    ? normalizeExcludedUnits(setting.value.map((value) => String(value)))
+    : [];
+}
+
+export async function saveAccidentExcludedUnits(
+  tx: Prisma.TransactionClient,
+  excludedUnits: readonly string[],
+): Promise<string[]> {
+  const normalized = normalizeExcludedUnits(excludedUnits);
+  await tx.appSetting.upsert({
+    where: { key: ACCIDENT_EXCLUDED_SETTING_KEY },
+    create: { key: ACCIDENT_EXCLUDED_SETTING_KEY, value: toJsonValue(normalized) },
+    update: { value: toJsonValue(normalized) },
+  });
+  return normalized;
 }
 
 export function monthlyRowsToRecords(
@@ -70,16 +94,11 @@ export function unitRowsToRecords(
       const unit = normalizeAccidentUnitCode(row.unit || row.unitKey);
       return { ...row, unit, unitKey: accidentUnitKey(unit) };
     })
-    .sort(
-      (a, b) =>
-        a.year - b.year ||
-        a.month - b.month ||
-        compareAccidentUnits(a.unit, b.unit),
-    );
+    .sort((a, b) => a.year - b.year || a.month - b.month || compareAccidentUnits(a.unit, b.unit));
 }
 
 export async function loadAccidentRateData(tx: Prisma.TransactionClient) {
-  const [monthlyRows, unitRows, target] = await Promise.all([
+  const [monthlyRows, unitRows, target, excludedUnits] = await Promise.all([
     tx.accidentMonthlyRecord.findMany({
       orderBy: [{ year: "asc" }, { month: "asc" }],
       select: { id: true, year: true, month: true, rate: true, caf: true },
@@ -97,24 +116,21 @@ export async function loadAccidentRateData(tx: Prisma.TransactionClient) {
       },
     }),
     loadAccidentTarget(tx),
+    loadAccidentExcludedUnits(tx),
   ]);
 
   const monthly = monthlyRowsToRecords(monthlyRows);
   const units = unitRowsToRecords(unitRows);
-  const result = computeAccidentRateResult(monthly, units, target);
+  const result = computeAccidentRateResult(monthly, units, target, excludedUnits);
 
-  return { monthly, units, target, result };
+  return { monthly, units, target, excludedUnits, result };
 }
 
 export async function saveAccidentIndicatorResult(
   tx: Prisma.TransactionClient,
   result: ReturnType<typeof computeAccidentRateResult>,
 ): Promise<void> {
-  if (
-    result.result === null ||
-    result.latestYear === null ||
-    result.latestMonth === null
-  ) {
+  if (result.result === null || result.latestYear === null || result.latestMonth === null) {
     return;
   }
 

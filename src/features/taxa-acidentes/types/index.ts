@@ -35,10 +35,12 @@ export interface AccidentMonthlyResult extends AccidentMonthlyInput {
 
 export interface AccidentUnitResult extends AccidentUnitRecord {
   label: string;
+  excluded: boolean;
 }
 
 export interface AccidentRateResult {
   target: number;
+  excludedUnits: string[];
   result: number | null;
   totalCaf: number;
   totalUnitCaf: number;

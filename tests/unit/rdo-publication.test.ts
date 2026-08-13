@@ -4,18 +4,17 @@ import type { RdoResult } from "@/features/rdo/types";
 
 const result: RdoResult = {
   threshold: 0.8,
+  excludedUnits: [],
   totalEmitidos: 10,
   totalAprovados: 8,
   totalRevisar: 1,
   totalPreenchendo: 1,
   unitAvg: 0.75,
   units: [
-    { name: "INPASA Sinop", emitidos: 6, aprovados: 5, aderencia: 5 / 6 },
-    { name: "Dourados", emitidos: 4, aprovados: 3, aderencia: 0.75 },
+    { name: "INPASA Sinop", emitidos: 6, aprovados: 5, aderencia: 5 / 6, excluded: false },
+    { name: "Dourados", emitidos: 4, aprovados: 3, aderencia: 0.75, excluded: false },
   ],
-  months: [
-    { label: "Jan/2026", year: 2026, month: 0, emitidos: 10, aprovados: 8, aderencia: 0.8 },
-  ],
+  months: [{ label: "Jan/2026", year: 2026, month: 0, emitidos: 10, aprovados: 8, aderencia: 0.8 }],
 };
 
 describe("toRdoPublishedPayload", () => {

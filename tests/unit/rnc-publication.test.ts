@@ -4,6 +4,7 @@ import type { RncResult } from "@/features/rnc/types";
 
 const result: RncResult = {
   metaDias: 15,
+  excludedUnits: [],
   totalCriadas: 10,
   totalTratadas: 8,
   aderenciaTotal: 0.8,
@@ -29,8 +30,8 @@ const result: RncResult = {
     },
   ],
   units: [
-    { name: "INPASA Sinop", criadas: 6, tratadas: 5, aderencia: 5 / 6 },
-    { name: "Dourados", criadas: 4, tratadas: 3, aderencia: 0.75 },
+    { name: "INPASA Sinop", criadas: 6, tratadas: 5, aderencia: 5 / 6, excluded: false },
+    { name: "Dourados", criadas: 4, tratadas: 3, aderencia: 0.75, excluded: false },
   ],
   ofensores: [
     { name: "Fornecedor", count: 5, pct: 0.5 },
@@ -69,8 +70,8 @@ describe("toRncPublishedPayload", () => {
   });
 
   it("não permite publicação sem tempo de tratativa real", () => {
-    expect(() =>
-      toRncPublishedPayload({ ...result, resultadoDias: null }),
-    ).toThrow(/tempo de tratativa/i);
+    expect(() => toRncPublishedPayload({ ...result, resultadoDias: null })).toThrow(
+      /tempo de tratativa/i,
+    );
   });
 });

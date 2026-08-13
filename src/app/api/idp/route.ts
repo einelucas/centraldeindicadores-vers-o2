@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { computeIdpResult } from "@/features/idp/calculations";
-import { loadIdpExcludedDisciplines } from "@/features/idp/configuration";
+import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp/configuration";
 import { storedIdpRowToRecord } from "@/features/idp/services";
 import {
   IDP_DEFAULT_MONTH_END,
@@ -14,8 +14,7 @@ import { handleApiError } from "@/server/http";
 
 function isMissingRsoTable(error: unknown): boolean {
   return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    ["P2021", "P2022"].includes(error.code)
+    error instanceof Prisma.PrismaClientKnownRequestError && ["P2021", "P2022"].includes(error.code)
   );
 }
 
@@ -36,14 +35,13 @@ export async function GET(req: NextRequest) {
     await requirePermission("indicators:read");
     const { searchParams } = new URL(req.url);
     const thresholdParam = searchParams.get("threshold");
-    const thresholdRaw = thresholdParam === null || thresholdParam.trim() === ""
-      ? Number.NaN
-      : Number(thresholdParam);
+    const thresholdRaw =
+      thresholdParam === null || thresholdParam.trim() === "" ? Number.NaN : Number(thresholdParam);
     const threshold = Number.isFinite(thresholdRaw)
       ? Math.max(0, Math.min(2, thresholdRaw / 100))
       : IDP_DEFAULT_TARGET;
 
-    const [rows, lastImport, excludedDisciplines] = await Promise.all([
+    const [rows, lastImport, excludedDisciplines, excludedUnits] = await Promise.all([
       prisma.idpRsoRecord.findMany({
         orderBy: [
           { referenceYear: "desc" },
@@ -70,9 +68,12 @@ export async function GET(req: NextRequest) {
         },
       }),
       loadIdpExcludedDisciplines(prisma),
+      loadIdpExcludedUnits(prisma),
     ]);
 
-    const importIds = Array.from(new Set(rows.flatMap((row) => [row.firstImportId, row.lastImportId])));
+    const importIds = Array.from(
+      new Set(rows.flatMap((row) => [row.firstImportId, row.lastImportId])),
+    );
     const importJobs = importIds.length
       ? await prisma.importJob.findMany({
           where: { id: { in: importIds } },
@@ -82,17 +83,16 @@ export async function GET(req: NextRequest) {
     const importUserById = new Map(importJobs.map((job) => [job.id, job.user.name]));
 
     const records = rows.map(storedIdpRowToRecord);
-    const years = Array.from(new Set(rows.map((row) => row.referenceYear))).sort(
-      (a, b) => b - a,
-    );
+    const years = Array.from(new Set(rows.map((row) => row.referenceYear))).sort((a, b) => b - a);
     const latest = rows[0]
       ? { year: rows[0].referenceYear, month: rows[0].referenceMonth }
       : { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
 
     const requestedYearParam = searchParams.get("year");
-    const requestedYear = requestedYearParam === null || requestedYearParam.trim() === ""
-      ? Number.NaN
-      : Number(requestedYearParam);
+    const requestedYear =
+      requestedYearParam === null || requestedYearParam.trim() === ""
+        ? Number.NaN
+        : Number(requestedYearParam);
     const selectedYear =
       Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2200
         ? requestedYear
@@ -101,15 +101,10 @@ export async function GET(req: NextRequest) {
     const monthsForYear = rows
       .filter((row) => row.referenceYear === selectedYear)
       .map((row) => row.referenceMonth);
-    const latestMonthForYear = monthsForYear.length
-      ? Math.max(...monthsForYear)
-      : latest.month;
+    const latestMonthForYear = monthsForYear.length ? Math.max(...monthsForYear) : latest.month;
     const selectedMonth = boundedMonth(searchParams.get("month"), latestMonthForYear);
 
-    let historyMonthStart = boundedMonth(
-      searchParams.get("historyStart"),
-      IDP_DEFAULT_MONTH_START,
-    );
+    let historyMonthStart = boundedMonth(searchParams.get("historyStart"), IDP_DEFAULT_MONTH_START);
     let historyMonthEnd = boundedMonth(
       searchParams.get("historyEnd"),
       Math.max(selectedMonth, IDP_DEFAULT_MONTH_START),
@@ -118,12 +113,18 @@ export async function GET(req: NextRequest) {
       [historyMonthStart, historyMonthEnd] = [historyMonthEnd, historyMonthStart];
     }
 
-    const result = computeIdpResult(records, threshold, excludedDisciplines, {
-      selectedYear,
-      selectedMonth,
-      historyMonthStart,
-      historyMonthEnd,
-    });
+    const result = computeIdpResult(
+      records,
+      threshold,
+      excludedDisciplines,
+      {
+        selectedYear,
+        selectedMonth,
+        historyMonthStart,
+        historyMonthEnd,
+      },
+      excludedUnits,
+    );
     const activeIds = new Set(result.unitRows.map((row) => row.sourceId).filter(Boolean));
 
     return NextResponse.json({
@@ -158,8 +159,7 @@ export async function GET(req: NextRequest) {
         fileName: row.fileName,
         areas: Array.isArray(row.areas) ? row.areas.length : 0,
         active: activeIds.has(row.id),
-        sameCompetence:
-          row.referenceYear === selectedYear && row.referenceMonth === selectedMonth,
+        sameCompetence: row.referenceYear === selectedYear && row.referenceMonth === selectedMonth,
         createdAt: row.createdAt.toISOString(),
         updatedAt: row.updatedAt.toISOString(),
         firstImportedBy: importUserById.get(row.firstImportId) ?? null,

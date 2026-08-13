@@ -95,9 +95,7 @@ export function selectLatestRsoByUnit(
     }
   }
 
-  return Array.from(latestByUnit.values()).sort((a, b) =>
-    a.unit.localeCompare(b.unit, "pt-BR"),
-  );
+  return Array.from(latestByUnit.values()).sort((a, b) => a.unit.localeCompare(b.unit, "pt-BR"));
 }
 
 function average(values: readonly number[]): number {
@@ -127,9 +125,7 @@ export function recordsInCompetence(
 ): IdpNormalizedRecord[] {
   return entries.filter(
     (entry) =>
-      isCompleteReference(entry) &&
-      entry.referenceYear === year &&
-      entry.referenceMonth === month,
+      isCompleteReference(entry) && entry.referenceYear === year && entry.referenceMonth === month,
   );
 }
 
@@ -223,34 +219,36 @@ function buildUnitDetails(
   }));
 }
 
-function buildUnitRows(activeEntries: readonly IdpNormalizedRecord[]): IdpUnitExecutionRow[] {
-  return activeEntries
-    .filter(isCompleteReference)
-    .map((entry) => {
-      const fases = entry.execucaoFases ?? [];
-      const prevAcum = average(fases.map((phase) => Number(phase.prevAcum) || 0));
-      const realAcum = average(fases.map((phase) => Number(phase.realAcum) || 0));
+function buildUnitRows(
+  activeEntries: readonly IdpNormalizedRecord[],
+  excludeSet: ReadonlySet<string>,
+): IdpUnitExecutionRow[] {
+  return activeEntries.filter(isCompleteReference).map((entry) => {
+    const fases = entry.execucaoFases ?? [];
+    const prevAcum = average(fases.map((phase) => Number(phase.prevAcum) || 0));
+    const realAcum = average(fases.map((phase) => Number(phase.realAcum) || 0));
 
-      return {
-        sourceId: entry.id,
-        unit: entry.unit,
-        rsoNumero: entry.rsoNumero,
-        referenceYear: entry.referenceYear,
-        referenceMonth: entry.referenceMonth,
-        referenceSource: entry.referenceSource,
-        referenceOriginalText: entry.referenceOriginalText,
-        referenceAdjusted: entry.referenceAdjusted,
-        periodStart: entry.periodStart,
-        periodEnd: entry.periodEnd,
-        emissionDate: entry.emissionDate,
-        fileName: entry.fileName,
-        prevAcum,
-        realAcum,
-        aderencia: calculateIdpAdherence(realAcum, prevAcum),
-        nFases: fases.length,
-        fases,
-      };
-    });
+    return {
+      sourceId: entry.id,
+      unit: entry.unit,
+      excluded: excludeSet.has(normalizedUnitKey(entry.unit)),
+      rsoNumero: entry.rsoNumero,
+      referenceYear: entry.referenceYear,
+      referenceMonth: entry.referenceMonth,
+      referenceSource: entry.referenceSource,
+      referenceOriginalText: entry.referenceOriginalText,
+      referenceAdjusted: entry.referenceAdjusted,
+      periodStart: entry.periodStart,
+      periodEnd: entry.periodEnd,
+      emissionDate: entry.emissionDate,
+      fileName: entry.fileName,
+      prevAcum,
+      realAcum,
+      aderencia: calculateIdpAdherence(realAcum, prevAcum),
+      nFases: fases.length,
+      fases,
+    };
+  });
 }
 
 function monthlyResult(
@@ -258,14 +256,13 @@ function monthlyResult(
   selectedYear: number,
   monthStart: number,
   monthEnd: number,
+  excludeSet: ReadonlySet<string>,
 ): IdpMonthlyAggregate[] {
   const rows: IdpMonthlyAggregate[] = [];
 
   for (let month = monthStart; month <= monthEnd; month += 1) {
-    const activeEntries = selectLatestRsoByUnit(
-      recordsInCompetence(entries, selectedYear, month),
-    );
-    const unitRows = buildUnitRows(activeEntries);
+    const activeEntries = selectLatestRsoByUnit(recordsInCompetence(entries, selectedYear, month));
+    const unitRows = buildUnitRows(activeEntries, excludeSet).filter((unit) => !unit.excluded);
     rows.push({
       year: selectedYear,
       month,
@@ -285,7 +282,9 @@ function boundedMonth(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.min(12, Math.trunc(value ?? fallback)));
 }
 
-function latestCompetence(entries: readonly IdpNormalizedRecord[]): { year: number; month: number } | null {
+function latestCompetence(
+  entries: readonly IdpNormalizedRecord[],
+): { year: number; month: number } | null {
   const valid = entries
     .filter(isCompleteReference)
     .map((entry) => ({ year: entry.referenceYear, month: entry.referenceMonth }))
@@ -298,12 +297,16 @@ export function computeIdpResult(
   threshold: number = IDP_DEFAULT_TARGET,
   excludedDisciplines: readonly string[] = [],
   options: IdpPeriodOptions = {},
+  excludedUnits: readonly string[] = [],
 ): IdpDetailedResult {
+  const excludeSet = new Set(excludedUnits.map(normalizedUnitKey).filter(Boolean));
+  const excludedNormalized = Array.from(excludeSet);
+
   const latest = latestCompetence(entries);
   const selectedYear =
     Number.isInteger(options.selectedYear) && (options.selectedYear ?? 0) >= 2000
       ? options.selectedYear!
-      : latest?.year ?? new Date().getFullYear();
+      : (latest?.year ?? new Date().getFullYear());
 
   const selectedMonth = boundedMonth(
     options.selectedMonth,
@@ -318,15 +321,20 @@ export function computeIdpResult(
 
   const competenceEntries = recordsInCompetence(entries, selectedYear, selectedMonth);
   const activeEntries = selectLatestRsoByUnit(competenceEntries);
-  const unitRows = buildUnitRows(activeEntries);
-  const disciplineRows = buildDisciplineRows(activeEntries, excludedDisciplines);
+  const includedEntries = activeEntries.filter(
+    (entry) => !excludeSet.has(normalizedUnitKey(entry.unit)),
+  );
+  const unitRows = buildUnitRows(activeEntries, excludeSet);
+  const includedUnitRows = unitRows.filter((unit) => !unit.excluded);
+  const disciplineRows = buildDisciplineRows(includedEntries, excludedDisciplines);
   const unitDetails = buildUnitDetails(activeEntries, excludedDisciplines);
-  const aderenciaGeral = unitRows.length
-    ? average(unitRows.map((unit) => unit.aderencia))
+  const aderenciaGeral = includedUnitRows.length
+    ? average(includedUnitRows.map((unit) => unit.aderencia))
     : 0;
 
   return {
     threshold,
+    excludedUnits: excludedNormalized,
     selectedYear,
     selectedMonth,
     historyMonthStart,
@@ -337,9 +345,9 @@ export function computeIdpResult(
     unitDetails,
     unitNames: activeEntries.map((entry) => entry.unit),
     activeDocuments: activeEntries.length,
-    totalPrevistoMedio: unitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
-    totalRealMedio: unitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
-    monthly: monthlyResult(entries, selectedYear, historyMonthStart, historyMonthEnd),
+    totalPrevistoMedio: includedUnitRows.reduce((sum, unit) => sum + unit.prevAcum, 0),
+    totalRealMedio: includedUnitRows.reduce((sum, unit) => sum + unit.realAcum, 0),
+    monthly: monthlyResult(entries, selectedYear, historyMonthStart, historyMonthEnd, excludeSet),
   };
 }
 

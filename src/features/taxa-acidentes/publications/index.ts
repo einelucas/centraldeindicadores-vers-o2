@@ -64,13 +64,15 @@ export function toAccidentRatePublishedPayload(
       taxa: month.rate,
       caf: month.caf,
     })),
-    unidades: result.units.map((unit) => ({
-      year: unit.year,
-      month: unit.month,
-      label: unit.label,
-      unidade: unit.unit,
-      caf: unit.caf,
-      saf: unit.saf,
-    })),
+    unidades: result.units
+      .filter((unit) => !unit.excluded)
+      .map((unit) => ({
+        year: unit.year,
+        month: unit.month,
+        label: unit.label,
+        unidade: unit.unit,
+        caf: unit.caf,
+        saf: unit.saf,
+      })),
   };
 }

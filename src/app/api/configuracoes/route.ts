@@ -7,7 +7,9 @@ import { recordAudit } from "@/server/audit";
 import { toJsonValue } from "@/server/database/json";
 import {
   IDP_EXCLUDED_DISCIPLINES_SETTING_KEY,
+  IDP_EXCLUDED_UNITS_SETTING_KEY,
   parseIdpExcludedDisciplines,
+  parseIdpExcludedUnits,
 } from "@/features/idp/configuration";
 import { recalcIdpIndicators } from "@/features/idp/services";
 
@@ -15,6 +17,7 @@ const ACTIVE_SETTING_KEYS = [
   "rdo.target",
   "idp.target",
   IDP_EXCLUDED_DISCIPLINES_SETTING_KEY,
+  IDP_EXCLUDED_UNITS_SETTING_KEY,
   "rnc.maxPrazoDias",
   "fiveS.target",
   "fiveS.excludedUnits",
@@ -53,7 +56,9 @@ export async function PATCH(req: NextRequest) {
     const normalizedValue =
       key === IDP_EXCLUDED_DISCIPLINES_SETTING_KEY
         ? parseIdpExcludedDisciplines(value)
-        : value;
+        : key === IDP_EXCLUDED_UNITS_SETTING_KEY
+          ? parseIdpExcludedUnits(value)
+          : value;
 
     const updated = await prisma.$transaction(
       async (tx) => {
@@ -63,7 +68,10 @@ export async function PATCH(req: NextRequest) {
           update: { value: toJsonValue(normalizedValue) },
         });
 
-        if (key === IDP_EXCLUDED_DISCIPLINES_SETTING_KEY) {
+        if (
+          key === IDP_EXCLUDED_DISCIPLINES_SETTING_KEY ||
+          key === IDP_EXCLUDED_UNITS_SETTING_KEY
+        ) {
           await recalcIdpIndicators(tx);
         }
 

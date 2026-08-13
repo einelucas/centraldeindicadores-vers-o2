@@ -35,21 +35,23 @@ export function averageMonthlyRncDays(
 ): number | null {
   const validDays = months
     .map((month) => month.diasMedios)
-    .filter(
-      (value): value is number => value !== null && Number.isFinite(value),
-    );
+    .filter((value): value is number => value !== null && Number.isFinite(value));
 
   if (validDays.length === 0) return null;
 
-  return (
-    validDays.reduce((sum, value) => sum + value, 0) / validDays.length
-  );
+  return validDays.reduce((sum, value) => sum + value, 0) / validDays.length;
 }
 
 export function computeRncResult(
   records: readonly RncNormalizedRecord[],
   metaDias: number = RNC_DEFAULT_MAX_DIAS,
+  excludedUnits: readonly string[] = [],
 ): RncResult {
+  const excludedNormalized = Array.from(
+    new Set(excludedUnits.map(normalizeRncUnitCode).filter(Boolean)),
+  );
+  const excludeSet = new Set(excludedNormalized);
+
   const byMonth = new Map<
     string,
     {
@@ -70,16 +72,25 @@ export function computeRncResult(
   for (const record of records) {
     if (!record.dataCriacao || isNaN(record.dataCriacao.getTime())) continue;
 
-    const status = String(record.statusRnc ?? "").trim().toUpperCase();
+    const status = String(record.statusRnc ?? "")
+      .trim()
+      .toUpperCase();
     const unidade = normalizeRncUnitCode(record.unidade);
     const ofensor = String(record.ofensor ?? "").trim() || "N/A";
+    const isExcluded = unidade !== "" && excludeSet.has(unidade);
 
-    totalCriadas++;
+    // A tabela por unidade continua mostrando todas, inclusive as ignoradas.
     if (unidade) {
       const unit = byUnit.get(unidade) ?? { criadas: 0, tratadas: 0 };
       unit.criadas++;
+      if (status === RNC_STATUS_TRATADA) unit.tratadas++;
       byUnit.set(unidade, unit);
     }
+
+    if (isExcluded) continue;
+
+    totalCriadas++;
+    if (status === RNC_STATUS_TRATADA) totalTratadas++;
     byOfensor.set(ofensor, (byOfensor.get(ofensor) ?? 0) + 1);
 
     const year = record.dataCriacao.getFullYear();
@@ -97,31 +108,18 @@ export function computeRncResult(
 
     if (record.dataSolucao && !isNaN(record.dataSolucao.getTime())) {
       aggregate.solucionados++;
-      if (
-        record.tempoTratativa !== null &&
-        Number.isFinite(record.tempoTratativa)
-      ) {
+      if (record.tempoTratativa !== null && Number.isFinite(record.tempoTratativa)) {
         aggregate.tratativaSum += record.tempoTratativa;
         aggregate.tratativaCount++;
       }
     }
     byMonth.set(key, aggregate);
-
-    if (status === RNC_STATUS_TRATADA) {
-      totalTratadas++;
-      if (unidade) {
-        const unit = byUnit.get(unidade);
-        if (unit) unit.tratadas++;
-      }
-    }
   }
 
   const months: RncMonthAggregate[] = Array.from(byMonth.values())
     .sort((a, b) => a.y - b.y || a.m - b.m)
     .map((month) => {
-      const diasMedios = month.tratativaCount
-        ? month.tratativaSum / month.tratativaCount
-        : null;
+      const diasMedios = month.tratativaCount ? month.tratativaSum / month.tratativaCount : null;
       return {
         label: `${MONTH_NAMES[month.m] ?? "?"}/${month.y}`,
         year: month.y,
@@ -140,12 +138,10 @@ export function computeRncResult(
       criadas: data.criadas,
       tratadas: data.tratadas,
       aderencia: data.criadas ? data.tratadas / data.criadas : 0,
+      excluded: excludeSet.has(name),
     }));
 
-  const totalOfensor = Array.from(byOfensor.values()).reduce(
-    (sum, value) => sum + value,
-    0,
-  );
+  const totalOfensor = Array.from(byOfensor.values()).reduce((sum, value) => sum + value, 0);
   const ofensores: RncOfensorAggregate[] = Array.from(byOfensor.entries())
     .sort((a, b) => b[1] - a[1])
     .map(([name, count]) => ({
@@ -158,6 +154,7 @@ export function computeRncResult(
 
   return {
     metaDias,
+    excludedUnits: excludedNormalized,
     totalCriadas,
     totalTratadas,
     aderenciaTotal: totalCriadas ? totalTratadas / totalCriadas : 0,

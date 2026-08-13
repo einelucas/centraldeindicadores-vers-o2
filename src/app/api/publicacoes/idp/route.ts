@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { computeIdpResult } from "@/features/idp/calculations";
-import { loadIdpExcludedDisciplines } from "@/features/idp/configuration";
+import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp/configuration";
 import { toIdpPublishedPayload } from "@/features/idp/publications";
 import { storedIdpRowToRecord } from "@/features/idp/services";
 import { IDP_DEFAULT_TARGET } from "@/features/idp/types";
@@ -20,7 +20,11 @@ const publishSchema = z.object({
   month: z.number().int().min(1).max(12),
   historyStart: z.number().int().min(1).max(12),
   historyEnd: z.number().int().min(1).max(12),
-  threshold: z.number().min(0).max(200).default(IDP_DEFAULT_TARGET * 100),
+  threshold: z
+    .number()
+    .min(0)
+    .max(200)
+    .default(IDP_DEFAULT_TARGET * 100),
 });
 
 function isMissingPublicationTable(error: unknown): boolean {
@@ -68,16 +72,13 @@ export async function POST(req: NextRequest) {
     const historyStart = Math.min(input.historyStart, input.historyEnd);
     const historyEnd = Math.max(input.historyStart, input.historyEnd);
 
-    const [rows, excludedDisciplines] = await Promise.all([
+    const [rows, excludedDisciplines, excludedUnits] = await Promise.all([
       prisma.idpRsoRecord.findMany({
         where: { referenceYear: input.year },
-        orderBy: [
-          { referenceMonth: "asc" },
-          { unit: "asc" },
-          { rsoNumero: "asc" },
-        ],
+        orderBy: [{ referenceMonth: "asc" }, { unit: "asc" }, { rsoNumero: "asc" }],
       }),
       loadIdpExcludedDisciplines(prisma),
+      loadIdpExcludedUnits(prisma),
     ]);
 
     if (!rows.length) {
@@ -88,12 +89,18 @@ export async function POST(req: NextRequest) {
     }
 
     const records = rows.map(storedIdpRowToRecord);
-    const result = computeIdpResult(records, thresholdFraction, excludedDisciplines, {
-      selectedYear: input.year,
-      selectedMonth: input.month,
-      historyMonthStart: historyStart,
-      historyMonthEnd: historyEnd,
-    });
+    const result = computeIdpResult(
+      records,
+      thresholdFraction,
+      excludedDisciplines,
+      {
+        selectedYear: input.year,
+        selectedMonth: input.month,
+        historyMonthStart: historyStart,
+        historyMonthEnd: historyEnd,
+      },
+      excludedUnits,
+    );
 
     if (!result.activeDocuments) {
       return NextResponse.json(

@@ -29,13 +29,16 @@ export function computeAccidentRateResult(
   monthlyRecords: readonly AccidentMonthlyInput[],
   unitRecords: readonly AccidentUnitRecord[],
   target: number,
+  excludedUnits: readonly string[] = [],
 ): AccidentRateResult {
+  const excludedNormalized = Array.from(
+    new Set(excludedUnits.map(normalizeAccidentUnitCode).filter(Boolean)),
+  );
+  const excludeSet = new Set(excludedNormalized);
+
   const monthByKey = new Map<string, AccidentMonthlyInput>();
   for (const record of monthlyRecords) {
-    monthByKey.set(
-      `${record.year}-${String(record.month).padStart(2, "0")}`,
-      record,
-    );
+    monthByKey.set(`${record.year}-${String(record.month).padStart(2, "0")}`, record);
   }
 
   const monthly = Array.from(monthByKey.values())
@@ -58,23 +61,21 @@ export function computeAccidentRateResult(
       ...record,
       unit: normalizeAccidentUnitCode(record.unit),
     }))
-    .sort(
-      (a, b) =>
-        a.year - b.year ||
-        a.month - b.month ||
-        compareAccidentUnits(a.unit, b.unit),
-    )
+    .sort((a, b) => a.year - b.year || a.month - b.month || compareAccidentUnits(a.unit, b.unit))
     .map((record) => ({
       ...record,
       label: monthLabel(record.year, record.month),
+      excluded: excludeSet.has(record.unit),
     }));
+  const includedUnits = units.filter((unit) => !unit.excluded);
 
   return {
     target,
+    excludedUnits: excludedNormalized,
     result,
     totalCaf,
-    totalUnitCaf: units.reduce((sum, record) => sum + record.caf, 0),
-    totalSaf: units.reduce((sum, record) => sum + record.saf, 0),
+    totalUnitCaf: includedUnits.reduce((sum, record) => sum + record.caf, 0),
+    totalSaf: includedUnits.reduce((sum, record) => sum + record.saf, 0),
     latestRate: latest?.rate ?? null,
     latestYear: latest?.year ?? null,
     latestMonth: latest?.month ?? null,

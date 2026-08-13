@@ -1,8 +1,4 @@
-import {
-  RDO_SCORECARD_POINTS,
-  RDO_SCORECARD_WEIGHT,
-  type RdoResult,
-} from "@/features/rdo/types";
+import { RDO_SCORECARD_POINTS, RDO_SCORECARD_WEIGHT, type RdoResult } from "@/features/rdo/types";
 
 export interface RdoPublishedUnit {
   n: string;
@@ -43,8 +39,7 @@ export function toRdoPublishedPayload(
     throw new Error("Não há RDO emitido no período para calcular a aprovação.");
   }
 
-  const resultado =
-    (result.totalAprovados / result.totalEmitidos) * 100;
+  const resultado = (result.totalAprovados / result.totalEmitidos) * 100;
 
   return {
     pontos: RDO_SCORECARD_POINTS,
@@ -53,14 +48,10 @@ export function toRdoPublishedPayload(
     resultado: roundPercent(resultado),
     aprovados: result.totalAprovados,
     emitidos: result.totalEmitidos,
-    emRevisaoPct: roundPercent(
-      (result.totalRevisar / result.totalEmitidos) * 100,
-    ),
-    preenchendoPct: roundPercent(
-      (result.totalPreenchendo / result.totalEmitidos) * 100,
-    ),
+    emRevisaoPct: roundPercent((result.totalRevisar / result.totalEmitidos) * 100),
+    preenchendoPct: roundPercent((result.totalPreenchendo / result.totalEmitidos) * 100),
     unidades: result.units
-      .filter((unit) => unit.emitidos > 0)
+      .filter((unit) => unit.emitidos > 0 && !unit.excluded)
       .map((unit) => ({
         n: unit.name.replace(/^INPASA\s*/i, "").trim(),
         v: Math.round(unit.aderencia * 100),
@@ -68,10 +59,7 @@ export function toRdoPublishedPayload(
       .sort((a, b) => b.v - a.v),
     mensal: result.months.map((month) => ({
       label: month.label,
-      v:
-        month.emitidos > 0
-          ? roundPercent((month.aprovados / month.emitidos) * 100)
-          : null,
+      v: month.emitidos > 0 ? roundPercent((month.aprovados / month.emitidos) * 100) : null,
     })),
   };
 }

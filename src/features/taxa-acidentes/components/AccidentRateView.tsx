@@ -1,7 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  CheckCircle2,
+  FilterX,
+  Gauge,
+  HardHat,
+  Pencil,
+  Send,
+  Trash2,
+  TrendingUp,
+  X,
+} from "lucide-react";
+import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { ExportButtons } from "@/components/exports/ExportButtons";
 import { MONTH_NAMES } from "@/lib/dates";
 import {
@@ -16,13 +45,13 @@ import {
   formatAccidentUnitLabel,
   normalizeAccidentUnitCode,
 } from "@/features/taxa-acidentes/utils/units";
-import styles from "./AccidentRateView.module.css";
 
 interface AccidentRateApiResponse {
   setupRequired?: boolean;
   monthly: AccidentMonthlyRecord[];
   units: AccidentUnitRecord[];
   target: number;
+  excludedUnits?: string[];
   result: AccidentRateResult | null;
 }
 
@@ -79,6 +108,10 @@ export function AccidentRateView({
   const [unitFilterMonth, setUnitFilterMonth] = useState("");
   const [unitFilterUnit, setUnitFilterUnit] = useState("");
 
+  const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+
   const load = useCallback(async () => {
     const response = await fetch("/api/taxa-acidentes", { cache: "no-store" });
     if (!response.ok) {
@@ -87,6 +120,7 @@ export function AccidentRateView({
     const body = (await response.json()) as AccidentRateApiResponse;
     setData(body);
     setTarget(String(body.target ?? ACCIDENT_RATE_DEFAULT_TARGET));
+    setExcludedUnits(body.excludedUnits ?? []);
   }, []);
 
   const loadPublication = useCallback(async () => {
@@ -144,9 +178,7 @@ export function AccidentRateView({
 
   const unitFilterUnits = useMemo(() => {
     const units = new Set(
-      (data?.units ?? [])
-        .map((row) => normalizeAccidentUnitCode(row.unit))
-        .filter(Boolean),
+      (data?.units ?? []).map((row) => normalizeAccidentUnitCode(row.unit)).filter(Boolean),
     );
     return Array.from(units).sort(compareAccidentUnits);
   }, [data]);
@@ -159,6 +191,37 @@ export function AccidentRateView({
     }
     return Array.from(units).sort(compareAccidentUnits);
   }, [data]);
+
+  const unitDialogOptions = useMemo(() => {
+    const codes = new Set<string>([...unitFormOptions, ...excludedUnits]);
+    codes.delete("");
+    return Array.from(codes)
+      .sort(compareAccidentUnits)
+      .map((code) => ({ code, label: formatAccidentUnitLabel(code) }));
+  }, [excludedUnits, unitFormOptions]);
+
+  async function saveExcludedUnits(next: string[]) {
+    setUnitDialogBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/taxa-acidentes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ excludedUnits: next }),
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Falha ao salvar as unidades ignoradas.");
+      }
+      setExcludedUnits(next);
+      setUnitDialogOpen(false);
+      await load();
+      setMessage("Unidades ignoradas atualizadas e indicador recalculado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar as unidades ignoradas.");
+    } finally {
+      setUnitDialogBusy(false);
+    }
+  }
 
   const filteredUnitRows = useMemo(() => {
     return (data?.units ?? []).filter((row) => {
@@ -189,10 +252,7 @@ export function AccidentRateView({
   const hasUnitFilters = Boolean(unitFilterYear || unitFilterMonth || unitFilterUnit);
 
   useEffect(() => {
-    if (
-      monthlyFilterYear &&
-      !monthlyFilterYears.includes(Number(monthlyFilterYear))
-    ) {
+    if (monthlyFilterYear && !monthlyFilterYears.includes(Number(monthlyFilterYear))) {
       setMonthlyFilterYear("");
     }
   }, [monthlyFilterYear, monthlyFilterYears]);
@@ -452,454 +512,568 @@ export function AccidentRateView({
 
   if (data?.setupRequired) {
     return (
-      <div className="error-box">
-        Estrutura do banco pendente. Execute <strong>pnpm db:upgrade:accidents</strong> e recarregue
-        esta página.
+      <div className="flex items-start gap-2 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-sm font-medium text-danger">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+        <span>
+          Estrutura do banco pendente. Execute{" "}
+          <strong className="font-bold">pnpm db:upgrade:accidents</strong> e recarregue esta página.
+        </span>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="controls-row">
-        <label>Meta de frequência (≤)</label>
-        <input
-          type="number"
-          min="0"
-          step="0.1"
-          value={target}
-          onChange={(event) => setTarget(event.target.value)}
-        />
-        <button className="btn secondary" disabled={busy} onClick={() => void saveTarget()}>
-          Salvar meta
-        </button>
-        <button className="btn secondary" disabled={busy} onClick={() => void load()}>
-          Recalcular do banco
-        </button>
-        <ExportButtons
-          fileName="taxa-acidentes"
-          title="Taxa de Acidentes"
-          subtitle={`Meta de frequência ≤ ${target}`}
-          rows={exportRows}
-          columns={[
-            { header: "Mês", value: (row) => row.periodo },
-            { header: "Taxa de Frequência", value: (row) => row.taxa },
-            { header: "Acidentes CAF", value: (row) => row.caf },
-          ]}
-        />
-        {canClear ? (
-          <button className="btn secondary" disabled={busy} onClick={() => void clearAll()}>
-            Limpar tudo
-          </button>
-        ) : null}
-        {canPublish ? (
-          <button
-            className="btn"
-            style={{ background: "var(--verde)" }}
-            disabled={busy || !data?.monthly.length}
-            onClick={() => void publish()}
-          >
-            Publicar no Painel
-          </button>
-        ) : null}
-      </div>
-
-      <div className="text-sm text-neutralbrand">
-        {publication
-          ? `Última publicação: versão ${publication.version}, por ${publication.publishedBy.name}, em ${new Date(publication.publishedAt).toLocaleString("pt-BR")}.`
-          : "Nenhuma versão publicada ainda."}
-      </div>
-
-      {error ? <div className="error-box">{error}</div> : null}
-      {message ? <div className="info-box">{message}</div> : null}
-
-      {data?.result ? (
-        <div className="cards">
-          <div className="card">
-            <div className="lbl">Taxa do período</div>
-            <div className="val">
-              {data.result.result === null ? "—" : decimal(data.result.result)}
-            </div>
-            <div className="sub">média de todos os meses carregados</div>
-          </div>
-          <div className="card">
-            <div className="lbl">Acidentes CAF</div>
-            <div className="val">{data.result.totalCaf}</div>
-            <div className="sub">total mensal do período</div>
-          </div>
-          <div className="card">
-            <div className="lbl">Acidentes SAF por unidade</div>
-            <div className="val">{data.result.totalSaf}</div>
-            <div className="sub">soma dos lançamentos por unidade</div>
-          </div>
-          <div className="card">
-            <div className="lbl">Desempenho do mês</div>
-            <div className="val">
-              {data.result.latestRate === null ? "—" : decimal(data.result.latestRate)}
-            </div>
-            <div className="sub">leitura mais recente</div>
-          </div>
-        </div>
-      ) : null}
-
-      <section className={styles.sectionCard}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h3>Taxa de frequência mensal e acidentes CAF</h3>
-            <p>Informe a competência, a taxa mensal e a quantidade total de acidentes CAF.</p>
-          </div>
-          {editingMonthId ? <span className={styles.editingBadge}>Editando lançamento</span> : null}
-        </div>
-
-        <div className={styles.formGrid}>
-          <label className={styles.field}>
-            <span>Ano</span>
-            <input
-              type="number"
-              min="2000"
-              max="2100"
-              value={year}
-              onChange={(event) => setYear(Number(event.target.value))}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>Mês</span>
-            <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>
-              {MONTH_NAMES.map((name, index) => (
-                <option key={name} value={index + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={styles.field}>
-            <span>Taxa de frequência</span>
-            <input
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label>Meta de frequência (≤)</Label>
+            <Input
               type="number"
               min="0"
               step="0.1"
-              value={rate}
-              onChange={(event) => setRate(event.target.value)}
+              value={target}
+              onChange={(event) => setTarget(event.target.value)}
+              className="w-24"
             />
-          </label>
-          <label className={styles.field}>
-            <span>Acidentes CAF</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={caf}
-              onChange={(event) => setCaf(event.target.value)}
-            />
-          </label>
-          <div className={styles.formActions}>
-            <button className="btn" disabled={busy} onClick={() => void addMonth()}>
-              {editingMonthId ? "Salvar alterações" : "Adicionar"}
-            </button>
-            {editingMonthId ? (
-              <button className="btn secondary" disabled={busy} onClick={resetMonthForm}>
-                Cancelar edição
-              </button>
-            ) : null}
           </div>
-        </div>
-
-        <div className={styles.filterBar}>
-          <strong>Consultar tabela</strong>
-          <label>
-            <span>Ano</span>
-            <select value={monthlyFilterYear} onChange={(event) => setMonthlyFilterYear(event.target.value)}>
-              <option value="">Todos</option>
-              {monthlyFilterYears.map((filterYear) => (
-                <option key={filterYear} value={filterYear}>
-                  {filterYear}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Mês</span>
-            <select value={monthlyFilterMonth} onChange={(event) => setMonthlyFilterMonth(event.target.value)}>
-              <option value="">Todos</option>
-              {MONTH_NAMES.map((name, index) => (
-                <option key={name} value={index + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={!hasMonthlyFilters}
-            onClick={clearMonthlyFilters}
-          >
-            Limpar filtros
-          </button>
-          <span className={styles.recordCount}>
-            {filteredMonthlyRows.length} {filteredMonthlyRows.length === 1 ? "registro" : "registros"}
-          </span>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void saveTarget()}>
+            Salvar meta
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+            Recalcular do banco
+          </Button>
           <ExportButtons
-            fileName="taxa-acidentes-por-mes"
-            title="Taxa de frequência mensal e acidentes CAF"
-            subtitle={hasMonthlyFilters ? "Lançamentos mensais filtrados" : "Todos os lançamentos mensais"}
-            rows={monthlyExportRows}
+            fileName="taxa-acidentes"
+            title="Taxa de Acidentes"
+            subtitle={`Meta de frequência ≤ ${target}`}
+            rows={exportRows}
             columns={[
               { header: "Mês", value: (row) => row.periodo },
               { header: "Taxa de Frequência", value: (row) => row.taxa },
               { header: "Acidentes CAF", value: (row) => row.caf },
             ]}
           />
+          {canClear ? (
+            <Button variant="destructive" size="sm" disabled={busy} onClick={() => void clearAll()}>
+              <Trash2 className="size-3.5" />
+              Limpar tudo
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+            <Ban className="size-3.5" />
+            Ignorar unidades
+            {excludedUnits.length ? (
+              <Badge variant="outline" className="ml-0.5">
+                {excludedUnits.length}
+              </Badge>
+            ) : null}
+          </Button>
         </div>
+        {canPublish ? (
+          <Button
+            variant="success"
+            disabled={busy || !data?.monthly.length}
+            onClick={() => void publish()}
+          >
+            <Send className="size-3.5" />
+            Publicar no Painel
+          </Button>
+        ) : null}
+      </div>
 
-        <div className={`${styles.tableScroll} table-scroll`}>
-          <table className={`${styles.table} data`}>
-            <thead>
-              <tr>
-                <th>Mês</th>
-                <th>Taxa de Frequência</th>
-                <th>Acidentes CAF</th>
-                <th className={styles.actionsHeader}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <CheckCircle2
+          className={cn(
+            "size-3.5 shrink-0",
+            publication ? "text-success" : "text-muted-foreground",
+          )}
+        />
+        {publication
+          ? `Última publicação: versão ${publication.version}, por ${publication.publishedBy.name}, em ${new Date(publication.publishedAt).toLocaleString("pt-BR")}.`
+          : "Nenhuma versão publicada ainda."}
+      </div>
+
+      {error ? (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-sm font-medium text-danger">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </div>
+      ) : null}
+      {message ? (
+        <div className="flex items-start gap-2 rounded-lg border border-success/25 bg-success/5 px-3.5 py-3 text-sm font-medium text-success">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          {message}
+        </div>
+      ) : null}
+
+      {data?.result ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <AdminMetricCard
+            label="Taxa do período"
+            value={data.result.result === null ? "—" : decimal(data.result.result)}
+            sub="média de todos os meses carregados"
+            icon={Gauge}
+          />
+          <AdminMetricCard
+            label="Acidentes CAF"
+            value={String(data.result.totalCaf)}
+            sub="total mensal do período"
+            icon={AlertTriangle}
+          />
+          <AdminMetricCard
+            label="Acidentes SAF por unidade"
+            value={String(data.result.totalSaf)}
+            sub="soma dos lançamentos por unidade"
+            icon={HardHat}
+          />
+          <AdminMetricCard
+            label="Desempenho do mês"
+            value={data.result.latestRate === null ? "—" : decimal(data.result.latestRate)}
+            sub="leitura mais recente"
+            icon={TrendingUp}
+          />
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Taxa de frequência mensal e acidentes CAF</CardTitle>
+            <CardDescription>
+              Informe a competência, a taxa mensal e a quantidade total de acidentes CAF.
+            </CardDescription>
+          </div>
+          {editingMonthId ? <Badge variant="default">Editando lançamento</Badge> : null}
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 pt-0">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>Ano</Label>
+              <Input
+                type="number"
+                min="2000"
+                max="2100"
+                value={year}
+                onChange={(event) => setYear(Number(event.target.value))}
+                className="w-24"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Mês</Label>
+              <Select
+                value={month}
+                onChange={(event) => setMonth(Number(event.target.value))}
+                className="w-36"
+              >
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Taxa de frequência</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                value={rate}
+                onChange={(event) => setRate(event.target.value)}
+                className="w-28"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Acidentes CAF</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={caf}
+                onChange={(event) => setCaf(event.target.value)}
+                className="w-28"
+              />
+            </div>
+            <Button disabled={busy} onClick={() => void addMonth()}>
+              {editingMonthId ? "Salvar alterações" : "Adicionar"}
+            </Button>
+            {editingMonthId ? (
+              <Button variant="outline" disabled={busy} onClick={resetMonthForm}>
+                Cancelar edição
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/20 p-3">
+            <span className="text-xs font-bold text-foreground">Consultar tabela</span>
+            <div className="flex flex-col gap-1.5">
+              <Label>Ano</Label>
+              <Select
+                value={monthlyFilterYear}
+                onChange={(event) => setMonthlyFilterYear(event.target.value)}
+                className="w-28"
+              >
+                <option value="">Todos</option>
+                {monthlyFilterYears.map((filterYear) => (
+                  <option key={filterYear} value={filterYear}>
+                    {filterYear}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Mês</Label>
+              <Select
+                value={monthlyFilterMonth}
+                onChange={(event) => setMonthlyFilterMonth(event.target.value)}
+                className="w-36"
+              >
+                <option value="">Todos</option>
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasMonthlyFilters}
+              onClick={clearMonthlyFilters}
+            >
+              <FilterX className="size-3.5" />
+              Limpar filtros
+            </Button>
+            <span className="ml-auto text-xs font-semibold text-muted-foreground">
+              {filteredMonthlyRows.length}{" "}
+              {filteredMonthlyRows.length === 1 ? "registro" : "registros"}
+            </span>
+            <ExportButtons
+              fileName="taxa-acidentes-por-mes"
+              title="Taxa de frequência mensal e acidentes CAF"
+              subtitle={
+                hasMonthlyFilters ? "Lançamentos mensais filtrados" : "Todos os lançamentos mensais"
+              }
+              rows={monthlyExportRows}
+              columns={[
+                { header: "Mês", value: (row) => row.periodo },
+                { header: "Taxa de Frequência", value: (row) => row.taxa },
+                { header: "Acidentes CAF", value: (row) => row.caf },
+              ]}
+            />
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mês</TableHead>
+                <TableHead className="text-right">Taxa de Frequência</TableHead>
+                <TableHead className="text-right">Acidentes CAF</TableHead>
+                <TableHead className="w-24 text-center">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredMonthlyRows.length ? (
                 filteredMonthlyRows.map((row) => (
-                  <tr key={row.id} className={editingMonthId === row.id ? styles.editingRow : undefined}>
-                    <td>{periodLabel(row.year, row.month)}</td>
-                    <td className="num">{decimal(row.rate)}</td>
-                    <td className="num">{row.caf}</td>
-                    <td>
-                      <div className={styles.rowActions}>
-                        <button
+                  <TableRow
+                    key={row.id}
+                    className={
+                      editingMonthId === row.id ? "bg-primary/5 hover:bg-primary/5" : undefined
+                    }
+                  >
+                    <TableCell className="font-medium">
+                      {periodLabel(row.year, row.month)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{decimal(row.rate)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.caf}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Button
                           type="button"
-                          className={`${styles.actionButton} ${styles.editAction}`}
+                          variant="outline"
+                          size="icon-sm"
                           disabled={busy}
                           onClick={() => startMonthEdit(row)}
                           aria-label={`Editar ${row.month}/${row.year}`}
                           title="Editar"
                         >
-                          <Pencil size={15} aria-hidden="true" />
-                        </button>
-                        <button
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
                           type="button"
-                          className={`${styles.actionButton} ${styles.deleteAction}`}
+                          variant="destructive"
+                          size="icon-sm"
                           disabled={busy}
                           onClick={() => void removeMonth(row)}
                           aria-label={`Remover ${row.month}/${row.year}`}
                           title="Excluir"
                         >
-                          <X size={17} aria-hidden="true" />
-                        </button>
+                          <X className="size-3.5" />
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={4} className={styles.emptyRow}>
+                <TableRow>
+                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                     {data?.monthly.length
                       ? "Nenhum lançamento encontrado para os filtros selecionados."
                       : "Nenhum mês adicionado ainda."}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-      <section className={styles.sectionCard}>
-        <div className={styles.sectionHeader}>
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div>
-            <h3>Acidentes CAF e SAF por unidade</h3>
-            <p>Informe a competência e a quantidade de acidentes de cada classificação por unidade.</p>
+            <CardTitle>Acidentes CAF e SAF por unidade</CardTitle>
+            <CardDescription>
+              Informe a competência e a quantidade de acidentes de cada classificação por unidade.
+            </CardDescription>
           </div>
-          {editingUnitId ? <span className={styles.editingBadge}>Editando unidade</span> : null}
-        </div>
-
-        <div className={styles.formGrid}>
-          <label className={styles.field}>
-            <span>Ano</span>
-            <input
-              type="number"
-              min="2000"
-              max="2100"
-              value={unitYear}
-              onChange={(event) => setUnitYear(Number(event.target.value))}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>Mês</span>
-            <select value={unitMonth} onChange={(event) => setUnitMonth(Number(event.target.value))}>
-              {MONTH_NAMES.map((name, index) => (
-                <option key={name} value={index + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={`${styles.field} ${styles.unitField}`}>
-            <span>Unidade</span>
-            <select value={unit} onChange={(event) => setUnit(event.target.value)}>
-              <option value="">Selecione uma unidade</option>
-              {unitFormOptions.map((unitCode) => (
-                <option key={unitCode} value={unitCode}>
-                  {formatAccidentUnitLabel(unitCode)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={styles.field}>
-            <span>Acidentes SAF</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={unitSaf}
-              onChange={(event) => setUnitSaf(event.target.value)}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>Acidentes CAF</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={unitCaf}
-              onChange={(event) => setUnitCaf(event.target.value)}
-            />
-          </label>
-          <div className={styles.formActions}>
-            <button className="btn" disabled={busy} onClick={() => void addUnit()}>
+          {editingUnitId ? <Badge variant="default">Editando unidade</Badge> : null}
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4 pt-0">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label>Ano</Label>
+              <Input
+                type="number"
+                min="2000"
+                max="2100"
+                value={unitYear}
+                onChange={(event) => setUnitYear(Number(event.target.value))}
+                className="w-24"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Mês</Label>
+              <Select
+                value={unitMonth}
+                onChange={(event) => setUnitMonth(Number(event.target.value))}
+                className="w-36"
+              >
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Unidade</Label>
+              <Select
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+                className="w-56"
+              >
+                <option value="">Selecione uma unidade</option>
+                {unitFormOptions.map((unitCode) => (
+                  <option key={unitCode} value={unitCode}>
+                    {formatAccidentUnitLabel(unitCode)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Acidentes SAF</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={unitSaf}
+                onChange={(event) => setUnitSaf(event.target.value)}
+                className="w-28"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Acidentes CAF</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={unitCaf}
+                onChange={(event) => setUnitCaf(event.target.value)}
+                className="w-28"
+              />
+            </div>
+            <Button disabled={busy} onClick={() => void addUnit()}>
               {editingUnitId ? "Salvar alterações" : "Adicionar"}
-            </button>
+            </Button>
             {editingUnitId ? (
-              <button className="btn secondary" disabled={busy} onClick={resetUnitForm}>
+              <Button variant="outline" disabled={busy} onClick={resetUnitForm}>
                 Cancelar edição
-              </button>
+              </Button>
             ) : null}
           </div>
-        </div>
 
-        <div className={styles.filterBar}>
-          <strong>Consultar tabela</strong>
-          <label>
-            <span>Ano</span>
-            <select value={unitFilterYear} onChange={(event) => setUnitFilterYear(event.target.value)}>
-              <option value="">Todos</option>
-              {unitFilterYears.map((filterYear) => (
-                <option key={filterYear} value={filterYear}>
-                  {filterYear}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Mês</span>
-            <select value={unitFilterMonth} onChange={(event) => setUnitFilterMonth(event.target.value)}>
-              <option value="">Todos</option>
-              {MONTH_NAMES.map((name, index) => (
-                <option key={name} value={index + 1}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={styles.filterUnitField}>
-            <span>Unidade</span>
-            <select value={unitFilterUnit} onChange={(event) => setUnitFilterUnit(event.target.value)}>
-              <option value="">Todas</option>
-              {unitFilterUnits.map((unitCode) => (
-                <option key={unitCode} value={unitCode}>
-                  {formatAccidentUnitLabel(unitCode)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn secondary"
-            disabled={!hasUnitFilters}
-            onClick={clearUnitFilters}
-          >
-            Limpar filtros
-          </button>
-          <span className={styles.recordCount}>
-            {filteredUnitRows.length} {filteredUnitRows.length === 1 ? "registro" : "registros"}
-          </span>
-          <ExportButtons
-            fileName="taxa-acidentes-por-unidade"
-            title="Acidentes CAF e SAF por unidade"
-            subtitle={hasUnitFilters ? "Lançamentos filtrados por competência e unidade" : "Todos os lançamentos por competência"}
-            rows={unitExportRows}
-            columns={[
-              { header: "Mês", value: (row) => row.periodo },
-              { header: "Unidade", value: (row) => row.unidade },
-              { header: "Acidentes CAF", value: (row) => row.caf },
-              { header: "Acidentes SAF", value: (row) => row.saf },
-            ]}
-          />
-        </div>
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-muted/20 p-3">
+            <span className="text-xs font-bold text-foreground">Consultar tabela</span>
+            <div className="flex flex-col gap-1.5">
+              <Label>Ano</Label>
+              <Select
+                value={unitFilterYear}
+                onChange={(event) => setUnitFilterYear(event.target.value)}
+                className="w-28"
+              >
+                <option value="">Todos</option>
+                {unitFilterYears.map((filterYear) => (
+                  <option key={filterYear} value={filterYear}>
+                    {filterYear}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Mês</Label>
+              <Select
+                value={unitFilterMonth}
+                onChange={(event) => setUnitFilterMonth(event.target.value)}
+                className="w-36"
+              >
+                <option value="">Todos</option>
+                {MONTH_NAMES.map((name, index) => (
+                  <option key={name} value={index + 1}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Unidade</Label>
+              <Select
+                value={unitFilterUnit}
+                onChange={(event) => setUnitFilterUnit(event.target.value)}
+                className="w-56"
+              >
+                <option value="">Todas</option>
+                {unitFilterUnits.map((unitCode) => (
+                  <option key={unitCode} value={unitCode}>
+                    {formatAccidentUnitLabel(unitCode)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasUnitFilters}
+              onClick={clearUnitFilters}
+            >
+              <FilterX className="size-3.5" />
+              Limpar filtros
+            </Button>
+            <span className="ml-auto text-xs font-semibold text-muted-foreground">
+              {filteredUnitRows.length} {filteredUnitRows.length === 1 ? "registro" : "registros"}
+            </span>
+            <ExportButtons
+              fileName="taxa-acidentes-por-unidade"
+              title="Acidentes CAF e SAF por unidade"
+              subtitle={
+                hasUnitFilters
+                  ? "Lançamentos filtrados por competência e unidade"
+                  : "Todos os lançamentos por competência"
+              }
+              rows={unitExportRows}
+              columns={[
+                { header: "Mês", value: (row) => row.periodo },
+                { header: "Unidade", value: (row) => row.unidade },
+                { header: "Acidentes CAF", value: (row) => row.caf },
+                { header: "Acidentes SAF", value: (row) => row.saf },
+              ]}
+            />
+          </div>
 
-        <div className={`${styles.tableScroll} table-scroll`}>
-          <table className={`${styles.table} data`}>
-            <thead>
-              <tr>
-                <th>Mês</th>
-                <th>Unidade</th>
-                <th>Acidentes CAF</th>
-                <th>Acidentes SAF</th>
-                <th className={styles.actionsHeader}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mês</TableHead>
+                <TableHead>Unidade</TableHead>
+                <TableHead className="text-right">Acidentes CAF</TableHead>
+                <TableHead className="text-right">Acidentes SAF</TableHead>
+                <TableHead className="w-24 text-center">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {filteredUnitRows.length ? (
                 filteredUnitRows.map((row) => (
-                  <tr key={row.id} className={editingUnitId === row.id ? styles.editingRow : undefined}>
-                    <td>{periodLabel(row.year, row.month)}</td>
-                    <td className={styles.unitCell}>{formatAccidentUnitLabel(row.unit)}</td>
-                    <td className="num">{row.caf}</td>
-                    <td className="num">{row.saf}</td>
-                    <td>
-                      <div className={styles.rowActions}>
-                        <button
+                  <TableRow
+                    key={row.id}
+                    className={
+                      editingUnitId === row.id ? "bg-primary/5 hover:bg-primary/5" : undefined
+                    }
+                  >
+                    <TableCell className="font-medium">
+                      {periodLabel(row.year, row.month)}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {formatAccidentUnitLabel(row.unit)}
+                      {excludedUnits.includes(normalizeAccidentUnitCode(row.unit)) ? (
+                        <Badge variant="outline" className="ml-2">
+                          ignorada
+                        </Badge>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{row.caf}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.saf}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <Button
                           type="button"
-                          className={`${styles.actionButton} ${styles.editAction}`}
+                          variant="outline"
+                          size="icon-sm"
                           disabled={busy}
                           onClick={() => startUnitEdit(row)}
                           aria-label={`Editar ${formatAccidentUnitLabel(row.unit)} de ${row.month}/${row.year}`}
                           title="Editar"
                         >
-                          <Pencil size={15} aria-hidden="true" />
-                        </button>
-                        <button
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
                           type="button"
-                          className={`${styles.actionButton} ${styles.deleteAction}`}
+                          variant="destructive"
+                          size="icon-sm"
                           disabled={busy}
                           onClick={() => void removeUnit(row)}
                           aria-label={`Remover ${formatAccidentUnitLabel(row.unit)} de ${row.month}/${row.year}`}
                           title="Excluir"
                         >
-                          <X size={17} aria-hidden="true" />
-                        </button>
+                          <X className="size-3.5" />
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className={styles.emptyRow}>
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     {data?.units.length
                       ? "Nenhum lançamento encontrado para os filtros selecionados."
                       : "Nenhum lançamento por unidade adicionado ainda."}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <UnitExclusionDialog
+        open={unitDialogOpen}
+        onOpenChange={setUnitDialogOpen}
+        units={unitDialogOptions}
+        excluded={excludedUnits}
+        busy={unitDialogBusy}
+        onSave={(next) => void saveExcludedUnits(next)}
+        description="Unidades marcadas ficam de fora das somas de acidentes CAF/SAF por unidade e do painel publicado."
+      />
     </div>
   );
 }

@@ -11,11 +11,28 @@ import { rncRecordSchema, type RncRecordInput } from "@/features/rnc/schemas";
 import { rncBusinessKey, rncContentHash } from "@/features/rnc/utils/keys";
 import { computeRncResult } from "@/features/rnc/calculations";
 import { loadRncRecords } from "@/features/rnc/repositories";
-import {
-  RNC_DEFAULT_MAX_DIAS,
-  type RncNormalizedRecord,
-} from "@/features/rnc/types";
+import { RNC_DEFAULT_MAX_DIAS, type RncNormalizedRecord } from "@/features/rnc/types";
+import { normalizeRncUnitCode } from "@/features/rnc/utils/units";
 import type { IncrementalRecord } from "@/importers/shared/incremental-upsert";
+
+export const RNC_EXCLUDED_SETTING = "rnc.excludedUnits";
+
+export function normalizeExcludedUnits(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map(normalizeRncUnitCode).filter(Boolean)));
+}
+
+export async function loadRncConfiguration(
+  tx: Prisma.TransactionClient,
+): Promise<{ excludedUnits: string[] }> {
+  const setting = await tx.appSetting.findUnique({
+    where: { key: RNC_EXCLUDED_SETTING },
+    select: { value: true },
+  });
+  const excludedUnits = Array.isArray(setting?.value)
+    ? normalizeExcludedUnits(setting.value.map((value) => String(value)))
+    : [];
+  return { excludedUnits };
+}
 
 export function toIncrementalRecords(rawRecords: unknown[]): {
   records: IncrementalRecord[];
@@ -53,9 +70,7 @@ export function toIncrementalRecords(rawRecords: unknown[]): {
       data: {
         ...record,
         dataCriacao: record.dataCriacao.toISOString(),
-        dataSolucao: record.dataSolucao
-          ? record.dataSolucao.toISOString()
-          : null,
+        dataSolucao: record.dataSolucao ? record.dataSolucao.toISOString() : null,
       } as unknown as Record<string, unknown>,
     });
   }
@@ -63,9 +78,7 @@ export function toIncrementalRecords(rawRecords: unknown[]): {
   return { records, rejected };
 }
 
-export async function recalcRncIndicators(
-  tx: Prisma.TransactionClient,
-): Promise<void> {
+export async function recalcRncIndicators(tx: Prisma.TransactionClient): Promise<void> {
   const rows = await loadRncRecords(tx);
   type LoadedRnc = {
     statusRnc: string;
@@ -90,7 +103,8 @@ export async function recalcRncIndicators(
     raw: (r.raw as Record<string, unknown>) ?? {},
   }));
 
-  const result = computeRncResult(records, RNC_DEFAULT_MAX_DIAS);
+  const configuration = await loadRncConfiguration(tx);
+  const result = computeRncResult(records, RNC_DEFAULT_MAX_DIAS, configuration.excludedUnits);
 
   // Um IndicatorResult por mês de criação: valor = dias médios de tratativa.
   for (const month of result.months) {
@@ -115,9 +129,7 @@ export async function recalcRncIndicators(
         month: month.month + 1,
         value: dias ?? 0,
         target: result.metaDias,
-        adherence: month.chamados
-          ? month.solucionados / month.chamados
-          : 0,
+        adherence: month.chamados ? month.solucionados / month.chamados : 0,
         status: dias === null ? "SEM_DADOS" : dentro ? "OK" : "ABAIXO",
         details: toJsonValue({
           chamados: month.chamados,
@@ -128,9 +140,7 @@ export async function recalcRncIndicators(
       update: {
         value: dias ?? 0,
         target: result.metaDias,
-        adherence: month.chamados
-          ? month.solucionados / month.chamados
-          : 0,
+        adherence: month.chamados ? month.solucionados / month.chamados : 0,
         status: dias === null ? "SEM_DADOS" : dentro ? "OK" : "ABAIXO",
         details: toJsonValue({
           chamados: month.chamados,

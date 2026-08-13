@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { computeRdoResult } from "@/features/rdo/calculations";
+import {
+  loadRdoConfiguration,
+  normalizeExcludedUnits,
+  RDO_EXCLUDED_SETTING,
+  recalcRdoIndicators,
+} from "@/features/rdo/services";
 import { RDO_DEFAULT_TARGET, type RdoNormalizedRecord } from "@/features/rdo/types";
+import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
+import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 
@@ -41,7 +50,7 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const [calculationRows, detailRows, total, allForOptions, lastImport] =
+    const [calculationRows, detailRows, total, allForOptions, lastImport, configuration] =
       await Promise.all([
         prisma.rdoRecord.findMany({
           where,
@@ -92,6 +101,7 @@ export async function GET(req: NextRequest) {
             totalRejected: true,
           },
         }),
+        prisma.$transaction((tx) => loadRdoConfiguration(tx)),
       ]);
 
     const records: RdoNormalizedRecord[] = calculationRows.map((row) => ({
@@ -106,14 +116,12 @@ export async function GET(req: NextRequest) {
       raw: (row.raw as Record<string, unknown>) ?? {},
     }));
 
-    const result = computeRdoResult(records, threshold);
+    const result = computeRdoResult(records, threshold, configuration.excludedUnits);
 
     const unidades = Array.from(
       new Set(allForOptions.map((row) => row.empresaNome).filter(Boolean)),
     ).sort();
-    const anos = Array.from(new Set(allForOptions.map((row) => row.year))).sort(
-      (a, b) => b - a,
-    );
+    const anos = Array.from(new Set(allForOptions.map((row) => row.year))).sort((a, b) => b - a);
     const statusList = Array.from(
       new Set(allForOptions.map((row) => row.statusDescricao).filter(Boolean)),
     ).sort();
@@ -138,6 +146,44 @@ export async function GET(req: NextRequest) {
       filtros: { unidades, anos, status: statusList },
       lastImport,
     });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+const patchSchema = z.object({
+  excludedUnits: z.array(z.string().max(200)).max(200),
+});
+
+/** PATCH /api/rdo — salva as unidades ignoradas e recalcula o indicador. */
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await requirePermission("import:run");
+    const input = patchSchema.parse(await req.json());
+    const excludedUnits = normalizeExcludedUnits(input.excludedUnits);
+
+    await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await tx.appSetting.upsert({
+          where: { key: RDO_EXCLUDED_SETTING },
+          create: { key: RDO_EXCLUDED_SETTING, value: toJsonValue(excludedUnits) },
+          update: { value: toJsonValue(excludedUnits) },
+        });
+        await recalcRdoIndicators(tx);
+      },
+      { maxWait: 10_000, timeout: 60_000 },
+    );
+
+    await recordAudit({
+      userId: user.id,
+      action: "INDICATOR_SETTINGS_UPDATED",
+      entity: "AppSetting",
+      entityId: "rdo",
+      newData: { excludedUnits },
+      metadata: { module: "rdo" },
+    });
+
+    return NextResponse.json({ ok: true, excludedUnits });
   } catch (error) {
     return handleApiError(error);
   }

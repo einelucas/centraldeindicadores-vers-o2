@@ -69,6 +69,7 @@ export interface IdpNormalizedRecord {
 export interface IdpUnitExecutionRow {
   sourceId?: string;
   unit: string;
+  excluded: boolean;
   rsoNumero: number;
   referenceYear: number;
   referenceMonth: number;
@@ -129,6 +130,7 @@ export interface IdpMonthlyAggregate {
 
 export interface IdpDetailedResult {
   threshold: number;
+  excludedUnits: string[];
   selectedYear: number;
   selectedMonth: number;
   historyMonthStart: number;

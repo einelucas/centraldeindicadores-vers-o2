@@ -4,6 +4,8 @@ import { z } from "zod";
 import {
   accidentUnitKey,
   loadAccidentRateData,
+  normalizeExcludedUnits,
+  saveAccidentExcludedUnits,
   saveAccidentTarget,
 } from "@/features/taxa-acidentes/services";
 import { normalizeAccidentUnitCode } from "@/features/taxa-acidentes/utils/units";
@@ -36,11 +38,7 @@ const settingsSchema = z.object({
   target: z.number().min(0),
 });
 
-const inputSchema = z.discriminatedUnion("type", [
-  monthlySchema,
-  unitSchema,
-  settingsSchema,
-]);
+const inputSchema = z.discriminatedUnion("type", [monthlySchema, unitSchema, settingsSchema]);
 
 const monthlySelect = {
   id: true,
@@ -79,8 +77,43 @@ export async function GET() {
         monthly: [],
         units: [],
         target: 7.5,
+        excludedUnits: [],
         result: null,
       });
+    }
+    return handleApiError(error);
+  }
+}
+
+const excludedUnitsSchema = z.object({
+  excludedUnits: z.array(z.string().max(100)).max(100),
+});
+
+/** PATCH /api/taxa-acidentes — salva as unidades ignoradas e recalcula. */
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await requirePermission("import:run");
+    const input = excludedUnitsSchema.parse(await req.json());
+    const excludedUnits = normalizeExcludedUnits(input.excludedUnits);
+
+    await prisma.$transaction((tx) => saveAccidentExcludedUnits(tx, excludedUnits));
+
+    await recordAudit({
+      userId: user.id,
+      action: "INDICATOR_SETTINGS_UPDATED",
+      entity: "AppSetting",
+      entityId: "taxa-acidentes",
+      newData: { excludedUnits },
+      metadata: { module: "taxa-acidentes" },
+    });
+
+    return NextResponse.json({ ok: true, excludedUnits });
+  } catch (error) {
+    if (missingTables(error)) {
+      return NextResponse.json(
+        { error: "Execute pnpm db:upgrade:accidents antes de salvar dados." },
+        { status: 503 },
+      );
     }
     return handleApiError(error);
   }
@@ -158,10 +191,7 @@ export async function POST(req: NextRequest) {
       const normalizedUnit = normalizeAccidentUnitCode(input.unit);
       const unitKey = accidentUnitKey(normalizedUnit);
       if (!unitKey) {
-        return NextResponse.json(
-          { error: "Informe uma unidade válida." },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "Informe uma unidade válida." }, { status: 400 });
       }
 
       const previousById = input.id
@@ -183,13 +213,10 @@ export async function POST(req: NextRequest) {
         select: unitSelect,
       });
       const equivalentRows = targetPeriodRows.filter(
-        (row) =>
-          row.id !== input.id &&
-          accidentUnitKey(row.unit || row.unitKey) === unitKey,
+        (row) => row.id !== input.id && accidentUnitKey(row.unit || row.unitKey) === unitKey,
       );
       const equivalentRow =
-        equivalentRows.find((row) => row.unitKey === unitKey) ??
-        equivalentRows[0];
+        equivalentRows.find((row) => row.unitKey === unitKey) ?? equivalentRows[0];
 
       if (input.id && equivalentRow) {
         return NextResponse.json(
@@ -269,9 +296,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const kind = req.nextUrl.searchParams.get("kind");
-    const user = await requirePermission(
-      kind === "all" ? "indicators:edit" : "import:run",
-    );
+    const user = await requirePermission(kind === "all" ? "indicators:edit" : "import:run");
 
     if (kind === "month") {
       const year = Number(req.nextUrl.searchParams.get("year"));

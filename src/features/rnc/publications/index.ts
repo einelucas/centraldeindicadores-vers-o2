@@ -1,8 +1,5 @@
 import type { RncResult } from "@/features/rnc/types";
-import {
-  RNC_SCORECARD_POINTS,
-  RNC_SCORECARD_WEIGHT,
-} from "@/features/rnc/types";
+import { RNC_SCORECARD_POINTS, RNC_SCORECARD_WEIGHT } from "@/features/rnc/types";
 
 export interface RncPublishedUnit {
   n: string;
@@ -51,6 +48,7 @@ export function toRncPublishedPayload(result: RncResult): RncPublishedPayload {
     semestreResolvidas: result.totalTratadas,
     semestreTotal: result.totalCriadas,
     unidades: result.units
+      .filter((unit) => !unit.excluded)
       .map((unit) => ({
         n: unit.name.replace(/^INPASA\s*/i, "").trim(),
         v: Math.round(unit.aderencia * 100),
@@ -58,19 +56,14 @@ export function toRncPublishedPayload(result: RncResult): RncPublishedPayload {
       .sort((a, b) => b.v - a.v),
     mensal: result.months.map((month) => ({
       label: month.label,
-      v:
-        month.diasMedios === null
-          ? null
-          : Math.round(month.diasMedios * 100) / 100,
+      v: month.diasMedios === null ? null : Math.round(month.diasMedios * 100) / 100,
     })),
     ofensores: [
       ...top.map((offender) => ({
         n: offender.name,
         pct: Math.round(offender.pct * 1000) / 10,
       })),
-      ...(outrosPct > 0.001
-        ? [{ n: "Outros", pct: Math.round(outrosPct * 1000) / 10 }]
-        : []),
+      ...(outrosPct > 0.001 ? [{ n: "Outros", pct: Math.round(outrosPct * 1000) / 10 }] : []),
     ],
   };
 }

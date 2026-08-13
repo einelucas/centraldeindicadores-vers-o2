@@ -1,5 +1,7 @@
 "use client";
 
+import { FileSpreadsheet, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { exportToExcel, type ExportColumn } from "@/lib/exports/excel";
 import { exportToPdf } from "@/lib/exports/pdf";
 
@@ -30,24 +32,26 @@ export function ExportButtons<T>({
 
   return (
     <div className="flex gap-2">
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         disabled={isDisabled}
         onClick={() => exportToExcel(fileName, columns, rows)}
-        className="rounded border border-brand px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand/5 disabled:opacity-40"
       >
+        <FileSpreadsheet className="size-3.5" />
         Exportar Excel
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         disabled={isDisabled}
-        onClick={() =>
-          exportToPdf(fileName, columns, rows, { title, subtitle, orientation })
-        }
-        className="rounded border border-brand px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand/5 disabled:opacity-40"
+        onClick={() => exportToPdf(fileName, columns, rows, { title, subtitle, orientation })}
       >
+        <FileText className="size-3.5" />
         Exportar PDF
-      </button>
+      </Button>
     </div>
   );
 }

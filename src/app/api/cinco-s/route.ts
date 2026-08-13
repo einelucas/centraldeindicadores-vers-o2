@@ -52,9 +52,7 @@ async function readSettings(): Promise<{
   const excluded = byKey.get(FIVES_EXCLUDED_SETTING);
   return {
     threshold:
-      typeof target === "number" && target >= 0 && target <= 1
-        ? target
-        : FIVES_DEFAULT_TARGET,
+      typeof target === "number" && target >= 0 && target <= 1 ? target : FIVES_DEFAULT_TARGET,
     excludedUnits: Array.isArray(excluded)
       ? normalizeExcludedUnits(excluded.map((item) => String(item)))
       : [...FIVES_DEFAULT_EXCLUDED],
@@ -94,11 +92,7 @@ export async function GET() {
       total: rows.length,
       threshold: settings.threshold,
       excludedUnits: settings.excludedUnits,
-      result: computeFiveSResult(
-        records,
-        settings.excludedUnits,
-        settings.threshold,
-      ),
+      result: computeFiveSResult(records, settings.excludedUnits, settings.threshold),
       lastImport,
     });
   } catch (error) {
@@ -114,22 +108,25 @@ export async function PATCH(req: NextRequest) {
     const excludedUnits = normalizeExcludedUnits(input.excludedUnits);
     const threshold = input.target / 100;
 
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.appSetting.upsert({
-        where: { key: FIVES_TARGET_SETTING },
-        create: { key: FIVES_TARGET_SETTING, value: toJsonValue(threshold) },
-        update: { value: toJsonValue(threshold) },
-      });
-      await tx.appSetting.upsert({
-        where: { key: FIVES_EXCLUDED_SETTING },
-        create: {
-          key: FIVES_EXCLUDED_SETTING,
-          value: toJsonValue(excludedUnits),
-        },
-        update: { value: toJsonValue(excludedUnits) },
-      });
-      await recalcFiveSIndicators(tx);
-    });
+    await prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        await tx.appSetting.upsert({
+          where: { key: FIVES_TARGET_SETTING },
+          create: { key: FIVES_TARGET_SETTING, value: toJsonValue(threshold) },
+          update: { value: toJsonValue(threshold) },
+        });
+        await tx.appSetting.upsert({
+          where: { key: FIVES_EXCLUDED_SETTING },
+          create: {
+            key: FIVES_EXCLUDED_SETTING,
+            value: toJsonValue(excludedUnits),
+          },
+          update: { value: toJsonValue(excludedUnits) },
+        });
+        await recalcFiveSIndicators(tx);
+      },
+      { maxWait: 10_000, timeout: 60_000 },
+    );
 
     await recordAudit({
       userId: user.id,

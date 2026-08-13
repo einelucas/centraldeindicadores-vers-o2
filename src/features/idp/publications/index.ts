@@ -1,8 +1,5 @@
 import type { IdpDetailedResult } from "@/features/idp/types";
-import {
-  IDP_SCORECARD_POINTS,
-  IDP_SCORECARD_WEIGHT,
-} from "@/features/idp/types";
+import { IDP_SCORECARD_POINTS, IDP_SCORECARD_WEIGHT } from "@/features/idp/types";
 
 export interface IdpPublishedUnit {
   n: string;
@@ -96,20 +93,22 @@ export function toIdpPublishedPayload(
     totalLinhaBase: result.totalPrevistoMedio,
     totalReal: result.totalRealMedio,
     documentosAtivos: result.activeDocuments,
-    unidades: result.unitRows.map((unit) => ({
-      n: unit.unit.replace(/^INPASA\s*/i, "").trim(),
-      v: roundPercent(unit.aderencia),
-      rsoNumero: unit.rsoNumero,
-      referenceYear: unit.referenceYear,
-      referenceMonth: unit.referenceMonth,
-      referenceSource: unit.referenceSource,
-      referenceOriginalText: unit.referenceOriginalText,
-      referenceAdjusted: unit.referenceAdjusted,
-      periodStart: unit.periodStart,
-      periodEnd: unit.periodEnd,
-      emissionDate: unit.emissionDate,
-      fileName: unit.fileName,
-    })),
+    unidades: result.unitRows
+      .filter((unit) => !unit.excluded)
+      .map((unit) => ({
+        n: unit.unit.replace(/^INPASA\s*/i, "").trim(),
+        v: roundPercent(unit.aderencia),
+        rsoNumero: unit.rsoNumero,
+        referenceYear: unit.referenceYear,
+        referenceMonth: unit.referenceMonth,
+        referenceSource: unit.referenceSource,
+        referenceOriginalText: unit.referenceOriginalText,
+        referenceAdjusted: unit.referenceAdjusted,
+        periodStart: unit.periodStart,
+        periodEnd: unit.periodEnd,
+        emissionDate: unit.emissionDate,
+        fileName: unit.fileName,
+      })),
     disciplinas: result.disciplineRows.map((row) => ({
       n: row.discipline,
       v: row.aderencia === null ? null : roundPercent(row.aderencia),

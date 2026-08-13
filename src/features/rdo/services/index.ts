@@ -15,10 +15,30 @@ import { loadRdoRecords } from "@/features/rdo/repositories";
 import { RDO_DEFAULT_TARGET, type RdoNormalizedRecord } from "@/features/rdo/types";
 import type { IncrementalRecord } from "@/importers/shared/incremental-upsert";
 
+export const RDO_EXCLUDED_SETTING = "rdo.excludedUnits";
+
+export function normalizeExcludedUnits(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+export async function loadRdoConfiguration(
+  tx: Prisma.TransactionClient,
+): Promise<{ excludedUnits: string[] }> {
+  const setting = await tx.appSetting.findUnique({
+    where: { key: RDO_EXCLUDED_SETTING },
+    select: { value: true },
+  });
+  const excludedUnits = Array.isArray(setting?.value)
+    ? normalizeExcludedUnits(setting.value.map((value) => String(value)))
+    : [];
+  return { excludedUnits };
+}
+
 /** Revalida e converte o input JSON em IncrementalRecord com chaves do servidor. */
-export function toIncrementalRecords(
-  rawRecords: unknown[],
-): { records: IncrementalRecord[]; rejected: number } {
+export function toIncrementalRecords(rawRecords: unknown[]): {
+  records: IncrementalRecord[];
+  rejected: number;
+} {
   const records: IncrementalRecord[] = [];
   let rejected = 0;
 
@@ -58,14 +78,18 @@ export function toIncrementalRecords(
  * Recalcula o IndicatorResult do RDO a partir dos registros persistidos.
  * Grava resultado consolidado (unit __ALL__) e por unidade.
  */
-export async function recalcRdoIndicators(
-  tx: Prisma.TransactionClient,
-): Promise<void> {
+export async function recalcRdoIndicators(tx: Prisma.TransactionClient): Promise<void> {
   const rows = await loadRdoRecords(tx);
   type LoadedRdo = {
-    dataReferencia: Date; empresaNome: string; statusDescricao: string;
-    relatorioId: string | null; grupo: string | null; disciplina: string | null;
-    year: number; month: number; raw: unknown;
+    dataReferencia: Date;
+    empresaNome: string;
+    statusDescricao: string;
+    relatorioId: string | null;
+    grupo: string | null;
+    disciplina: string | null;
+    year: number;
+    month: number;
+    raw: unknown;
   };
   const records: RdoNormalizedRecord[] = (rows as LoadedRdo[]).map((r) => ({
     dataReferencia: r.dataReferencia,
@@ -79,6 +103,8 @@ export async function recalcRdoIndicators(
     raw: (r.raw as Record<string, unknown>) ?? {},
   }));
 
+  const configuration = await loadRdoConfiguration(tx);
+
   // Recalcula por (ano, mês) presentes nos dados.
   const periods = new Set(records.map((r) => `${r.year}-${r.month}`));
 
@@ -87,11 +113,8 @@ export async function recalcRdoIndicators(
     const year = Number(yStr);
     const month = Number(mStr);
     const subset = records.filter((r) => r.year === year && r.month === month);
-    const result = computeRdoResult(subset, RDO_DEFAULT_TARGET);
-    const adherence =
-      result.totalEmitidos > 0
-        ? result.totalAprovados / result.totalEmitidos
-        : 0;
+    const result = computeRdoResult(subset, RDO_DEFAULT_TARGET, configuration.excludedUnits);
+    const adherence = result.totalEmitidos > 0 ? result.totalAprovados / result.totalEmitidos : 0;
 
     await tx.indicatorResult.upsert({
       where: {

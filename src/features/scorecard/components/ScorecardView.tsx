@@ -46,9 +46,7 @@ interface HistoryExportRow {
 
 function initialPeriodMonth(): number {
   const current = new Date().getMonth() + 1;
-  return SCORECARD_PERIOD_MONTHS.includes(
-    current as (typeof SCORECARD_PERIOD_MONTHS)[number],
-  )
+  return SCORECARD_PERIOD_MONTHS.includes(current as (typeof SCORECARD_PERIOD_MONTHS)[number])
     ? current
     : SCORECARD_PERIOD_MONTHS[0];
 }
@@ -78,9 +76,7 @@ function targetLabel(row: Pick<ScorecardRow, "direction" | "meta" | "unit">): st
   return `${operator} ${formatValue(row.meta, row.unit)}`;
 }
 
-function inputsFromValues(
-  values: Record<string, number | null>,
-): Record<string, string> {
+function inputsFromValues(values: Record<string, number | null>): Record<string, string> {
   return Object.fromEntries(
     SC_INDICATORS.map((indicator) => [
       indicator.key,
@@ -91,17 +87,12 @@ function inputsFromValues(
   );
 }
 
-function resultRow(
-  computation: Computation | undefined,
-  key: string,
-): ScorecardRow | undefined {
+function resultRow(computation: Computation | undefined, key: string): ScorecardRow | undefined {
   return computation?.result.rows.find((row) => row.key === key);
 }
 
 function average(values: number[]): number | null {
-  return values.length
-    ? values.reduce((sum, value) => sum + value, 0) / values.length
-    : null;
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 }
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
@@ -228,8 +219,7 @@ export function ScorecardView() {
       const next = { ...currentInputs };
       for (const indicator of SC_INDICATORS) {
         const key = indicator.key;
-        const untouched =
-          (currentInputs[key] ?? "") === (lastLiveInputsRef.current[key] ?? "");
+        const untouched = (currentInputs[key] ?? "") === (lastLiveInputsRef.current[key] ?? "");
         if (untouched) next[key] = liveInputs[key] ?? "";
       }
       return next;
@@ -255,10 +245,7 @@ export function ScorecardView() {
     return values;
   }, [data?.values, inputs]);
 
-  const displayedResult = useMemo(
-    () => computeScorecard(displayedValues),
-    [displayedValues],
-  );
+  const displayedResult = useMemo(() => computeScorecard(displayedValues), [displayedValues]);
 
   const effectiveByMonth = useMemo(() => {
     const map = new Map<number, Computation>();
@@ -340,8 +327,7 @@ export function ScorecardView() {
   const semesterPoints = useMemo(
     () =>
       SCORECARD_PERIOD_MONTHS.reduce(
-        (sum, periodMonth) =>
-          sum + (effectiveByMonth.get(periodMonth)?.result.totalPontos ?? 0),
+        (sum, periodMonth) => sum + (effectiveByMonth.get(periodMonth)?.result.totalPontos ?? 0),
         0,
       ),
     [effectiveByMonth],
@@ -352,19 +338,10 @@ export function ScorecardView() {
   const availableMonthsCount = effectiveByMonth.size;
   const semesterPontuacaoPrevista = availableMonthsCount * SCORECARD_MONTHLY_POOL;
   const semesterAttendance =
-    semesterPontuacaoPrevista > 0
-      ? (semesterPoints / semesterPontuacaoPrevista) * 100
-      : 0;
+    semesterPontuacaoPrevista > 0 ? (semesterPoints / semesterPontuacaoPrevista) * 100 : 0;
 
   const historyExportRows = useMemo<HistoryExportRow[]>(() => {
-    const monthField = [
-      "junho",
-      "julho",
-      "agosto",
-      "setembro",
-      "outubro",
-      "novembro",
-    ] as const;
+    const monthField = ["junho", "julho", "agosto", "setembro", "outubro", "novembro"] as const;
 
     return SC_INDICATORS.map((indicator) => {
       const monthRows = SCORECARD_PERIOD_MONTHS.map((periodMonth) =>
@@ -400,9 +377,7 @@ export function ScorecardView() {
       monthRows.forEach((monthRow, index) => {
         const field = monthField[index];
         if (!field) return;
-        row[field] = monthRow?.hasValue
-          ? formatValue(monthRow.value, monthRow.unit)
-          : "—";
+        row[field] = monthRow?.hasValue ? formatValue(monthRow.value, monthRow.unit) : "—";
       });
 
       return row;
@@ -435,9 +410,7 @@ export function ScorecardView() {
       // pelo publicado ao vivo assim que houver um — daí marcar o override
       // recém-salvo como o baseline "ao vivo" atual (ver o efeito acima).
       lastLiveInputsRef.current = savedInputs;
-      setSemesterPreview((current) =>
-        current.filter((computation) => computation.month !== month),
-      );
+      setSemesterPreview((current) => current.filter((computation) => computation.month !== month));
       await loadHistory();
       setStatus(`${monthName(month)}/${year} salvo com sucesso.`);
     } catch (error) {
@@ -531,96 +504,95 @@ export function ScorecardView() {
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-neutralbrand/25 bg-white shadow-sm">
-        <div className="bg-gradient-to-br from-brand to-brand-dark px-5 py-5 text-white sm:px-7">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-accent">
-            Central de Indicadores
-          </p>
-          <h2 className="mt-1 text-xl font-extrabold sm:text-2xl">
-            2026 — Scorecard consolidado
-          </h2>
-          <p className="mt-1 max-w-3xl text-sm text-white/70">
-            Consolidação de junho a novembro com pontuação máxima fixa de 11.582 pontos,
-            seguindo os pesos e as metas do alinhamento vigente.
-          </p>
+      <section className="flex flex-wrap items-end gap-3 rounded-2xl border border-neutralbrand/25 bg-canvas px-4 py-4 shadow-sm sm:px-6">
+        <div>
+          <label
+            className="mb-1 block text-xs font-bold uppercase tracking-wide text-neutralbrand"
+            htmlFor="scMonth"
+          >
+            Mês do snapshot
+          </label>
+          <select
+            id="scMonth"
+            value={month}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              setMonth(Number(event.target.value))
+            }
+            className="min-w-40 rounded-lg border border-neutralbrand/40 bg-white px-3 py-2 text-sm font-semibold text-brand outline-none focus:border-brand"
+          >
+            {SCORECARD_PERIOD_MONTHS.map((periodMonth) => (
+              <option key={periodMonth} value={periodMonth}>
+                {monthName(periodMonth)}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <div className="flex flex-wrap items-end gap-3 border-b border-neutralbrand/20 bg-canvas px-4 py-4 sm:px-6">
-          <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-neutralbrand" htmlFor="scMonth">
-              Mês do snapshot
-            </label>
-            <select
-              id="scMonth"
-              value={month}
-              onChange={(event: ChangeEvent<HTMLSelectElement>) => setMonth(Number(event.target.value))}
-              className="min-w-40 rounded-lg border border-neutralbrand/40 bg-white px-3 py-2 text-sm font-semibold text-brand outline-none focus:border-brand"
-            >
-              {SCORECARD_PERIOD_MONTHS.map((periodMonth) => (
-                <option key={periodMonth} value={periodMonth}>
-                  {monthName(periodMonth)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-neutralbrand" htmlFor="scYear">
-              Ano
-            </label>
-            <input
-              id="scYear"
-              type="number"
-              value={year}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => setYear(Number(event.target.value))}
-              className="w-28 rounded-lg border border-neutralbrand/40 bg-white px-3 py-2 text-sm font-semibold text-brand outline-none focus:border-brand"
-            />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={busy}
-            className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark disabled:opacity-40"
+        <div>
+          <label
+            className="mb-1 block text-xs font-bold uppercase tracking-wide text-neutralbrand"
+            htmlFor="scYear"
           >
-            Salvar snapshot
-          </button>
+            Ano
+          </label>
+          <input
+            id="scYear"
+            type="number"
+            value={year}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setYear(Number(event.target.value))}
+            className="w-28 rounded-lg border border-neutralbrand/40 bg-white px-3 py-2 text-sm font-semibold text-brand outline-none focus:border-brand"
+          />
+        </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-neutralbrand">
-            <span
-              className={`h-2 w-2 rounded-full ${busy ? "animate-pulse bg-accent" : "bg-success"}`}
-              aria-hidden
-            />
-            {busy
-              ? "Sincronizando…"
-              : lastSyncedAt
-                ? `Ao vivo · atualizado às ${lastSyncedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
-                : "Ao vivo"}
-          </div>
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy}
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark disabled:opacity-40"
+        >
+          Salvar snapshot
+        </button>
 
-          <div className="ml-auto">
-            <ExportButtons
-              fileName={`scorecard-${year}-${String(month).padStart(2, "0")}`}
-              title="Scorecard 2026 — Resultado mensal"
-              subtitle={`${monthName(month)}/${year} · ${formatPoints(displayedResult.totalPontos)} de ${formatPoints(SCORECARD_MONTHLY_POOL)} pontos`}
-              orientation="landscape"
-              rows={selectedRows}
-              columns={[
-                { header: "Indicador", value: (row) => row.label },
-                { header: "Peso (%)", value: (row) => row.peso.toFixed(2) },
-                { header: "Meta", value: (row) => targetLabel(row) },
-                { header: "Resultado", value: (row) => formatValue(row.value, row.unit) },
-                { header: "Pontos possíveis", value: (row) => formatPoints(row.pontosPossiveis) },
-                { header: "Pontos realizados", value: (row) => formatPoints(row.pontos) },
-                { header: "Situação", value: (row) => !row.hasValue ? "Sem dados" : row.pass ? "Dentro da meta" : "Fora da meta" },
-              ]}
-            />
-          </div>
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-neutralbrand">
+          <span
+            className={`h-2 w-2 rounded-full ${busy ? "animate-pulse bg-accent" : "bg-success"}`}
+            aria-hidden
+          />
+          {busy
+            ? "Sincronizando…"
+            : lastSyncedAt
+              ? `Ao vivo · atualizado às ${lastSyncedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+              : "Ao vivo"}
+        </div>
+
+        <div className="ml-auto">
+          <ExportButtons
+            fileName={`scorecard-${year}-${String(month).padStart(2, "0")}`}
+            title="Scorecard — Resultado mensal"
+            subtitle={`${monthName(month)}/${year} · ${formatPoints(displayedResult.totalPontos)} de ${formatPoints(SCORECARD_MONTHLY_POOL)} pontos`}
+            orientation="landscape"
+            rows={selectedRows}
+            columns={[
+              { header: "Indicador", value: (row) => row.label },
+              { header: "Peso (%)", value: (row) => row.peso.toFixed(2) },
+              { header: "Meta", value: (row) => targetLabel(row) },
+              { header: "Resultado", value: (row) => formatValue(row.value, row.unit) },
+              { header: "Pontos possíveis", value: (row) => formatPoints(row.pontosPossiveis) },
+              { header: "Pontos realizados", value: (row) => formatPoints(row.pontos) },
+              {
+                header: "Situação",
+                value: (row) =>
+                  !row.hasValue ? "Sem dados" : row.pass ? "Dentro da meta" : "Fora da meta",
+              },
+            ]}
+          />
         </div>
       </section>
 
       {status ? (
-        <div className={`rounded-xl border px-4 py-3 text-sm font-semibold ${statusError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>
+        <div
+          className={`rounded-xl border px-4 py-3 text-sm font-semibold ${statusError ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}
+        >
           {status}
         </div>
       ) : null}
@@ -670,8 +642,9 @@ export function ScorecardView() {
           <div>
             <h3 className="text-base font-extrabold text-brand-dark">Indicadores do mês</h3>
             <p className="mt-1 text-xs text-neutralbrand">
-              O valor é atualizado automaticamente a partir do módulo de origem. O campo pode ser editado para um
-              ajuste manual antes de salvar; sem edição, ele acompanha o valor publicado em tempo real.
+              O valor é atualizado automaticamente a partir do módulo de origem. O campo pode ser
+              editado para um ajuste manual antes de salvar; sem edição, ele acompanha o valor
+              publicado em tempo real.
             </p>
           </div>
         </div>
@@ -692,11 +665,15 @@ export function ScorecardView() {
             </thead>
             <tbody>
               {selectedRows.map((row) => (
-                <tr key={row.key} className="border-t border-neutralbrand/15 align-middle hover:bg-canvas/60">
+                <tr
+                  key={row.key}
+                  className="border-t border-neutralbrand/15 align-middle hover:bg-canvas/60"
+                >
                   <td className="px-3 py-3">
                     <div className="font-bold text-brand-dark">{row.label}</div>
                     <div className="mt-0.5 text-[10px] uppercase tracking-wide text-neutralbrand">
-                      {SC_INDICATORS.find((indicator) => indicator.key === row.key)?.source?.module ?? "Manual"}
+                      {SC_INDICATORS.find((indicator) => indicator.key === row.key)?.source
+                        ?.module ?? "Manual"}
                     </div>
                   </td>
                   <td className="px-3 py-3 text-right font-semibold">{row.peso.toFixed(2)}%</td>
@@ -722,8 +699,12 @@ export function ScorecardView() {
                       className="w-32 rounded-lg border border-neutralbrand/40 px-3 py-2 text-sm font-semibold outline-none focus:border-brand"
                     />
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{formatPoints(row.pontosPossiveis)}</td>
-                  <td className={`px-3 py-3 text-right font-extrabold tabular-nums ${row.pass ? "text-success" : "text-neutralbrand"}`}>
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    {formatPoints(row.pontosPossiveis)}
+                  </td>
+                  <td
+                    className={`px-3 py-3 text-right font-extrabold tabular-nums ${row.pass ? "text-success" : "text-neutralbrand"}`}
+                  >
                     {formatPoints(row.pontos)}
                   </td>
                   <td className="px-3 py-3">
@@ -742,9 +723,13 @@ export function ScorecardView() {
             </tbody>
             <tfoot className="border-t-2 border-brand/20 bg-canvas font-extrabold text-brand-dark">
               <tr>
-                <td className="px-3 py-3" colSpan={5}>Total do mês</td>
+                <td className="px-3 py-3" colSpan={5}>
+                  Total do mês
+                </td>
                 <td className="px-3 py-3 text-right">{formatPoints(SCORECARD_MONTHLY_POOL)}</td>
-                <td className="px-3 py-3 text-right text-accent">{formatPoints(displayedResult.totalPontos)}</td>
+                <td className="px-3 py-3 text-right text-accent">
+                  {formatPoints(displayedResult.totalPontos)}
+                </td>
                 <td className="px-3 py-3">{displayedResult.atendimentoMes.toFixed(2)}%</td>
               </tr>
             </tfoot>
@@ -755,9 +740,12 @@ export function ScorecardView() {
       <section className="rounded-2xl border border-neutralbrand/25 bg-white p-4 shadow-sm sm:p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-base font-extrabold text-brand-dark">Histórico do ciclo — indicador por mês</h3>
+            <h3 className="text-base font-extrabold text-brand-dark">
+              Histórico do ciclo — indicador por mês
+            </h3>
             <p className="mt-1 text-xs text-neutralbrand">
-              O farol usa a meta de cada indicador. Clique nele para editar somente aquele indicador e mês, sem trocar o snapshot aberto acima.
+              O farol usa a meta de cada indicador. Clique nele para editar somente aquele indicador
+              e mês, sem trocar o snapshot aberto acima.
             </p>
           </div>
           <ExportButtons
@@ -819,11 +807,17 @@ export function ScorecardView() {
                       : mean >= indicator.meta;
 
                 return (
-                  <tr key={indicator.key} className="border-t border-neutralbrand/15 hover:bg-canvas/60">
+                  <tr
+                    key={indicator.key}
+                    className="border-t border-neutralbrand/15 hover:bg-canvas/60"
+                  >
                     <td className="px-3 py-3 font-bold text-brand-dark">{indicator.label}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{indicator.peso.toFixed(2)}%</td>
                     <td className="px-3 py-3 text-right font-semibold">
-                      {indicator.direction === "lower" ? "≤" : "≥"} {indicator.meta}{indicator.unit}
+                      {indicator.peso.toFixed(2)}%
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold">
+                      {indicator.direction === "lower" ? "≤" : "≥"} {indicator.meta}
+                      {indicator.unit}
                     </td>
                     {rows.map((row, index) => {
                       const periodMonth = SCORECARD_PERIOD_MONTHS[index];
@@ -843,16 +837,22 @@ export function ScorecardView() {
                             }`}
                             title={`Editar ${indicator.label} de ${monthName(periodMonth)}/${year}`}
                           >
-                            <span className={`h-2.5 w-2.5 rounded-full ${!row?.hasValue ? "bg-neutralbrand/40" : row.pass ? "bg-success" : "bg-red-600"}`} />
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full ${!row?.hasValue ? "bg-neutralbrand/40" : row.pass ? "bg-success" : "bg-red-600"}`}
+                            />
                             {row?.hasValue ? formatValue(row.value, row.unit) : "—"}
                           </button>
                         </td>
                       );
                     })}
-                    <td className="px-3 py-3 text-right font-semibold">{formatValue(mean, indicator.unit)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">
+                      {formatValue(mean, indicator.unit)}
+                    </td>
                     <td className="px-3 py-3 text-right">
                       <div className="font-extrabold text-brand-dark">{formatPoints(points)}</div>
-                      <div className="text-[10px] text-neutralbrand">de {formatPoints(maxPoints)}</div>
+                      <div className="text-[10px] text-neutralbrand">
+                        de {formatPoints(maxPoints)}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       {partialPass === null ? (
@@ -869,7 +869,9 @@ export function ScorecardView() {
             </tbody>
             <tfoot className="border-t-2 border-brand/20 bg-canvas font-extrabold text-brand-dark">
               <tr>
-                <td className="px-3 py-3" colSpan={3}>Pontuação mensal</td>
+                <td className="px-3 py-3" colSpan={3}>
+                  Pontuação mensal
+                </td>
                 {SCORECARD_PERIOD_MONTHS.map((periodMonth) => (
                   <td key={periodMonth} className="px-3 py-3 text-center tabular-nums">
                     {formatPoints(effectiveByMonth.get(periodMonth)?.result.totalPontos ?? 0)}
@@ -884,8 +886,9 @@ export function ScorecardView() {
         </div>
 
         <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-5 text-brand">
-          <strong>Regra de pontuação:</strong> cada mês disponibiliza {formatPoints(SCORECARD_MONTHLY_POOL)} pontos.
-          O peso define a parcela de cada indicador. Meta cumprida recebe 100% da parcela; meta não cumprida ou sem resultado recebe zero.
+          <strong>Regra de pontuação:</strong> cada mês disponibiliza{" "}
+          {formatPoints(SCORECARD_MONTHLY_POOL)} pontos. O peso define a parcela de cada indicador.
+          Meta cumprida recebe 100% da parcela; meta não cumprida ou sem resultado recebe zero.
         </div>
       </section>
     </div>

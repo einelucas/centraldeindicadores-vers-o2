@@ -2,13 +2,9 @@
 
 import type { Prisma } from "@prisma/client";
 
-export const IDP_EXCLUDED_DISCIPLINES_SETTING_KEY =
-  "idp.excludedDisciplines" as const;
+export const IDP_EXCLUDED_DISCIPLINES_SETTING_KEY = "idp.excludedDisciplines" as const;
 
-export const IDP_DEFAULT_EXCLUDED_DISCIPLINES = [
-  "10 _ Fornecimentos",
-  "09 _ Projetos",
-] as const;
+export const IDP_DEFAULT_EXCLUDED_DISCIPLINES = ["10 _ Fornecimentos", "09 _ Projetos"] as const;
 
 interface AppSettingReader {
   appSetting: {
@@ -78,9 +74,7 @@ export function filterIdpExcludedDisciplines<T extends { disciplina: string }>(
 }
 
 /** Lê a configuração; na ausência dela, aplica as exclusões oficiais padrão. */
-export async function loadIdpExcludedDisciplines(
-  db: AppSettingReader,
-): Promise<string[]> {
+export async function loadIdpExcludedDisciplines(db: AppSettingReader): Promise<string[]> {
   const setting = await db.appSetting.findUnique({
     where: { key: IDP_EXCLUDED_DISCIPLINES_SETTING_KEY },
     select: { value: true },
@@ -88,4 +82,48 @@ export async function loadIdpExcludedDisciplines(
 
   if (!setting) return [...IDP_DEFAULT_EXCLUDED_DISCIPLINES];
   return parseIdpExcludedDisciplines(setting.value);
+}
+
+export const IDP_EXCLUDED_UNITS_SETTING_KEY = "idp.excludedUnits" as const;
+
+/**
+ * Normaliza apenas para comparação (mesma regra de normalizedUnitKey em
+ * calculations/index.ts, duplicada aqui para não criar um ciclo de import
+ * entre configuration/ e calculations/).
+ */
+export function normalizeIdpUnitKey(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toLocaleUpperCase("pt-BR");
+}
+
+/** Converte o valor salvo no AppSetting em uma lista limpa e sem duplicatas. */
+export function parseIdpExcludedUnits(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : [];
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of source) {
+    const label = String(item ?? "").trim();
+    const normalized = normalizeIdpUnitKey(label);
+    if (!label || !normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(label);
+  }
+
+  return result;
+}
+
+/** Lê a lista de unidades ignoradas nos cálculos e no painel do IDP. */
+export async function loadIdpExcludedUnits(db: AppSettingReader): Promise<string[]> {
+  const setting = await db.appSetting.findUnique({
+    where: { key: IDP_EXCLUDED_UNITS_SETTING_KEY },
+    select: { value: true },
+  });
+
+  if (!setting) return [];
+  return parseIdpExcludedUnits(setting.value);
 }

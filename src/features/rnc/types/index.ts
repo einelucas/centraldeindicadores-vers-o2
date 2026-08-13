@@ -29,6 +29,7 @@ export interface RncUnitAggregate {
   criadas: number;
   tratadas: number;
   aderencia: number;
+  excluded: boolean;
 }
 
 /** Agregado por ofensor. */
@@ -41,6 +42,7 @@ export interface RncOfensorAggregate {
 /** Resultado consolidado do RNC. */
 export interface RncResult {
   metaDias: number;
+  excludedUnits: string[];
   totalCriadas: number;
   totalTratadas: number;
   aderenciaTotal: number;

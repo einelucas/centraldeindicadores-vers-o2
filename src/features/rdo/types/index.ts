@@ -20,6 +20,7 @@ export interface RdoUnitAggregate {
   emitidos: number;
   aprovados: number;
   aderencia: number;
+  excluded: boolean;
 }
 
 /** Agregado por mês. */
@@ -35,6 +36,7 @@ export interface RdoMonthAggregate {
 /** Resultado consolidado do RDO. */
 export interface RdoResult {
   threshold: number;
+  excludedUnits: string[];
   totalEmitidos: number;
   totalAprovados: number;
   totalRevisar: number;

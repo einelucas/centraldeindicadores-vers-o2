@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
   ChevronRight,
   Download,
@@ -18,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { normalizedUnitKey } from "@/features/idp/calculations";
 import { parseIdpFile } from "@/features/idp/importers";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
@@ -174,6 +177,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [historyMonthEnd, setHistoryMonthEnd] = useState(12);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [excludedDisciplinesDraft, setExcludedDisciplinesDraft] = useState("");
+  const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitDialogBusy, setUnitDialogBusy] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [publication, setPublication] = useState<PublicationSummary | null>(null);
@@ -217,6 +223,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     setHistoryMonthEnd(body.historyMonthEnd);
     setThreshold(body.threshold * 100);
     setExcludedDisciplinesDraft(body.excludedDisciplines.join("\n"));
+    setExcludedUnits(body.result.excludedUnits);
     setSelectedUnit((current) =>
       body.result.unitDetails.some((item) => item.unit === current)
         ? current
@@ -251,6 +258,39 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     );
   }
 
+  const unitOptions = useMemo(() => {
+    const codes = new Set<string>([
+      ...(data?.documents.map((document) => document.unit) ?? []),
+      ...excludedUnits,
+    ]);
+    codes.delete("");
+    return Array.from(codes)
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+      .map((code) => ({ code, label: code }));
+  }, [data, excludedUnits]);
+
+  async function saveExcludedUnits(next: string[]) {
+    setUnitDialogBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/configuracoes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "idp.excludedUnits", value: next }),
+      });
+      if (!response.ok)
+        throw await responseError(response, "Falha ao salvar as unidades ignoradas.");
+      setExcludedUnits(next);
+      setUnitDialogOpen(false);
+      await load();
+      setMessage("Unidades ignoradas atualizadas e indicador recalculado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar as unidades ignoradas.");
+    } finally {
+      setUnitDialogBusy(false);
+    }
+  }
+
   async function prepareFiles(files: FileList | File[]) {
     const selected = Array.from(files);
     if (!selected.length) return;
@@ -270,6 +310,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         setMessage(
           "RSOs lidos. Confira unidade, número da versão, mês de referência, período e emissão antes de importar.",
         );
+        const known = new Set(unitOptions.map((option) => normalizedUnitKey(option.code)));
+        const detected = parsed
+          .map((item) => item.record?.unit)
+          .filter((unit): unit is string => Boolean(unit));
+        const hasNewUnit = detected.some((unit) => !known.has(normalizedUnitKey(unit)));
+        if (hasNewUnit) setUnitDialogOpen(true);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao ler os PDFs RSO.");
@@ -911,6 +957,15 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   Limpar histórico
                 </Button>
               ) : null}
+              <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+                <Ban className="size-3.5" />
+                Ignorar unidades
+                {excludedUnits.length ? (
+                  <Badge variant="outline" className="ml-0.5">
+                    {excludedUnits.length}
+                  </Badge>
+                ) : null}
+              </Button>
             </div>
             {canPublish ? (
               <Button
@@ -1141,8 +1196,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                             {fmtPct(unit.aderencia)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={ok ? "success" : "destructive"}>
-                              {ok ? "Dentro da meta" : "Fora da meta"}
+                            <Badge
+                              variant={unit.excluded ? "outline" : ok ? "success" : "destructive"}
+                            >
+                              {unit.excluded ? "Ignorada" : ok ? "Dentro da meta" : "Fora da meta"}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -1422,6 +1479,16 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           </CardDescription>
         </Card>
       )}
+
+      <UnitExclusionDialog
+        open={unitDialogOpen}
+        onOpenChange={setUnitDialogOpen}
+        units={unitOptions}
+        excluded={excludedUnits}
+        busy={unitDialogBusy}
+        onSave={(next) => void saveExcludedUnits(next)}
+        description="Unidades marcadas continuam visíveis no histórico de RSOs, mas ficam de fora da execução geral, das disciplinas e do painel publicado."
+      />
     </div>
   );
 }
