@@ -3,12 +3,84 @@
 import type { Prisma } from "@prisma/client";
 import { toJsonValue } from "@/server/database/json";
 import { makeBusinessKey, makeContentHash } from "@/lib/hashing";
+import { normalizePeriodRange, type PeriodRange } from "@/lib/period";
 import { computeScorecard } from "@/features/scorecard/calculations";
 import {
   latestPublishedValueForPeriod,
   type GeneralPanelPublicationInput,
 } from "@/features/scorecard/publications";
 import { SC_INDICATORS } from "@/features/scorecard/types";
+
+/**
+ * Período de controle único do Scorecard: escolhido na Administração,
+ * persistido no banco e usado tanto para os dados do painel administrativo
+ * quanto para o que é puxado das abas no Painel Geral. Só o botão "Ciclo
+ * atual" volta a apontar para o semestre vigente na data real — fora isso, a
+ * escolha do usuário permanece entre sessões e recarregamentos.
+ */
+export const SCORECARD_PANEL_PERIOD_SETTING = "scorecard.panelPeriod";
+
+interface AppSettingReader {
+  appSetting: {
+    findUnique(args: {
+      where: { key: string };
+      select: { value: true };
+    }): Promise<{ value: Prisma.JsonValue } | null>;
+  };
+}
+
+interface AppSettingWriter {
+  appSetting: {
+    upsert(args: {
+      where: { key: string };
+      create: { key: string; value: Prisma.InputJsonValue | typeof Prisma.JsonNull };
+      update: { value: Prisma.InputJsonValue | typeof Prisma.JsonNull };
+    }): Promise<unknown>;
+  };
+}
+
+function parseScorecardPanelPeriod(value: Prisma.JsonValue | undefined): PeriodRange | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const { startYear, startMonth, endYear, endMonth } = record;
+  if (
+    !Number.isInteger(startYear) ||
+    !Number.isInteger(startMonth) ||
+    !Number.isInteger(endYear) ||
+    !Number.isInteger(endMonth)
+  ) {
+    return null;
+  }
+  return normalizePeriodRange({
+    startYear: startYear as number,
+    startMonth: startMonth as number,
+    endYear: endYear as number,
+    endMonth: endMonth as number,
+  });
+}
+
+/** Lê o período persistido do Painel Geral; `null` se nunca foi salvo. */
+export async function loadScorecardPanelPeriod(db: AppSettingReader): Promise<PeriodRange | null> {
+  const setting = await db.appSetting.findUnique({
+    where: { key: SCORECARD_PANEL_PERIOD_SETTING },
+    select: { value: true },
+  });
+  return setting ? parseScorecardPanelPeriod(setting.value) : null;
+}
+
+/** Salva o período de controle único do Scorecard (Administração + Painel Geral). */
+export async function saveScorecardPanelPeriod(
+  db: AppSettingWriter,
+  period: PeriodRange,
+): Promise<PeriodRange> {
+  const normalized = normalizePeriodRange(period);
+  await db.appSetting.upsert({
+    where: { key: SCORECARD_PANEL_PERIOD_SETTING },
+    create: { key: SCORECARD_PANEL_PERIOD_SETTING, value: toJsonValue(normalized) },
+    update: { value: toJsonValue(normalized) },
+  });
+  return normalized;
+}
 
 /** Lê os valores publicados dos cinco indicadores para um período. */
 export async function pullScorecardValues(

@@ -2,7 +2,9 @@ import { ModuleWorkspace } from "@/components/layout/ModuleWorkspace";
 import { ReferenceSectionHeader } from "@/components/layout/ReferenceSectionHeader";
 import { DashboardOverview } from "@/features/dashboard/components/DashboardOverview";
 import { ScorecardView } from "@/features/scorecard/components/ScorecardView";
+import { loadScorecardPanelPeriod } from "@/features/scorecard/services";
 import { getCurrentUser } from "@/server/auth/session";
+import { prisma } from "@/server/database/prisma";
 
 export const metadata = { title: "Scorecard — Central de Indicadores" };
 
@@ -10,6 +12,7 @@ export default async function ScorecardPage() {
   const user = await getCurrentUser();
   const canAdmin = user !== null && user.role !== "VIEWER";
   const canClearHistory = user?.role === "ADMIN";
+  const initialPeriod = user ? await loadScorecardPanelPeriod(prisma) : null;
 
   return (
     <ModuleWorkspace
@@ -20,9 +23,9 @@ export default async function ScorecardPage() {
           <>
             <ReferenceSectionHeader
               title="Scorecard consolidado (Administração)"
-              description="Consolida as publicações de RDO, IDP, RNC, 5S e Taxa de Acidentes com os pesos e metas vigentes para o ciclo de junho a novembro."
+              description="Consolida as publicações de RDO, IDP, RNC, 5S e Taxa de Acidentes com os pesos e metas vigentes para o período selecionado."
             />
-            <ScorecardView canClearHistory={canClearHistory} />
+            <ScorecardView canClearHistory={canClearHistory} initialPeriod={initialPeriod} />
           </>
         ) : null
       }

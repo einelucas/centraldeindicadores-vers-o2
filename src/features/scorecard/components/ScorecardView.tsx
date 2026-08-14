@@ -10,7 +10,6 @@ import { StatusBadge } from "@/components/indicators/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { computeScorecard } from "@/features/scorecard/calculations";
 import {
   SC_INDICATORS,
@@ -63,13 +62,9 @@ function monthColumnLabel(year: number, month: number): string {
   return `${monthName(month).slice(0, 3)}/${String(year).slice(2)}`;
 }
 
-/** Competência atual se estiver dentro do ciclo; senão o primeiro mês do ciclo. */
-function initialSelectedPeriod(range: PeriodRange): { year: number; month: number } {
-  const months = enumeratePeriodMonths(range);
-  const now = new Date();
-  const currentIdx = toMonthIndex(now.getFullYear(), now.getMonth() + 1);
-  const match = months.find((item) => toMonthIndex(item.year, item.month) === currentIdx);
-  return match ?? months[0] ?? { year: range.startYear, month: range.startMonth };
+/** Mês de referência do ciclo: sempre o fim do intervalo do filtro de Período. */
+function endOfRange(range: PeriodRange): { year: number; month: number } {
+  return { year: range.endYear, month: range.endMonth };
 }
 
 function formatPoints(value: number, digits = 2): string {
@@ -114,11 +109,19 @@ function average(values: number[]): number | null {
 
 const LIVE_REFRESH_INTERVAL_MS = 30_000;
 
-export function ScorecardView({ canClearHistory }: { canClearHistory: boolean }) {
-  const [cycleRange, setCycleRange] = useState<PeriodRange>(getCurrentCycle);
-  const [{ year, month }, setSelectedPeriod] = useState<{ year: number; month: number }>(() =>
-    initialSelectedPeriod(getCurrentCycle()),
-  );
+export function ScorecardView({
+  canClearHistory,
+  initialPeriod,
+}: {
+  canClearHistory: boolean;
+  /** Período salvo (Administração) na última vez que alguém o alterou; `null` = nunca foi salvo. */
+  initialPeriod: PeriodRange | null;
+}) {
+  const [cycleRange, setCycleRange] = useState<PeriodRange>(initialPeriod ?? getCurrentCycle);
+  // Mês de referência para "Indicadores do mês" e "Salvar snapshot": sempre o
+  // fim do intervalo do filtro de Período — não existe mais um seletor
+  // independente, para não haver dois controles de período divergentes.
+  const { year, month } = useMemo(() => endOfRange(cycleRange), [cycleRange]);
   const cycleMonths = useMemo(() => enumeratePeriodMonths(cycleRange), [cycleRange]);
   const [data, setData] = useState<Computation | null>(null);
   const [history, setHistory] = useState<Computation[]>([]);
@@ -412,6 +415,21 @@ export function ScorecardView({ canClearHistory }: { canClearHistory: boolean })
     });
   }, [cycleMonths, effectiveByPeriod]);
 
+  // Persiste a escolha de Período no servidor, para que ela sobreviva a um
+  // recarregamento e seja o mesmo período usado pelo Painel Geral — em vez de
+  // ficar só na memória do navegador e voltar ao ciclo padrão a cada F5.
+  function updateCycleRange(next: PeriodRange) {
+    setCycleRange(next);
+    void fetch("/api/scorecard/panel-period", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    }).catch(() => {
+      // Falha silenciosa: o filtro continua funcionando nesta sessão: só a
+      // persistência entre sessões é que não é garantida nesse caso.
+    });
+  }
+
   async function save() {
     setBusy(true);
     setStatus(null);
@@ -585,31 +603,7 @@ export function ScorecardView({ canClearHistory }: { canClearHistory: boolean })
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Filtros</Label>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="scMonth">Mês do snapshot</Label>
-              <Select
-                id="scMonth"
-                value={periodKey(year, month)}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                  const [nextYear, nextMonth] = event.target.value.split("-").map(Number);
-                  if (nextYear && nextMonth) setSelectedPeriod({ year: nextYear, month: nextMonth });
-                }}
-                className="w-44"
-              >
-                {cycleMonths.map((cm) => (
-                  <option key={periodKey(cm.year, cm.month)} value={periodKey(cm.year, cm.month)}>
-                    {monthName(cm.month)}/{cm.year}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-        </Card>
-
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[2fr_1fr]">
         <Card className="p-4">
           <div className="flex flex-col gap-3">
             <Label>Período</Label>
@@ -617,18 +611,16 @@ export function ScorecardView({ canClearHistory }: { canClearHistory: boolean })
               value={cycleRange}
               onChange={(next) => {
                 if (!next) return;
-                setCycleRange(next);
-                const months = enumeratePeriodMonths(next);
-                const idx = toMonthIndex(year, month);
-                const stillInRange = months.some(
-                  (item) => toMonthIndex(item.year, item.month) === idx,
-                );
-                if (!stillInRange) setSelectedPeriod(initialSelectedPeriod(next));
+                updateCycleRange(next);
               }}
               yearsInData={[cycleRange.startYear, cycleRange.endYear]}
               allowClear={false}
               label=""
             />
+            <p className="text-xs text-neutralbrand">
+              &quot;Indicadores do mês&quot; e &quot;Salvar snapshot&quot; sempre usam o mês final
+              deste período ({monthName(month)}/{year}).
+            </p>
           </div>
         </Card>
 

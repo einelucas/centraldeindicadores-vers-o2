@@ -7,8 +7,9 @@ import {
   type GeneralPanelData,
   type GeneralPanelIndicator,
 } from "@/features/scorecard/publications";
+import { loadScorecardPanelPeriod } from "@/features/scorecard/services";
 import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
-import { enumeratePeriodMonths, getCurrentCycle } from "@/lib/period";
+import { enumeratePeriodMonths, getCurrentCycle, type PeriodRange } from "@/lib/period";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
@@ -38,14 +39,15 @@ function percentOfSpreadsheetTarget(
 }
 
 /**
- * Reaplica ao Painel Geral a mesma janela e a mesma pontuação da planilha: o
- * ciclo semestral vigente, total máximo fixo de 11.582 pontos e regra
- * tudo-ou-nada. O Painel Geral não tem filtro de período próprio, então usa
- * sempre o ciclo ativo na data de hoje.
+ * Reaplica ao Painel Geral a mesma pontuação da planilha (total máximo fixo
+ * de 11.582 pontos, regra tudo-ou-nada) usando a janela de meses do período
+ * salvo na Administração do Scorecard — o mesmo período que controla o que é
+ * puxado das abas. Sem período salvo ainda (instalação nova), cai no ciclo
+ * semestral vigente na data real.
  */
-function applySpreadsheetScore(data: GeneralPanelData): GeneralPanelData {
+function applySpreadsheetScore(data: GeneralPanelData, period: PeriodRange): GeneralPanelData {
   const allowedKeys = new Set(
-    enumeratePeriodMonths(getCurrentCycle()).map(
+    enumeratePeriodMonths(period).map(
       ({ year, month }) => `${year}-${String(month).padStart(2, "0")}`,
     ),
   );
@@ -123,21 +125,25 @@ export async function GET() {
   try {
     await requirePermission("indicators:read");
 
-    // Histórico completo (não só a versão ativa): uma republicação pode
-    // cobrir só parte do ciclo, e buildGeneralPanelData precisa das versões
-    // antigas para não perder meses que a mais nova não inclui.
-    const publications = await prisma.indicatorPublication.findMany({
-      orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
-      include: {
-        publishedBy: { select: { id: true, name: true, email: true } },
-      },
-    });
+    const [publications, savedPeriod] = await Promise.all([
+      // Histórico completo (não só a versão ativa): uma republicação pode
+      // cobrir só parte do ciclo, e buildGeneralPanelData precisa das versões
+      // antigas para não perder meses que a mais nova não inclui.
+      prisma.indicatorPublication.findMany({
+        orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
+        include: {
+          publishedBy: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      loadScorecardPanelPeriod(prisma),
+    ]);
+    const period = savedPeriod ?? getCurrentCycle();
 
-    return NextResponse.json(applySpreadsheetScore(buildGeneralPanelData(publications)));
+    return NextResponse.json(applySpreadsheetScore(buildGeneralPanelData(publications), period));
   } catch (error) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json({
-        ...applySpreadsheetScore(buildGeneralPanelData([])),
+        ...applySpreadsheetScore(buildGeneralPanelData([]), getCurrentCycle()),
         setupRequired: true,
       });
     }
