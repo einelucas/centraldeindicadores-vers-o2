@@ -13,6 +13,9 @@ export default async function RncPage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · RNC"
+      title="Não Conformidades"
+      description="Painel de acompanhamento das RNCs e do tempo de tratativa por unidade."
       panel={<RncPublishedPanel />}
       administration={
         canAdmin ? (

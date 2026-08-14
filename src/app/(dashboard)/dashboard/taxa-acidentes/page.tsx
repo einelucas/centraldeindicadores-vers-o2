@@ -16,6 +16,9 @@ export default async function AccidentRatePage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · Segurança"
+      title="Taxa de Acidentes"
+      description="Painel de acompanhamento dos indicadores de segurança do trabalho."
       panel={<AccidentRatePublishedPanel />}
       administration={
         canAdmin ? (

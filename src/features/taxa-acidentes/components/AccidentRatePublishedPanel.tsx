@@ -174,9 +174,9 @@ export function AccidentRatePublishedPanel() {
         type="button"
         disabled={exporting}
         onClick={() => void handleExportPdf()}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+        className="flex h-[42px] items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-[15px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
       >
-        <FileDown className="size-3.5" />
+        <FileDown className="size-4" />
         {exporting ? "Gerando PDF…" : "Exportar PDF"}
       </button>
     </ToolbarSlotContent>
@@ -291,6 +291,7 @@ export function AccidentRatePublishedPanel() {
           <div className="g2 indicator-subgrid">
             <div className="indicator-subcard">
               <div className="ct">Taxa de frequência mensal</div>
+              <div className="cs">Comparativo da taxa de frequência com a meta em cada mês.</div>
 
               <div className="cw" style={{ height: 160 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -383,9 +384,7 @@ export function AccidentRatePublishedPanel() {
               >
                 <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                   <div className="ct">Correlação CAF e SAF por unidade</div>
-                  <p className="ps" style={{ margin: 0 }}>
-                    Barras agrupadas por unidade.
-                  </p>
+                  <div className="cs">Barras agrupadas por unidade.</div>
                 </div>
 
                 {unitPeriods.length > 1 ? (
@@ -543,6 +542,7 @@ export function AccidentRatePublishedPanel() {
 
           <div className="indicator-subcard">
             <div className="ct">Acidentes mensais (CAF)</div>
+            <div className="cs">Quantidade de acidentes CAF registrados por mês.</div>
 
             <div className="cw" style={{ height: 220 }}>
               <ResponsiveContainer width="100%" height="100%">

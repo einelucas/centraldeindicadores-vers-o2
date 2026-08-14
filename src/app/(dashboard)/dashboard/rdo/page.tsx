@@ -13,6 +13,9 @@ export default async function RdoPage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · RDO"
+      title="Aprovação de RDO"
+      description="Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês."
       panel={<RdoPublishedPanel />}
       administration={canAdmin ? (
         <>

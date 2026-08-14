@@ -90,9 +90,9 @@ export function RdoPublishedPanel() {
         type="button"
         disabled={exporting}
         onClick={() => void handleExportPdf()}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+        className="flex h-[42px] items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-[15px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
       >
-        <FileDown className="size-3.5" />
+        <FileDown className="size-4" />
         {exporting ? "Gerando PDF…" : "Exportar PDF"}
       </button>
     </ToolbarSlotContent>
@@ -190,6 +190,7 @@ export function RdoPublishedPanel() {
           <div className="g2 indicator-subgrid">
             <div className="indicator-subcard">
               <div className="ct">Distribuição de status</div>
+              <div className="cs">Proporção entre relatórios aprovados, em revisão e preenchendo.</div>
               <div className="cw" style={{ height: 130 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 2, right: 4, bottom: 2, left: 4 }}>
@@ -224,6 +225,7 @@ export function RdoPublishedPanel() {
 
             <div className="indicator-subcard">
               <div className="ct">Aprovação mensal</div>
+              <div className="cs">Aderência mensal comparada com a meta do indicador.</div>
               <div className="cw" style={{ height: 130 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={d.mensal} margin={{ top: 8, right: 12, bottom: 2, left: -16 }}>
@@ -262,6 +264,7 @@ export function RdoPublishedPanel() {
 
           <div className="indicator-subcard">
             <div className="ct">Aprovação por unidade</div>
+            <div className="cs">Leitura visual de desempenho por unidade.</div>
             {d.unidades.length ? (
               d.unidades.map((unit) => {
                 const ok = unit.v >= d.meta;

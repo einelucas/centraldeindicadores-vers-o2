@@ -1,0 +1,49 @@
+- generic [active] [ref=f16e1]:
+  - banner [ref=f16e2]:
+    - generic [ref=f16e3]:
+      - img "Inpasa" [ref=f16e4]
+      - generic [ref=f16e5]:
+        - paragraph [ref=f16e6]: Planejamento
+        - paragraph [ref=f16e7]: Central de Indicadores
+    - searchbox [ref=f16e9]
+    - generic [ref=f16e10]:
+      - button "Notificações" [ref=f16e11] [cursor=pointer]
+      - button "LP" [ref=f16e17] [cursor=pointer]
+  - navigation "Indicadores" [ref=f16e23]:
+    - generic [ref=f16e24]:
+      - link "Scorecard" [ref=f16e25] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f16e31]:
+      - link "RDO" [ref=f16e32] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f16e35]:
+      - link "IDP - Disciplinas" [ref=f16e36] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f16e40]:
+      - link "RNC" [ref=f16e41] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f16e44]:
+      - link "5S" [ref=f16e45] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f16e49]:
+      - link "Taxa de Acidentes" [ref=f16e50] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+    - generic [ref=f16e56]:
+      - button "Painel" [ref=f16e57] [cursor=pointer]
+      - button "Administração" [ref=f16e63] [cursor=pointer]
+      - button "Exportar PDF" [ref=f16e67] [cursor=pointer]
+  - main [ref=f16e72]:
+    - generic [ref=f16e73]:
+      - generic [ref=f16e74]:
+        - paragraph [ref=f16e75]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=f16e76]
+        - paragraph [ref=f16e77]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - paragraph [ref=f16e82]: Carregando painel publicado…
+  - contentinfo [ref=f16e83]: Central de Indicadores - 2026
+  - alert [ref=f16e84]

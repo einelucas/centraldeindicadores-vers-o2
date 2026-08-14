@@ -13,6 +13,9 @@ export default async function FiveSPage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · 5S"
+      title="Programa 5S"
+      description="Painel de aderência das auditorias 5S por unidade e área."
       panel={<FiveSPublishedPanel />}
       administration={
         canAdmin ? (

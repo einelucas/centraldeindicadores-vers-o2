@@ -1,50 +1,87 @@
+"use client";
+
 import Image from "next/image";
-import { Bell, Search } from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft, Bell, CloudDownload, History, Search } from "lucide-react";
 import type { CurrentUser } from "@/server/auth/session";
+import { TABS } from "./TabsNav";
 import { UserMenu } from "./UserMenu";
 
-/** Cabeçalho no estilo do hub corporativo (identidade visual compartilhada). */
+/** Cabeçalho no estilo do hub de automação (identidade visual compartilhada). */
 export function AppHeader({ user }: { user: CurrentUser }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const activeTab = TABS.find(
+    (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
+  );
+
   return (
-    <header className="grid h-14 grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-border bg-background px-4 sm:px-6">
-      <div className="flex items-center gap-2.5">
+    <header className="flex h-16 items-center gap-4 border-b border-black/[0.07] bg-background px-4 sm:px-6">
+      <div className="flex shrink-0 items-center gap-3">
         <Image
           src="/brand/logo-inpasa.png"
           alt="Inpasa"
           width={2087}
           height={601}
-          className="h-[30px] w-auto"
+          className="h-9 w-auto"
           priority
         />
+
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="flex h-[34px] items-center gap-1.5 rounded-lg border border-[#e5e7eb] bg-white px-3 text-[13.6px] font-medium text-[#374151] transition-colors hover:bg-muted"
+        >
+          <ArrowLeft className="size-[18px]" />
+          Voltar
+        </button>
+
         <div className="hidden sm:block">
-          <p className="text-[10px] font-bold uppercase leading-none tracking-wider text-muted-foreground">
+          <p className="text-[9.92px] font-extrabold uppercase leading-none tracking-[0.08em] text-[#8a97ab]">
             Planejamento
           </p>
-          <p className="mt-1 text-[15px] font-extrabold leading-none tracking-tight text-foreground">
-            Central de Indicadores
+          <p className="mt-1 text-[16px] font-extrabold leading-none tracking-tight text-[#20324a]">
+            {activeTab?.label ?? "Central de Indicadores"}
           </p>
         </div>
       </div>
 
-      <label className="relative mx-auto hidden w-full max-w-md items-center sm:flex">
-        <Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" />
+      <label className="relative mx-auto hidden w-full max-w-[480px] flex-1 items-center sm:flex">
+        <Search className="pointer-events-none absolute left-3.5 size-4 text-muted-foreground" />
         <input
           type="search"
           placeholder="Buscar"
-          className="h-9 w-full rounded-lg border border-border bg-muted/60 pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring focus:bg-background"
+          className="h-10 w-full rounded-full bg-white pl-10 pr-4 text-[15px] text-foreground shadow-[0_2px_4px_rgba(15,23,42,0.12)] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/40"
         />
       </label>
 
-      <div className="flex items-center gap-1.5 justify-self-end">
+      <div className="flex shrink-0 items-center gap-1.5">
         <button
           type="button"
           aria-label="Notificações"
-          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex size-[38px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Bell className="size-[18px]" />
         </button>
 
-        <div className="mx-1 hidden h-6 w-px bg-border sm:block" />
+        {user.role === "ADMIN" ? (
+          <Link
+            href="/dashboard/auditoria"
+            className="flex h-[34px] items-center gap-1.5 rounded-[4px] bg-primary/10 px-3.5 text-[13px] font-medium text-primary transition-colors hover:bg-primary/15"
+          >
+            <History className="size-[15px]" />
+            Registro de Atividades
+          </Link>
+        ) : null}
+
+        <button
+          type="button"
+          aria-label="Exportar dados"
+          className="flex size-[38px] items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <CloudDownload className="size-[18px]" />
+        </button>
 
         <UserMenu user={user} />
       </div>

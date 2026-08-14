@@ -104,9 +104,9 @@ export function FiveSPublishedPanel() {
         type="button"
         disabled={exporting}
         onClick={() => void handleExportPdf()}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+        className="flex h-[42px] items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-[15px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
       >
-        <FileDown className="size-3.5" />
+        <FileDown className="size-4" />
         {exporting ? "Gerando PDF…" : "Exportar PDF"}
       </button>
     </ToolbarSlotContent>
@@ -191,6 +191,7 @@ export function FiveSPublishedPanel() {
           <div className="g2 indicator-subgrid">
             <div className="indicator-subcard">
               <div className="ct">Pontuação por mês</div>
+              <div className="cs">Comparativo da pontuação com a meta em cada mês.</div>
               <div className="cw" style={{ height: 160 }}>
                 {data.mensal.length ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -285,6 +286,7 @@ export function FiveSPublishedPanel() {
 
           <div className="indicator-subcard">
             <div className="ct">Resultado por unidade</div>
+            <div className="cs">Leitura visual de desempenho por unidade.</div>
 
             {data.unidades.length ? (
               data.unidades.map((unit) => {

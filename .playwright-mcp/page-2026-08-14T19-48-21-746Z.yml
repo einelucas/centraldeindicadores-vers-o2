@@ -1,0 +1,44 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - img "Inpasa" [ref=e4]
+      - generic [ref=e5]:
+        - paragraph [ref=e6]: Planejamento
+        - paragraph [ref=e7]: Central de Indicadores
+    - searchbox [ref=e9]
+    - generic [ref=e10]:
+      - button "Notificações" [ref=e11] [cursor=pointer]
+      - button "LP" [ref=e17] [cursor=pointer]
+  - navigation "Indicadores" [ref=e23]:
+    - generic [ref=e24]:
+      - link "Scorecard" [ref=e25] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=e31]:
+      - link "RDO" [ref=e32] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=e35]:
+      - link "IDP - Disciplinas" [ref=e36] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=e40]:
+      - link "RNC" [ref=e41] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=e44]:
+      - link "5S" [ref=e45] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=e49]:
+      - link "Taxa de Acidentes" [ref=e50] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+  - main [ref=e56]:
+    - generic [ref=e57]:
+      - generic [ref=e58]:
+        - paragraph [ref=e59]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=e60]
+        - paragraph [ref=e61]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - paragraph [ref=e66]: Carregando painel publicado…
+  - contentinfo [ref=e67]: Central de Indicadores - 2026

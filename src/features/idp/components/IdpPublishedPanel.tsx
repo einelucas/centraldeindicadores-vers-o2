@@ -93,9 +93,9 @@ export function IdpPublishedPanel() {
         type="button"
         disabled={exporting}
         onClick={() => void handleExportPdf()}
-        className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3.5 py-1.5 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+        className="flex h-[42px] items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-[15px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
       >
-        <FileDown className="size-3.5" />
+        <FileDown className="size-4" />
         {exporting ? "Gerando PDF…" : "Exportar PDF"}
       </button>
     </ToolbarSlotContent>
@@ -154,6 +154,7 @@ export function IdpPublishedPanel() {
           <div className="g2 indicator-subgrid">
             <div className="indicator-subcard">
               <div className="ct">Aderência mensal (%)</div>
+              <div className="cs">Comparativo do percentual executado com a meta em cada mês.</div>
               <div className="cw" style={{ height: 160 }}>
                 {d.mensal?.length ? (
                   <ResponsiveContainer width="100%" height="100%">
@@ -173,6 +174,7 @@ export function IdpPublishedPanel() {
             {chartData.length ? (
               <div className="indicator-subcard">
                 <div className="ct">Aderência por disciplina (%)</div>
+                <div className="cs">Comparativo do percentual executado por disciplina.</div>
                 <div className="cw" style={{ height: 160 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 36, left: -10 }}>
@@ -191,6 +193,7 @@ export function IdpPublishedPanel() {
 
           <div className="indicator-subcard">
             <div className="ct">Execução por unidade — RSO utilizado</div>
+            <div className="cs">Leitura visual de desempenho por unidade.</div>
             {d.unidades.length ? d.unidades.map((unit) => {
               const ok = unit.v >= d.meta;
               return (

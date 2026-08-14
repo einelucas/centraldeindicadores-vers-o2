@@ -13,6 +13,9 @@ export default async function IdpPage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · IDP"
+      title="Aderência do Cronograma"
+      description="Painel de execução física do cronograma por RSO, unidade e disciplina."
       panel={<IdpPublishedPanel />}
       administration={canAdmin ? (
         <>

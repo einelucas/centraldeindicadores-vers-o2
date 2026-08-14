@@ -1,0 +1,44 @@
+- generic [active] [ref=f2e1]:
+  - banner [ref=f2e2]:
+    - generic [ref=f2e3]:
+      - img "Inpasa" [ref=f2e4]
+      - generic [ref=f2e5]:
+        - paragraph [ref=f2e6]: Planejamento
+        - paragraph [ref=f2e7]: Central de Indicadores
+    - searchbox [ref=f2e9]
+    - generic [ref=f2e10]:
+      - button "Notificações" [ref=f2e11] [cursor=pointer]
+      - button "LP" [ref=f2e17] [cursor=pointer]
+  - navigation "Indicadores" [ref=f2e23]:
+    - generic [ref=f2e24]:
+      - link "Scorecard" [ref=f2e25] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f2e31]:
+      - link "RDO" [ref=f2e32] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f2e35]:
+      - link "IDP - Disciplinas" [ref=f2e36] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f2e40]:
+      - link "RNC" [ref=f2e41] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f2e44]:
+      - link "5S" [ref=f2e45] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f2e49]:
+      - link "Taxa de Acidentes" [ref=f2e50] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+  - main [ref=f2e56]:
+    - generic [ref=f2e57]:
+      - generic [ref=f2e58]:
+        - paragraph [ref=f2e59]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=f2e60]
+        - paragraph [ref=f2e61]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - paragraph [ref=f2e66]: Carregando painel publicado…
+  - contentinfo [ref=f2e67]: Central de Indicadores - 2026

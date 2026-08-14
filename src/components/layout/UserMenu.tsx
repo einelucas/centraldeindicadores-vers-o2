@@ -45,7 +45,7 @@ export function UserMenu({ user }: { user: CurrentUser }) {
         aria-haspopup="menu"
         className="flex items-center gap-1.5 rounded-full py-0.5 pr-1.5 pl-0.5 transition-colors hover:bg-muted"
       >
-        <span className="relative flex size-9 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+        <span className="relative flex size-10 items-center justify-center rounded-full bg-primary/10 text-[13px] font-bold text-primary">
           {initials(user.name)}
           <span className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-background bg-success" />
         </span>

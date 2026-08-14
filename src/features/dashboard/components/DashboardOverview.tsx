@@ -1,53 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
-import type { GeneralPanelData, GeneralPanelIndicator } from "@/features/scorecard/publications";
-
-const BLUE = "#304F7E";
-
-// Uma cor bem distinta por mês (modelo colorido, no estilo do resto do app:
-// azul, laranja, verde... em vez de um único matiz em degradê), em ordem
-// fixa Jun→Nov — a ordem nunca muda, é o que garante que as cores sigam
-// distinguíveis mesmo sob daltonismo. Croma e luminosidade elevados pra
-// ficar vívido (bem acima do tom pastel do brand default #304F7E).
-// Validado com scripts/validate_palette.js (checks categóricos: banda de
-// luminosidade, piso de croma, separação CVD adjacente ≥8, piso de visão
-// normal ≥15, contraste ≥3:1 — todos OK nesta ordem).
-const MONTH_COLORS = ["#0074ca", "#c37a00", "#008f7b", "#c53732", "#7a4db5", "#48871e"];
-
-function monthColor(index: number): string {
-  return MONTH_COLORS[index % MONTH_COLORS.length] ?? BLUE;
-}
-
-// Legenda própria em vez do <Legend> automático do Recharts: para BarChart,
-// o Recharts às vezes lista as séries na ordem inversa à declarada — no
-// gráfico por mês isso inverte a cronologia e é exatamente a ambiguidade
-// reportada ("Jul" aparecendo antes de "Jun" na legenda). Renderizar a
-// lista nós mesmos garante Jun→Nov sempre na mesma ordem das barras.
-function MonthLegend({ monthKeys, monthLabels }: { monthKeys: string[]; monthLabels: string[] }) {
-  return (
-    <ul className="month-legend">
-      {monthKeys.map((key, index) => (
-        <li key={key}>
-          <span className="month-legend-swatch" style={{ background: monthColor(index) }} />
-          {monthLabels[index]}
-        </li>
-      ))}
-    </ul>
-  );
-}
+import { StatusBadge } from "@/components/indicators/StatusBadge";
+import type {
+  GeneralPanelData,
+  GeneralPanelIndicator,
+  GeneralPanelMonthCell,
+} from "@/features/scorecard/publications";
+import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -71,9 +32,20 @@ function unitSuffix(indicator: Pick<GeneralPanelIndicator, "unit">): string {
   return indicator.unit;
 }
 
+/** Média/Parcial do indicador. RNC sem casas decimais: "15 dias", não "15,0 dias". */
 function formatValue(indicator: Pick<GeneralPanelIndicator, "unit">, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
-  if (indicator.unit === "dias") return `${value.toFixed(1)} dias`;
+  if (indicator.unit === "dias") return `${Math.round(value)} dias`;
+  if (indicator.unit === "%") return `${value.toFixed(1)}%`;
+  return value.toFixed(1);
+}
+
+/** Valor de uma célula mensal, sem a unidade — repetir "dias" em toda célula do RNC é redundante. */
+function formatMonthValue(
+  indicator: Pick<GeneralPanelIndicator, "unit">,
+  value: number | null,
+): string {
+  if (value === null || !Number.isFinite(value)) return "—";
   if (indicator.unit === "%") return `${value.toFixed(1)}%`;
   return value.toFixed(1);
 }
@@ -81,6 +53,22 @@ function formatValue(indicator: Pick<GeneralPanelIndicator, "unit">, value: numb
 function formatMeta(indicator: GeneralPanelIndicator): string {
   const operator = indicator.direction === "lower" ? "≤" : "≥";
   return `${operator}${indicator.meta}${unitSuffix(indicator)}`;
+}
+
+/** Pontos de um mês: peso cheio se bateu a meta, zero se não bateu ou sem dado — mesma regra do Scorecard. */
+function monthPoints(
+  indicator: Pick<GeneralPanelIndicator, "peso">,
+  month: GeneralPanelMonthCell,
+): number {
+  return month.pass ? (indicator.peso / 100) * SCORECARD_MONTHLY_POOL : 0;
+}
+
+function indicatorPoints(indicator: GeneralPanelIndicator): number {
+  return indicator.months.reduce((sum, month) => sum + monthPoints(indicator, month), 0);
+}
+
+function indicatorMaxPoints(indicator: Pick<GeneralPanelIndicator, "peso">): number {
+  return (indicator.peso / 100) * SCORECARD_MAX_POINTS;
 }
 
 function Dot({ state }: { state: "G" | "A" | "R" | "X" }) {
@@ -98,11 +86,6 @@ function Dot({ state }: { state: "G" | "A" | "R" | "X" }) {
       }
     />
   );
-}
-
-function ResultBadge({ pass }: { pass: boolean | null }) {
-  if (pass === null) return <span className="badge X">Sem dados</span>;
-  return <span className={`badge ${pass ? "G" : "R"}`}>{pass ? "OK" : "Atenção"}</span>;
 }
 
 function SummaryMetric({
@@ -175,17 +158,14 @@ export function DashboardOverview() {
     };
   }, [load]);
 
-  const chartData = useMemo(() => {
+  const monthlyPointTotals = useMemo(() => {
     if (!data) return [];
-    return data.indicators.map((indicator) => {
-      const row: Record<string, string | number | null> = {
-        indicador: indicator.shortLabel,
-      };
-      indicator.months.forEach((month, index) => {
-        row[`month_${index}`] = month.pctOfMeta;
-      });
-      return row;
-    });
+    return data.monthKeys.map((key) =>
+      data.indicators.reduce((sum, indicator) => {
+        const month = indicator.months.find((item) => item.key === key);
+        return sum + (month ? monthPoints(indicator, month) : 0);
+      }, 0),
+    );
   }, [data]);
 
   if (loading && !data) {
@@ -276,44 +256,105 @@ export function DashboardOverview() {
 
           <div className="indicator-subcard" style={{ marginTop: 14, marginBottom: 14 }}>
             <div className="ct">Resultado geral do PPR Obras</div>
-            <p className="ps" style={{ margin: "-6px 0 12px" }}>
+            <div className="cs">
               Leitura consolidada dos indicadores e pesos mensais. Dados administrativos não
               publicados não entram neste quadro.
-            </p>
-            <div style={{ overflowX: "auto" }}>
-              <table className="dt" style={{ minWidth: 700 }}>
-                <thead>
+            </div>
+            <div className="general-scorecard-scroll rounded-[18px] border border-neutralbrand/20">
+              <table className="general-scorecard-table">
+                <colgroup>
+                  <col className="general-scorecard-col-indicator" />
+                  <col className="general-scorecard-col-weight" />
+                  <col className="general-scorecard-col-target" />
+                  {data.monthLabels.map((label) => (
+                    <col key={label} className="general-scorecard-col-month" />
+                  ))}
+                  <col className="general-scorecard-col-average" />
+                  <col className="general-scorecard-col-points" />
+                  <col className="general-scorecard-col-status" />
+                </colgroup>
+                <thead className="bg-[#EEF1F6] text-left text-[11px] font-medium uppercase tracking-wide text-brand-dark">
                   <tr>
-                    <th>Entrega</th>
-                    <th>Meta</th>
-                    <th>Peso</th>
+                    <th className="px-3 py-3">Indicador</th>
+                    <th className="px-3 py-3 text-right">Peso</th>
+                    <th className="px-3 py-3 text-right">Meta</th>
                     {data.monthLabels.map((label) => (
-                      <th key={label} style={{ textAlign: "center" }}>
+                      <th key={label} className="px-3 py-3 text-center">
                         {label}
                       </th>
                     ))}
-                    <th>Parcial</th>
-                    <th>Consolidado</th>
+                    <th className="px-3 py-3 text-right">Média</th>
+                    <th className="px-3 py-3 text-right">Pontos</th>
+                    <th className="px-3 py-3 text-center">Situação</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.indicators.map((indicator) => (
-                    <tr key={indicator.key}>
-                      <td>{indicator.label.toUpperCase()}</td>
-                      <td>{formatMeta(indicator)}</td>
-                      <td>{indicator.peso.toFixed(2)}%</td>
+                    <tr
+                      key={indicator.key}
+                      className="general-scorecard-row border-t border-neutralbrand/15 hover:bg-canvas/60"
+                    >
+                      <td className="general-scorecard-label text-brand-dark">{indicator.label}</td>
+                      <td className="px-3 py-3 text-right font-normal text-brand-dark">
+                        {indicator.peso.toFixed(2)}%
+                      </td>
+                      <td className="px-3 py-3 text-right font-normal">{formatMeta(indicator)}</td>
                       {indicator.months.map((month) => (
-                        <td key={month.key} style={{ textAlign: "center" }}>
-                          <Dot state={month.pass === null ? "X" : month.pass ? "G" : "R"} />
+                        <td key={month.key} className="general-scorecard-month-cell text-center">
+                          <span
+                            className={`general-scorecard-month inline-flex items-center justify-center rounded-lg border text-xs font-medium ${
+                              month.value === null
+                                ? "border-neutralbrand/20 bg-neutralbrand/5 text-neutralbrand"
+                                : month.pass
+                                  ? "border-green-200 bg-green-50 text-green-700"
+                                  : "border-red-200 bg-red-50 text-red-700"
+                            }`}
+                            title={`${indicator.label} — ${month.label}`}
+                          >
+                            {formatMonthValue(indicator, month.value)}
+                          </span>
                         </td>
                       ))}
-                      <td>{formatValue(indicator, indicator.partial)}</td>
-                      <td>
-                        <ResultBadge pass={indicator.partialPass} />
+                      <td className="px-3 py-3 text-right font-normal">
+                        {formatValue(indicator, indicator.partial)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="font-extrabold text-brand-dark">
+                          {formatPoints(indicatorPoints(indicator))}
+                        </div>
+                        <div className="text-[10px] text-neutralbrand">
+                          de {formatPoints(indicatorMaxPoints(indicator))}
+                        </div>
+                      </td>
+                      <td className="general-scorecard-status px-3 py-3 text-center">
+                        {indicator.partialPass === null ? (
+                          <span className="text-xs font-normal text-neutralbrand">Sem dados</span>
+                        ) : (
+                          <StatusBadge ok={indicator.partialPass} className="w-28 text-center">
+                            {indicator.partialPass ? "Dentro da meta" : "Fora da meta"}
+                          </StatusBadge>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot className="border-t-2 border-brand/20 bg-canvas font-extrabold text-brand-dark">
+                  <tr>
+                    <td className="px-3 py-3" colSpan={3}>
+                      Pontuação mensal
+                    </td>
+                    {data.monthKeys.map((key, index) => (
+                      <td key={key} className="px-3 py-3 text-center tabular-nums">
+                        {formatPoints(monthlyPointTotals[index] ?? 0)}
+                      </td>
+                    ))}
+                    <td className="px-3 py-3 text-right">—</td>
+                    <td className="px-3 py-3 text-right text-accent">
+                      {data.pontosRealizados.toLocaleString("pt-BR")}
+                    </td>
+                    <td className="px-3 py-3">{Math.round(data.atendimentoGeral)}%</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -322,9 +363,7 @@ export function DashboardOverview() {
             <div className="indicator-subcard">
               <div className="ct">Legenda · Indicadores gerais</div>
 
-              <p className="ps" style={{ margin: "-6px 0 10px" }}>
-                Faixas de leitura do atendimento consolidado.
-              </p>
+              <div className="cs">Faixas de leitura do atendimento consolidado.</div>
 
               <LegendRow dot={<Dot state="G" />} title="≥ 95%" subtitle="Valor atendido" />
 
@@ -336,9 +375,7 @@ export function DashboardOverview() {
             <div className="indicator-subcard">
               <div className="ct">Legenda · Indicadores setoriais</div>
 
-              <p className="ps" style={{ margin: "-6px 0 10px" }}>
-                Faixas de leitura para os indicadores setoriais (por unidade).
-              </p>
+              <div className="cs">Faixas de leitura para os indicadores setoriais (por unidade).</div>
 
               <LegendRow
                 dot={<span className="dot" style={{ background: "#609346" }} />}
@@ -371,92 +408,6 @@ export function DashboardOverview() {
               />
             </div>
           </div>
-
-          <div className="indicator-subcard">
-            <div className="ct">Desempenho mensal (% da meta atingida)</div>
-            <p className="ps" style={{ margin: "-6px 0 12px" }}>
-              Cada indicador mostra um mês por barra, uma cor fixa por mês (veja a legenda). A linha
-              tracejada marca 100% da meta.
-            </p>
-
-            <div className="cw" style={{ height: 340, minWidth: 0 }}>
-              {data.monthLabels.length ? (
-                <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={100}>
-                  <BarChart
-                    data={chartData}
-                    margin={{ top: 12, right: 20, bottom: 8, left: -4 }}
-                    barGap={3}
-                    maxBarSize={28}
-                  >
-                    <CartesianGrid stroke="#f4f4f4" vertical={false} />
-
-                    <XAxis
-                      dataKey="indicador"
-                      tick={{
-                        fontFamily: "Montserrat",
-                        fontSize: 9,
-                      }}
-                    />
-
-                    <YAxis
-                      tick={{
-                        fontFamily: "Montserrat",
-                        fontSize: 10,
-                      }}
-                      tickFormatter={(value: unknown) => `${value}%`}
-                    />
-
-                    <ReferenceLine
-                      y={100}
-                      stroke="#9CA3AF"
-                      strokeDasharray="4 4"
-                      strokeWidth={1.5}
-                      label={{
-                        value: "Meta 100%",
-                        position: "insideTopRight",
-                        fill: "#6b7280",
-                        fontFamily: "Montserrat",
-                        fontSize: 9,
-                      }}
-                    />
-
-                    <Tooltip
-                      formatter={(value: unknown, name: unknown) => [
-                        value === null ? "—" : `${Number(value).toFixed(1)}% da meta`,
-                        String(name),
-                      ]}
-                      contentStyle={{
-                        fontFamily: "Montserrat",
-                        fontSize: 11,
-                        borderRadius: 8,
-                      }}
-                    />
-
-                    <Legend
-                      verticalAlign="bottom"
-                      content={
-                        <MonthLegend monthKeys={data.monthKeys} monthLabels={data.monthLabels} />
-                      }
-                    />
-
-                    {data.monthLabels.map((label, index) => (
-                      <Bar
-                        key={label}
-                        dataKey={`month_${index}`}
-                        name={label}
-                        fill={monthColor(index)}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    ))}
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="empty">
-                  <p className="ps">Nenhuma série mensal publicada.</p>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -477,12 +428,7 @@ function LegendRow({
       <span className="legend-row-dot">{dot}</span>
       <div>
         <strong>{title}</strong>
-        {subtitle ? (
-          <>
-            <br />
-            <span style={{ color: "#999", fontSize: 11 }}>{subtitle}</span>
-          </>
-        ) : null}
+        {subtitle ? <span className="legend-row-subtitle">{subtitle}</span> : null}
       </div>
     </div>
   );

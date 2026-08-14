@@ -16,6 +16,9 @@ export default async function ScorecardPage() {
 
   return (
     <ModuleWorkspace
+      eyebrow="Planejamento · PMO Obras & Melhorias"
+      title="Indicadores de Obra"
+      description="Dashboard para visualização de indicadores de obras e melhorias."
       panelLabel="Painel Geral"
       panel={<DashboardOverview />}
       administration={

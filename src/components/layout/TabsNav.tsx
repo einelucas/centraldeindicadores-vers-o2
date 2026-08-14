@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   AlertTriangle,
   CalendarCheck,
-  ClipboardList,
+  ChartColumn,
   HardHat,
   LayoutDashboard,
   ListChecks,
@@ -20,7 +20,7 @@ type Tab = { id: string; label: string; href: string; icon: LucideIcon };
 /** Ordem oficial dos módulos ativos no ciclo de 2026. */
 export const TABS: Tab[] = [
   { id: "2026", label: "Scorecard", href: "/dashboard/scorecard", icon: LayoutDashboard },
-  { id: "rdo", label: "RDO", href: "/dashboard/rdo", icon: ClipboardList },
+  { id: "rdo", label: "RDO", href: "/dashboard/rdo", icon: ChartColumn },
   {
     id: "idp-disciplinas",
     label: "IDP - Disciplinas",
@@ -43,7 +43,7 @@ export function TabsNav() {
   return (
     <div className="app-toolbar-shell pt-2.5">
       <nav
-        className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-3 shadow-sm"
+        className="flex items-center gap-2 rounded-[18px] border border-[#e7ecf3] bg-background px-4 py-3 shadow-[0_10px_30px_rgba(39,69,120,0.08)]"
         id="tabsNav"
         aria-label="Indicadores"
       >
@@ -51,19 +51,32 @@ export function TabsNav() {
           const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
           const Icon = tab.icon;
           return (
-            <Link
-              key={tab.id}
-              href={tab.href}
-              aria-label={tab.label}
-              title={tab.label}
-              className={cn(
-                "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                active &&
-                  "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
-              )}
-            >
-              <Icon className="size-5" strokeWidth={2} />
-            </Link>
+            <div key={tab.id} className="group relative">
+              <Link
+                href={tab.href}
+                aria-label={tab.label}
+                className={cn(
+                  "flex size-11 shrink-0 items-center justify-center rounded-[14px] border border-transparent text-muted-foreground transition-colors",
+                  active
+                    ? "border-[#d8e5ff] bg-[#edf3ff] text-[#21427d]"
+                    : "hover:border-border hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <Icon className="size-5" strokeWidth={2} />
+              </Link>
+
+              {/* Tooltip com o nome da aba, igual ao hub de automação. */}
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 -translate-x-1/2 scale-90 whitespace-nowrap rounded-lg bg-foreground px-2.5 py-1.5 text-xs font-semibold text-background opacity-0 shadow-lg transition-all duration-150 ease-out group-hover:scale-100 group-hover:opacity-100"
+              >
+                <span
+                  aria-hidden
+                  className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rotate-45 bg-foreground"
+                />
+                {tab.label}
+              </span>
+            </div>
           );
         })}
 

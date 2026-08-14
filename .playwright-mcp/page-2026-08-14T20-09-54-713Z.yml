@@ -1,0 +1,48 @@
+- generic [active] [ref=f21e1]:
+  - banner [ref=f21e2]:
+    - generic [ref=f21e3]:
+      - img "Inpasa" [ref=f21e4]
+      - button "Voltar" [ref=f21e5] [cursor=pointer]
+      - generic [ref=f21e8]:
+        - paragraph [ref=f21e9]: Planejamento
+        - paragraph [ref=f21e10]: Scorecard
+    - searchbox [ref=f21e12]
+    - generic [ref=f21e13]:
+      - button "Notificações" [ref=f21e14] [cursor=pointer]
+      - link "Registro de Atividades" [ref=f21e18] [cursor=pointer]:
+        - /url: /dashboard/auditoria
+      - button "Exportar dados" [ref=f21e23] [cursor=pointer]
+      - button "LP" [ref=f21e29] [cursor=pointer]
+  - navigation "Indicadores" [ref=f21e35]:
+    - generic [ref=f21e36]:
+      - link "Scorecard" [ref=f21e37] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f21e43]:
+      - link "RDO" [ref=f21e44] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f21e47]:
+      - link "IDP - Disciplinas" [ref=f21e48] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f21e52]:
+      - link "RNC" [ref=f21e53] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f21e56]:
+      - link "5S" [ref=f21e57] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f21e61]:
+      - link "Taxa de Acidentes" [ref=f21e62] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+  - main [ref=f21e68]:
+    - generic [ref=f21e69]:
+      - generic [ref=f21e70]:
+        - paragraph [ref=f21e71]: Planejamento · PMO Obras & Melhorias
+        - heading "Indicadores de Obra" [level=1] [ref=f21e72]
+        - paragraph [ref=f21e73]: Dashboard para visualização de indicadores de obras e melhorias.
+      - paragraph [ref=f21e78]: Carregando Painel Geral…
+  - contentinfo [ref=f21e79]: Central de Indicadores - 2026

@@ -1,0 +1,187 @@
+- generic [ref=f20e1]:
+  - generic [ref=f20e6]:
+    - banner [ref=f20e7]:
+      - generic [ref=f20e8]:
+        - link [ref=f20e9] [cursor=pointer]:
+          - /url: /automacao/aplicativos
+          - img "Logo" [ref=f20e10]
+        - button "Voltar" [ref=f20e11] [cursor=pointer]
+        - generic [ref=f20e14]:
+          - generic [ref=f20e15]: Planejamento
+          - strong [ref=f20e16]: Indicadores de Obra
+        - combobox [ref=f20e20]:
+          - textbox "Buscar" [ref=f20e25]
+        - button [ref=f20e26] [cursor=pointer]
+        - button "Registro de Atividades" [ref=f20e29] [cursor=pointer]
+        - generic [ref=f20e33]:
+          - button [ref=f20e35] [cursor=pointer]
+          - generic [ref=f20e39]:
+            - generic [ref=f20e40] [cursor=pointer]: LP
+            - status "Badge" [ref=f20e42]
+    - main [ref=f20e43]:
+      - generic [ref=f20e46]:
+        - complementary [ref=f20e47]:
+          - generic [ref=f20e48]:
+            - navigation [ref=f20e53]:
+              - button "Resumo geral" [ref=f20e54] [cursor=pointer]
+              - button "Aprovacao RDO" [active] [ref=f20e56] [cursor=pointer]
+              - button "Aderencia cronograma" [ref=f20e58] [cursor=pointer]
+              - button "Indice custo" [ref=f20e60] [cursor=pointer]
+              - button "RNC" [ref=f20e62] [cursor=pointer]
+              - button "Treinamentos" [ref=f20e64] [cursor=pointer]
+              - button "NEJ" [ref=f20e66] [cursor=pointer]
+              - button "5S" [ref=f20e68] [cursor=pointer]
+              - button "Taxa desligamento" [ref=f20e70] [cursor=pointer]
+              - button "Taxa acidentes" [ref=f20e72] [cursor=pointer]
+            - generic [ref=f20e74]:
+              - button "Importar" [ref=f20e75] [cursor=pointer]
+              - button "Exportar" [ref=f20e79] [cursor=pointer]
+        - generic [ref=f20e84]:
+          - generic [ref=f20e85]: Planejamento · PMO Obras & Melhorias
+          - heading "Indicadores de Obra" [level=1] [ref=f20e86]
+          - paragraph [ref=f20e87]: Dashboard para visualização de indicadores de obras e melhorias.
+        - article [ref=f20e88]:
+          - generic [ref=f20e89]:
+            - generic [ref=f20e90]:
+              - generic [ref=f20e91]: Contexto da leitura
+              - generic [ref=f20e92]: Selecione o contexto desejado para a leitura dos indicadores.
+            - generic [ref=f20e93]:
+              - generic [ref=f20e94]: 2026 S2
+              - generic [ref=f20e95]: Aprovacao RDO
+              - generic [ref=f20e96]: Historico 0
+          - generic [ref=f20e97]:
+            - combobox [ref=f20e100] [cursor=pointer]:
+              - generic [ref=f20e102]:
+                - generic [ref=f20e739]: Aprovacao RDO
+                - textbox "Open": rdo
+              - generic: Guia ativa
+            - combobox [ref=f20e109] [cursor=pointer]:
+              - generic [ref=f20e111]:
+                - generic [ref=f20e112]: Periodo atual · 2026 S2
+                - textbox "Open": current
+              - generic: Periodo
+        - generic [ref=f20e116]:
+          - article [ref=f20e628]:
+            - generic [ref=f20e629]: Meta geral
+            - generic [ref=f20e633]: 76%
+            - generic [ref=f20e634]: Meta de aprovacao
+          - article [ref=f20e485]:
+            - generic [ref=f20e486]: Resultado semestre
+            - generic [ref=f20e490]: 89%
+            - generic [ref=f20e491]: Aderencia consolidada
+          - article [ref=f20e741]:
+            - generic [ref=f20e742]: Relatorios aprovados
+            - generic [ref=f20e746]: "5.136"
+            - generic [ref=f20e747]: Volume aprovado no periodo
+          - article [ref=f20e748]:
+            - generic [ref=f20e749]: Total emitidos
+            - generic [ref=f20e753]: "5.752"
+            - generic [ref=f20e754]: Base total emitida
+        - generic [ref=f20e145]:
+          - generic [ref=f20e147]:
+            - generic [ref=f20e148]: Indicador
+            - generic [ref=f20e149]: Aprovacao de RDO
+            - generic [ref=f20e150]: Meta, evolucao mensal e comparativo por unidade.
+          - generic [ref=f20e755]:
+            - article [ref=f20e756]:
+              - generic [ref=f20e758]:
+                - generic [ref=f20e759]: Situacao geral
+                - generic [ref=f20e760]: Distribuicao do fluxo entre aprovados, revisao e preenchimento.
+              - img [ref=f20e763]:
+                - generic [ref=f20e765]:
+                  - generic [ref=f20e766] [cursor=pointer]: Aprovado · 89%
+                  - generic [ref=f20e769] [cursor=pointer]: Revisar relatorio · 9%
+                  - generic [ref=f20e772] [cursor=pointer]: Preenchendo · 1%
+                - generic [ref=f20e779]:
+                  - generic: 89%
+                  - generic: 9%
+                  - generic: 1%
+            - article [ref=f20e786]:
+              - generic [ref=f20e788]:
+                - generic [ref=f20e789]: Desempenho por mes
+                - generic [ref=f20e790]: Aderencia mensal comparada com a meta do indicador.
+              - img [ref=f20e793]:
+                - generic [ref=f20e795]:
+                  - generic [ref=f20e796] [cursor=pointer]: Aderencia
+                  - generic [ref=f20e798] [cursor=pointer]: Meta
+                - generic [ref=f20e801]:
+                  - generic "100" [ref=f20e802]
+                  - generic "80" [ref=f20e803]
+                  - generic "60" [ref=f20e804]
+                  - generic "40" [ref=f20e805]
+                  - generic "20" [ref=f20e806]
+                  - generic "0" [ref=f20e807]
+                - generic [ref=f20e813]:
+                  - generic "Jun" [ref=f20e814]
+                  - generic "Jul" [ref=f20e815]
+                  - generic "Ago" [ref=f20e816]
+                  - generic "Set" [ref=f20e817]
+                  - generic "Out" [ref=f20e818]
+                  - generic "Nov" [ref=f20e819]
+          - article [ref=f20e820]:
+            - generic [ref=f20e822]:
+              - generic [ref=f20e823]: Aprovacao por unidade
+              - generic [ref=f20e824]: Leitura visual de desempenho por unidade.
+            - generic [ref=f20e825]:
+              - generic [ref=f20e826]:
+                - generic [ref=f20e827]: SINOP
+                - strong [ref=f20e831]: 86%
+              - generic [ref=f20e832]:
+                - generic [ref=f20e833]: DOURADOS
+                - strong [ref=f20e837]: 93%
+              - generic [ref=f20e838]:
+                - generic [ref=f20e839]: NOVA MUTUM
+                - strong [ref=f20e843]: 58%
+              - generic [ref=f20e844]:
+                - generic [ref=f20e845]: SIDROLÂNDIA
+                - strong [ref=f20e849]: 83%
+              - generic [ref=f20e850]:
+                - generic [ref=f20e851]: BALSAS
+                - strong [ref=f20e855]: 81%
+              - generic [ref=f20e856]:
+                - generic [ref=f20e857]: LUIS EDUARDO MAGALHÃES
+                - strong [ref=f20e861]: 88%
+              - generic [ref=f20e862]:
+                - generic [ref=f20e863]: RIO VERDE
+                - strong [ref=f20e867]: 98%
+              - generic [ref=f20e868]:
+                - generic [ref=f20e869]: RONDONÓPOLIS
+                - strong [ref=f20e873]: 95%
+      - navigation [ref=f20e405]:
+        - generic [ref=f20e407]:
+          - generic [ref=f20e408]:
+            - generic [ref=f20e409]: Registro
+            - generic [ref=f20e411]:
+              - button "Atividade da automação" [ref=f20e412] [cursor=pointer]
+              - button [ref=f20e414] [cursor=pointer]
+          - generic [ref=f20e417]:
+            - generic [ref=f20e418]:
+              - button "Log do filtro" [ref=f20e419] [cursor=pointer]
+              - textbox "Buscar..." [ref=f20e427]
+              - combobox [ref=f20e430]:
+                - textbox [ref=f20e433]
+                - button "Clear" [ref=f20e435] [cursor=pointer]
+                - button "Open" [ref=f20e437] [cursor=pointer]
+            - generic [ref=f20e439]:
+              - generic [ref=f20e440]:
+                - button "Tudo" [ref=f20e441] [cursor=pointer]
+                - button "Criações" [ref=f20e443] [cursor=pointer]
+                - button "Atualizações" [ref=f20e446] [cursor=pointer]
+                - button "Exclusões" [ref=f20e449] [cursor=pointer]
+              - generic [ref=f20e454]:
+                - textbox "De De" [ref=f20e456]
+                - generic: De
+              - generic [ref=f20e459]:
+                - textbox "Até Até" [ref=f20e461]
+                - generic: Até
+              - combobox [ref=f20e464]:
+                - generic [ref=f20e465]:
+                  - generic: Campos alterados
+                  - textbox "Campos alterados Campos alterados" [ref=f20e467]
+                - button "Open" [ref=f20e469] [cursor=pointer]
+              - button "Aplicar" [ref=f20e470] [cursor=pointer]
+          - separator [ref=f20e472]
+          - listbox [ref=f20e474]:
+            - generic [ref=f20e475]: Sem atividades.
+  - generic:
+    - tooltip
