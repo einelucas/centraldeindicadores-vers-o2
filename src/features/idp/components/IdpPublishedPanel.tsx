@@ -19,6 +19,7 @@ import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { IdpPublishedPayload } from "@/features/idp/publications";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { formatIdpUnitLabel } from "@/features/idp/utils/units";
 
 interface PublicationResponse {
   publication: null | {
@@ -194,7 +195,7 @@ export function IdpPublishedPanel() {
               const ok = unit.v >= d.meta;
               return (
                 <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
-                  <div className="uname">{unit.n}<small className="idp-panel-rso">{unit.rsoNumero ? `RSO ${unit.rsoNumero}` : ""}</small></div>
+                  <div className="uname">{formatIdpUnitLabel(unit.n)}</div>
                   <div className="utrack"><div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} /></div>
                   <div className="uval" style={{ color: ok ? GREEN : RED }}>{Math.round(unit.v)}%</div>
                 </div>

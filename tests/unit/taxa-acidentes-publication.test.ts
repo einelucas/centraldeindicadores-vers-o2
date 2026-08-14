@@ -30,7 +30,7 @@ describe("Publicação da Taxa de Acidentes", () => {
         year: 2026,
         month: 2,
         label: "Fevereiro/2026",
-        unidade: "Sinop",
+        unidade: "SINOP",
         caf: 2,
         saf: 1,
       },

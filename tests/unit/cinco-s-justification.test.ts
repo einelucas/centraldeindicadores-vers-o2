@@ -49,7 +49,7 @@ describe("generateFiveSJustification", () => {
 
     expect(suggestion.status).toBe("BELOW_TARGET");
     expect(suggestion.result).toBeCloseTo(0.8);
-    expect(suggestion.suggestedText).toContain("SNP - SINOP (60%");
+    expect(suggestion.suggestedText).toContain("SINOP (60%");
     expect(suggestion.suggestedText).toContain("Obras / Pátio (50%; nota 50 de meta 100)");
     expect(suggestion.suggestedText).toContain("Obras (60%; 2 de 2 área(s) abaixo da meta)");
     expect(suggestion.suggestedText).toContain("recuou 20");

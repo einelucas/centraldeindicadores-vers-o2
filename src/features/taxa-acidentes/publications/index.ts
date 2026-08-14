@@ -4,6 +4,7 @@ import {
   type AccidentRateResult,
 } from "@/features/taxa-acidentes/types";
 import type { PeriodRange } from "@/lib/period";
+import { formatAccidentUnitLabel } from "@/features/taxa-acidentes/utils/units";
 
 export interface AccidentRatePublishedMonth {
   label: string;
@@ -74,7 +75,7 @@ export function toAccidentRatePublishedPayload(
         year: unit.year,
         month: unit.month,
         label: unit.label,
-        unidade: unit.unit,
+        unidade: formatAccidentUnitLabel(unit.unit),
         caf: unit.caf,
         saf: unit.saf,
       })),

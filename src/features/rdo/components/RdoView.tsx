@@ -37,6 +37,7 @@ import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
+import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 import { exportRdoPdf } from "@/features/rdo/exports/pdf";
 import type { RdoNormalizedRecord, RdoResult } from "@/features/rdo/types";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
@@ -137,8 +138,8 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
     ]);
     codes.delete("");
     return Array.from(codes)
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((code) => ({ code, label: code }));
+      .sort((a, b) => formatRdoUnitLabel(a).localeCompare(formatRdoUnitLabel(b), "pt-BR"))
+      .map((code) => ({ code, label: formatRdoUnitLabel(code) }));
   }, [data, excludedUnits]);
 
   async function saveExcludedUnits(next: string[]) {
@@ -647,7 +648,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
                   <option value="all">Todas as unidades</option>
                   {result.units.map((unit) => (
                     <option value={unit.name} key={unit.name}>
-                      {unit.name}
+                      {formatRdoUnitLabel(unit.name)}
                     </option>
                   ))}
                 </Select>
@@ -670,7 +671,9 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
                       const ok = unit.aderencia >= threshold / 100;
                       return (
                         <TableRow key={unit.name}>
-                          <TableCell className="font-medium">{unit.name}</TableCell>
+                          <TableCell className="font-medium">
+                            {formatRdoUnitLabel(unit.name)}
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {unit.emitidos.toLocaleString("pt-BR")}
                           </TableCell>

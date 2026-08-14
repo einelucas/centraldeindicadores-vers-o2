@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RncResult } from "@/features/rnc/types";
+import { formatRncUnitLabel } from "@/features/rnc/utils/units";
 
 function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
@@ -76,7 +77,7 @@ export function exportRncPdf(result: RncResult): void {
     startY: firstY + 30,
     head: [["Unidade", "Criadas", "Tratadas", "Aderência"]],
     body: result.units.map((unit) => [
-      unit.name,
+      formatRncUnitLabel(unit.name),
       unit.criadas,
       unit.tratadas,
       pct(unit.aderencia),

@@ -40,9 +40,9 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { normalizedUnitKey } from "@/features/idp/calculations";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { parseIdpFile } from "@/features/idp/importers";
+import { formatIdpUnitLabel, normalizeIdpUnitCode } from "@/features/idp/utils/units";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
 import { normalizePeriodRange, toMonthIndex, type PeriodRange } from "@/lib/period";
@@ -288,13 +288,13 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
   const unitOptions = useMemo(() => {
     const codes = new Set<string>([
-      ...(data?.documents.map((document) => document.unit) ?? []),
-      ...excludedUnits,
+      ...(data?.documents.map((document) => normalizeIdpUnitCode(document.unit)) ?? []),
+      ...excludedUnits.map(normalizeIdpUnitCode),
     ]);
     codes.delete("");
     return Array.from(codes)
-      .sort((a, b) => a.localeCompare(b, "pt-BR"))
-      .map((code) => ({ code, label: code }));
+      .sort((a, b) => formatIdpUnitLabel(a).localeCompare(formatIdpUnitLabel(b), "pt-BR"))
+      .map((code) => ({ code, label: formatIdpUnitLabel(code) }));
   }, [data, excludedUnits]);
 
   async function saveExcludedUnits(next: string[]) {
@@ -338,11 +338,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         setMessage(
           "RSOs lidos. Confira unidade, número da versão, mês de referência, período e emissão antes de importar.",
         );
-        const known = new Set(unitOptions.map((option) => normalizedUnitKey(option.code)));
+        const known = new Set(unitOptions.map((option) => option.code));
         const detected = parsed
           .map((item) => item.record?.unit)
           .filter((unit): unit is string => Boolean(unit));
-        const hasNewUnit = detected.some((unit) => !known.has(normalizedUnitKey(unit)));
+        const hasNewUnit = detected.some((unit) => !known.has(normalizeIdpUnitCode(unit)));
         if (hasNewUnit) setUnitDialogOpen(true);
       }
     } catch (err) {
@@ -1203,7 +1203,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                           <TableCell>
                             <ExpandIcon open={open} />
                           </TableCell>
-                          <TableCell className="font-medium">{unit.unit}</TableCell>
+                          <TableCell className="font-medium">
+                            {formatIdpUnitLabel(unit.unit)}
+                          </TableCell>
                           <TableCell className="font-semibold">RSO {unit.rsoNumero}</TableCell>
                           <TableCell>{periodLabel(unit.periodStart, unit.periodEnd)}</TableCell>
                           <TableCell>
@@ -1357,7 +1359,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                               >
                                 <TableCell />
                                 <TableCell className="text-muted-foreground">
-                                  {group.unit}
+                                  {formatIdpUnitLabel(group.unit)}
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums text-muted-foreground">
                                   {group.entries.length}
@@ -1401,7 +1403,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                 >
                   {result.unitDetails.map((unit) => (
                     <option value={unit.unit} key={unit.unit}>
-                      {unit.unit}
+                      {formatIdpUnitLabel(unit.unit)}
                     </option>
                   ))}
                 </Select>

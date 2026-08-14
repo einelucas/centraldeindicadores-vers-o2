@@ -66,7 +66,7 @@ body {
 main {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 14px 20px 60px;
+  padding: 8px 20px 60px;
 }
 .panel {
   display: none;
@@ -769,7 +769,7 @@ footer.app {
   border-bottom-color: #eaa239;
 }
 .painel-frontend .content {
-  padding: 14px 20px 32px;
+  padding: 6px 20px 32px;
 }
 .painel-frontend .ppr {
   background: #304f7e;
@@ -1209,7 +1209,7 @@ textarea {
   padding-top: 16px;
 }
 .module-workspace > .subtab-content.panel-view {
-  padding-top: 6px;
+  padding-top: 0;
 }
 
 .admin-hub-grid {
@@ -1799,9 +1799,13 @@ table.data,
     width: min(calc(100% - 48px), 1360px);
   }
 
+  body:has(.painel-frontend) .app-toolbar-shell {
+    width: min(calc(100% - 48px), 1180px);
+  }
+
   .painel-frontend .content {
     padding-inline: 0;
-    max-width: 1360px;
+    max-width: 1180px;
   }
 
   .painel-frontend .mgrid {
@@ -1813,7 +1817,7 @@ table.data,
   }
 
   .painel-frontend .cw {
-    min-height: 330px;
+    min-height: 300px;
   }
 }
 
@@ -1827,8 +1831,12 @@ table.data,
     width: min(calc(100% - 64px), 1360px);
   }
 
+  body:has(.painel-frontend) .app-toolbar-shell {
+    width: min(calc(100% - 64px), 1180px);
+  }
+
   .painel-frontend .content {
-    max-width: 1360px;
+    max-width: 1180px;
   }
 
   .painel-frontend .mgrid {
@@ -1845,7 +1853,7 @@ table.data,
   }
 
   .painel-frontend .cw {
-    min-height: 350px;
+    min-height: 310px;
   }
 
   .painel-frontend .dt {
@@ -1857,16 +1865,20 @@ table.data,
 @media (min-width: 1920px) and (max-width: 2559px) {
   main {
     width: min(calc(100% - 96px), 1360px);
-    padding-top: 16px;
+    padding-top: 8px;
   }
 
   .app-toolbar-shell {
     width: min(calc(100% - 96px), 1360px);
   }
 
+  body:has(.painel-frontend) .app-toolbar-shell {
+    width: min(calc(100% - 96px), 1180px);
+  }
+
   .painel-frontend .content {
-    max-width: 1360px;
-    padding-top: 18px !important;
+    max-width: 1180px;
+    padding-top: 8px !important;
   }
 
   .painel-frontend .mgrid {
@@ -1918,7 +1930,7 @@ table.data,
   }
 
   .painel-frontend .cw {
-    min-height: 400px;
+    min-height: 330px;
   }
 
   .cards {
@@ -1938,15 +1950,19 @@ table.data,
     width: min(calc(100% - 140px), 1360px);
   }
 
+  body:has(.painel-frontend) .app-toolbar-shell {
+    width: min(calc(100% - 140px), 1180px);
+  }
+
   main {
     width: min(calc(100% - 140px), 1360px);
-    padding-top: 18px;
+    padding-top: 10px;
     padding-bottom: 80px;
   }
 
   .painel-frontend .content {
-    max-width: 1360px;
-    padding-top: 20px !important;
+    max-width: 1180px;
+    padding-top: 10px !important;
   }
 
   .painel-frontend .mgrid {
@@ -2000,7 +2016,7 @@ table.data,
   }
 
   .painel-frontend .cw {
-    min-height: 460px;
+    min-height: 380px;
   }
 
   .cards {

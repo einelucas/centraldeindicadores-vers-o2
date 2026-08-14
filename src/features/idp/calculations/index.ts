@@ -28,6 +28,7 @@ import {
 } from "@/features/idp/types";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { enumeratePeriodMonths, normalizePeriodRange, type PeriodRange } from "@/lib/period";
+import { normalizeIdpUnitCode } from "@/features/idp/utils/units";
 
 export interface IdpPeriodOptions {
   selectedYear?: number;
@@ -79,7 +80,7 @@ export function selectLatestRsoByUnit(
   const latestByUnit = new Map<string, IdpNormalizedRecord>();
 
   for (const entry of entries) {
-    const unitKey = normalizedUnitKey(entry.unit);
+    const unitKey = normalizeIdpUnitCode(entry.unit);
     if (!unitKey) continue;
 
     const current = latestByUnit.get(unitKey);
@@ -234,7 +235,7 @@ function buildUnitRows(
     return {
       sourceId: entry.id,
       unit: entry.unit,
-      excluded: excludeSet.has(normalizedUnitKey(entry.unit)),
+      excluded: excludeSet.has(normalizeIdpUnitCode(entry.unit)),
       rsoNumero: entry.rsoNumero,
       referenceYear: entry.referenceYear,
       referenceMonth: entry.referenceMonth,
@@ -296,7 +297,7 @@ export function computeIdpResult(
   options: IdpPeriodOptions = {},
   excludedUnits: readonly string[] = [],
 ): IdpDetailedResult {
-  const excludeSet = new Set(excludedUnits.map(normalizedUnitKey).filter(Boolean));
+  const excludeSet = new Set(excludedUnits.map(normalizeIdpUnitCode).filter(Boolean));
   const excludedNormalized = Array.from(excludeSet);
 
   const latest = latestCompetence(entries);
@@ -330,7 +331,7 @@ export function computeIdpResult(
   const competenceEntries = recordsInCompetence(entries, selectedYear, selectedMonth);
   const activeEntries = selectLatestRsoByUnit(competenceEntries);
   const includedEntries = activeEntries.filter(
-    (entry) => !excludeSet.has(normalizedUnitKey(entry.unit)),
+    (entry) => !excludeSet.has(normalizeIdpUnitCode(entry.unit)),
   );
   const unitRows = buildUnitRows(activeEntries, excludeSet);
   const includedUnitRows = unitRows.filter((unit) => !unit.excluded);

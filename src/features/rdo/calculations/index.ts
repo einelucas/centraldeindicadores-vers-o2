@@ -13,6 +13,7 @@
 
 import { MONTH_NAMES } from "@/lib/dates";
 import { isWithinPeriodRange, type PeriodRange } from "@/lib/period";
+import { normalizeRdoUnitCode } from "@/features/rdo/utils/units";
 import {
   RDO_DEFAULT_TARGET,
   RDO_STATUS,
@@ -42,7 +43,7 @@ export function computeRdoResult(
   period: PeriodRange | null = null,
 ): RdoResult {
   const excludedNormalized = Array.from(
-    new Set(excludedUnits.map((value) => value.trim()).filter(Boolean)),
+    new Set(excludedUnits.map(normalizeRdoUnitCode).filter(Boolean)),
   );
   const excludeSet = new Set(excludedNormalized);
 
@@ -56,7 +57,7 @@ export function computeRdoResult(
 
   for (const r of records) {
     const status = (r.statusDescricao ?? "").toString().trim();
-    const unit = (r.empresaNome ?? "").toString().trim();
+    const unit = normalizeRdoUnitCode(r.empresaNome);
     // Fiel ao HTML: precisa de data válida e unidade.
     if (!r.dataReferencia || isNaN(r.dataReferencia.getTime()) || !unit) continue;
     // Corte estrutural: fora do período selecionado, o registro nem entra

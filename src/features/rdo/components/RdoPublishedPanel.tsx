@@ -21,6 +21,7 @@ import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPla
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import { formatPeriodRangeLabel } from "@/lib/period";
+import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 
 interface PublicationResponse {
   publication: null | {
@@ -266,7 +267,7 @@ export function RdoPublishedPanel() {
                 const ok = unit.v >= d.meta;
                 return (
                   <div className="urow" key={unit.n}>
-                    <div className="uname">{unit.n}</div>
+                    <div className="uname">{formatRdoUnitLabel(unit.n)}</div>
                     <div className="utrack">
                       <div
                         className="ufill"

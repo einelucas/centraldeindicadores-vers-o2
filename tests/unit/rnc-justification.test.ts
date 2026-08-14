@@ -57,7 +57,7 @@ describe("generateRncJustification", () => {
     expect(suggestion.status).toBe("BELOW_TARGET");
     expect(suggestion.result).toBe(17.5);
     expect(suggestion.suggestedText).toContain(
-      "RDN - RONDONOPOLIS: média 20 dias (mediana 20 dias)",
+      "RONDONOPOLIS: média 20 dias (mediana 20 dias)",
     );
     expect(suggestion.suggestedText).toContain("principal ofensor: Fornecedor (2 RNC(s))");
     expect(suggestion.suggestedText).toContain("piorou 7,5 dia(s)");

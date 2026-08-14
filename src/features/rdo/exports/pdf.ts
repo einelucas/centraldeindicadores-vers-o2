@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { RdoResult } from "@/features/rdo/types";
+import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 
 function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
@@ -47,7 +48,7 @@ export function exportRdoPdf(result: RdoResult, thresholdPercent: number): void 
     startY: cardY + cardH + 20,
     head: [["Unidade", "Emitidos", "Aprovados", "Aderência", "Situação"]],
     body: result.units.map((unit) => [
-      unit.name,
+      formatRdoUnitLabel(unit.name),
       unit.emitidos,
       unit.aprovados,
       pct(unit.aderencia),

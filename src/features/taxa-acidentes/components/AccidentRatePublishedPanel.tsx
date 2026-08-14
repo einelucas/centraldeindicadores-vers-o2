@@ -25,7 +25,7 @@ import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/pub
 import { formatPeriodRangeLabel } from "@/lib/period";
 import {
   compareAccidentUnits,
-  normalizeAccidentUnitCode,
+  formatAccidentUnitLabel,
 } from "@/features/taxa-acidentes/utils/units";
 
 interface PublicationResponse {
@@ -161,7 +161,7 @@ export function AccidentRatePublishedPanel() {
     return units
       .filter((item) => periodKey(item.year, item.month) === activePeriod)
       .map((item) => ({
-        unidade: normalizeAccidentUnitCode(item.unidade),
+        unidade: formatAccidentUnitLabel(item.unidade),
         caf: item.caf,
         saf: item.saf,
       }))

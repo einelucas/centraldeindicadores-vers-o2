@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { IdpDetailedResult } from "@/features/idp/types";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { formatIdpUnitLabel } from "@/features/idp/utils/units";
 
 function pct(value: number): string {
   return `${(value * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
@@ -39,7 +40,7 @@ export function exportIdpPdf(result: IdpDetailedResult): void {
     startY: 78,
     head: [["Unidade", "RSO", "Período", "Emissão", "Prev. acum.", "Real acum.", "Aderência"]],
     body: result.unitRows.map((unit) => [
-      unit.unit,
+      formatIdpUnitLabel(unit.unit),
       String(unit.rsoNumero),
       `${datePt(unit.periodStart)} → ${datePt(unit.periodEnd)}`,
       datePt(unit.emissionDate),

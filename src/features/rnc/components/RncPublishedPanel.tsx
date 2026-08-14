@@ -21,6 +21,7 @@ import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPla
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import type { RncPublishedPayload } from "@/features/rnc/publications";
 import { formatPeriodRangeLabel } from "@/lib/period";
+import { formatRncUnitLabel } from "@/features/rnc/utils/units";
 
 interface PublicationResponse {
   publication: null | {
@@ -331,7 +332,7 @@ export function RncPublishedPanel() {
 
                 return (
                   <div className="urow" key={unit.n}>
-                    <div className="uname">{unit.n}</div>
+                    <div className="uname">{formatRncUnitLabel(unit.n)}</div>
 
                     <div className="utrack">
                       <div

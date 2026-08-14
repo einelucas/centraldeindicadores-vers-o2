@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client";
 import { toJsonValue } from "@/server/database/json";
 import { rdoRecordSchema, type RdoRecordInput } from "@/features/rdo/schemas";
 import { rdoBusinessKey, rdoContentHash } from "@/features/rdo/utils/keys";
+import { normalizeRdoUnitCode } from "@/features/rdo/utils/units";
 import { computeRdoResult } from "@/features/rdo/calculations";
 import { loadRdoRecords } from "@/features/rdo/repositories";
 import { RDO_DEFAULT_TARGET, type RdoNormalizedRecord } from "@/features/rdo/types";
@@ -18,7 +19,7 @@ import type { IncrementalRecord } from "@/importers/shared/incremental-upsert";
 export const RDO_EXCLUDED_SETTING = "rdo.excludedUnits";
 
 export function normalizeExcludedUnits(values: readonly string[]): string[] {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return Array.from(new Set(values.map(normalizeRdoUnitCode).filter(Boolean)));
 }
 
 export async function loadRdoConfiguration(

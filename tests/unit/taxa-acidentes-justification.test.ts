@@ -41,7 +41,7 @@ describe("generateAccidentRateJustification", () => {
     expect(suggestion.target).toBe(7.5);
     expect(suggestion.suggestedText).toContain("1,5 ponto(s) acima da meta");
     expect(suggestion.suggestedText).toContain("piorou 2,5 ponto(s)");
-    expect(suggestion.suggestedText).toContain("SNP - SINOP: 5 ocorrência(s)");
+    expect(suggestion.suggestedText).toContain("SINOP: 5 ocorrência(s)");
     expect(suggestion.suggestedText).toContain("diferença de 1 acidente(s) CAF");
   });
 
@@ -60,8 +60,8 @@ describe("generateAccidentRateJustification", () => {
     });
 
     expect(suggestion.status).toBe("ON_TARGET");
-    expect(suggestion.suggestedText).not.toContain("SNP - SINOP:");
-    expect(suggestion.suggestedText).toContain("RVD - RIO VERDE: 1 ocorrência(s)");
+    expect(suggestion.suggestedText).not.toContain("SINOP:");
+    expect(suggestion.suggestedText).toContain("RIO VERDE: 1 ocorrência(s)");
     expect(suggestion.suggestedText).toContain("1 unidade(s) ignorada(s)");
   });
 

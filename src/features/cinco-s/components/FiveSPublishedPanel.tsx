@@ -278,50 +278,48 @@ export function FiveSPublishedPanel() {
             </div>
 
             <div className="indicator-subcard">
-              <div className="ct">Resultado por unidade</div>
-
-              {data.unidades.length ? (
-                data.unidades.map((unit) => {
-                  const unitOk = unit.v >= data.meta;
-                  const normalizedValue = Math.min(100, Math.max(0, unit.v));
-
-                  return (
-                    <div className="urow" key={unit.n}>
-                      <div className="uname">{formatFiveSUnitLabel(unit.n)}</div>
-
-                      <div className="utrack">
-                        <div
-                          className="ufill"
-                          style={{
-                            width: `${normalizedValue}%`,
-                            background: unitOk ? GREEN : RED,
-                          }}
-                        />
-                      </div>
-
-                      <div
-                        className="uval"
-                        style={{
-                          color: unitOk ? GREEN : RED,
-                        }}
-                      >
-                        {Math.round(unit.v)}%
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="ps">Nenhuma unidade elegível foi publicada.</p>
-              )}
+              <div className="ct">Em breve</div>
+              <p className="ps">Novo indicador em desenvolvimento.</p>
             </div>
           </div>
 
-          {data.excludedUnits.length ? (
-            <div className="indicator-subcard">
-              <div className="ct">Unidades excluídas do consolidado</div>
-              <p className="ps">{data.excludedUnits.map(formatFiveSUnitLabel).join(", ")}</p>
-            </div>
-          ) : null}
+          <div className="indicator-subcard">
+            <div className="ct">Resultado por unidade</div>
+
+            {data.unidades.length ? (
+              data.unidades.map((unit) => {
+                const unitOk = unit.v >= data.meta;
+                const normalizedValue = Math.min(100, Math.max(0, unit.v));
+
+                return (
+                  <div className="urow" key={unit.n}>
+                    <div className="uname">{formatFiveSUnitLabel(unit.n)}</div>
+
+                    <div className="utrack">
+                      <div
+                        className="ufill"
+                        style={{
+                          width: `${normalizedValue}%`,
+                          background: unitOk ? GREEN : RED,
+                        }}
+                      />
+                    </div>
+
+                    <div
+                      className="uval"
+                      style={{
+                        color: unitOk ? GREEN : RED,
+                      }}
+                    >
+                      {Math.round(unit.v)}%
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="ps">Nenhuma unidade elegível foi publicada.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

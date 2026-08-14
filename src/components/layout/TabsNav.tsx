@@ -43,7 +43,7 @@ export function TabsNav() {
   return (
     <div className="app-toolbar-shell pt-2.5">
       <nav
-        className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2.5 shadow-sm"
+        className="flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-3 shadow-sm"
         id="tabsNav"
         aria-label="Indicadores"
       >
@@ -57,7 +57,7 @@ export function TabsNav() {
               aria-label={tab.label}
               title={tab.label}
               className={cn(
-                "flex size-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                "flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                 active &&
                   "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground",
               )}
