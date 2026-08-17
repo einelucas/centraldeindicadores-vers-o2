@@ -20,8 +20,10 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,7 +42,7 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
@@ -130,7 +132,15 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [excludedUnits, setExcludedUnits] = useState<string[]>([...FIVES_DEFAULT_EXCLUDED]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
-  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
+  /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. */
+  const { year, semester, cycle: publishPeriod, setPeriod } = useReadingContextCycle();
+  /** Filtro de "Consulta": undefined = segue o período de publicação; null =
+      Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
+  const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
+  const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
+  const effectivePeriodKey = effectivePeriod
+    ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
+    : "all";
   const [data, setData] = useState<FiveSApiResponse | null>(null);
   const [prepared, setPrepared] = useState<PreparedImport | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -146,7 +156,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(
-    async (nextPeriod = periodRange) => {
+    async (nextPeriod = effectivePeriod) => {
       const params = new URLSearchParams(
         Object.fromEntries(
           Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
@@ -167,7 +177,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       setTarget(body.threshold * 100);
       setExcludedUnits(body.excludedUnits);
     },
-    [periodRange],
+    [effectivePeriod],
   );
 
   const loadPublication = useCallback(async () => {
@@ -182,11 +192,13 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   }, []);
 
   useEffect(() => {
-    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-    // Só na montagem: mudar o filtro de período não deve buscar sozinho,
-    // só ao clicar em "Recalcular" (igual aos demais módulos).
+    void load().catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [effectivePeriodKey]);
+
+  useEffect(() => {
+    void loadPublication();
+  }, [loadPublication]);
 
   const units = useMemo(() => {
     if (!data) return [];
@@ -476,7 +488,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       const response = await fetch("/api/publicacoes/cinco-s", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target, excludedUnits, ...periodToOptionalFields(periodRange) }),
+        body: JSON.stringify({ target, excludedUnits, ...periodToOptionalFields(publishPeriod) }),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o 5S.");
@@ -665,13 +677,16 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
 
         <Card className="p-4">
           <div className="flex flex-col gap-3">
-            <Label>Período</Label>
-            <PeriodRangeFilter
-              value={periodRange}
-              onChange={setPeriodRange}
-              yearsInData={availableYears}
-              label=""
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label className="mb-0">Período de publicação</Label>
+              <ViewFilterPopover
+                value={viewFilter}
+                onChange={setViewFilter}
+                yearsInData={availableYears}
+                publishedLabel={formatPeriodRangeLabel(publishPeriod)}
+              />
+            </div>
+            <SemesterYearFilter year={year} semester={semester} onChange={setPeriod} label="" />
           </div>
         </Card>
 

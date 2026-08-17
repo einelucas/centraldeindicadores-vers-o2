@@ -27,10 +27,19 @@ import {
   type IdpUnitExecutionRow,
 } from "@/features/idp/types";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { enumeratePeriodMonths, normalizePeriodRange, type PeriodRange } from "@/lib/period";
+import {
+  enumeratePeriodMonths,
+  isWithinPeriodRange,
+  normalizePeriodRange,
+  type PeriodRange,
+} from "@/lib/period";
 import { normalizeIdpUnitCode } from "@/features/idp/utils/units";
 
 export interface IdpPeriodOptions {
+  /** Intervalo travado (Ano + Semestre) — a competência efetiva é a mais
+      recente com RSO dentro dele. `selectedYear`/`selectedMonth` continuam
+      aceitos para forçar uma competência específica quando necessário. */
+  periodRange?: PeriodRange;
   selectedYear?: number;
   selectedMonth?: number;
   historyStartYear?: number;
@@ -282,9 +291,11 @@ function boundedMonth(value: number | undefined, fallback: number): number {
 
 function latestCompetence(
   entries: readonly IdpNormalizedRecord[],
+  range?: PeriodRange,
 ): { year: number; month: number } | null {
   const valid = entries
     .filter(isCompleteReference)
+    .filter((entry) => !range || isWithinPeriodRange(entry.referenceYear, entry.referenceMonth, range))
     .map((entry) => ({ year: entry.referenceYear, month: entry.referenceMonth }))
     .sort((a, b) => b.year - a.year || b.month - a.month);
   return valid[0] ?? null;
@@ -301,26 +312,48 @@ export function computeIdpResult(
   const excludedNormalized = Array.from(excludeSet);
 
   const latest = latestCompetence(entries);
+  /** Se o intervalo travado (Ano + Semestre) foi informado, a competência
+      efetiva é a mais recente com RSO dentro dele — não a mais recente do
+      dataset inteiro. Sem RSO nesse intervalo, cai no fim do intervalo
+      (resultado zerado, igual a um período sem publicação nos outros
+      módulos), nunca num mês de outro semestre. */
+  const latestInRange = options.periodRange ? latestCompetence(entries, options.periodRange) : null;
+
   const selectedYear =
     Number.isInteger(options.selectedYear) && (options.selectedYear ?? 0) >= 2000
       ? options.selectedYear!
-      : (latest?.year ?? new Date().getFullYear());
+      : (latestInRange?.year ??
+        options.periodRange?.endYear ??
+        latest?.year ??
+        new Date().getFullYear());
 
   const selectedMonth = boundedMonth(
     options.selectedMonth,
-    latest?.year === selectedYear ? latest.month : IDP_DEFAULT_MONTH_END,
+    latestInRange && latestInRange.year === selectedYear
+      ? latestInRange.month
+      : options.periodRange && options.periodRange.endYear === selectedYear
+        ? options.periodRange.endMonth
+        : latest?.year === selectedYear
+          ? latest.month
+          : IDP_DEFAULT_MONTH_END,
   );
 
   const historyStartYear =
     Number.isInteger(options.historyStartYear) && (options.historyStartYear ?? 0) >= 2000
       ? options.historyStartYear!
-      : selectedYear;
+      : (options.periodRange?.startYear ?? selectedYear);
   const historyEndYear =
     Number.isInteger(options.historyEndYear) && (options.historyEndYear ?? 0) >= 2000
       ? options.historyEndYear!
-      : selectedYear;
-  const historyMonthStartRaw = boundedMonth(options.historyMonthStart, IDP_DEFAULT_MONTH_START);
-  const historyMonthEndRaw = boundedMonth(options.historyMonthEnd, selectedMonth);
+      : (options.periodRange?.endYear ?? selectedYear);
+  const historyMonthStartRaw = boundedMonth(
+    options.historyMonthStart,
+    options.periodRange?.startMonth ?? IDP_DEFAULT_MONTH_START,
+  );
+  const historyMonthEndRaw = boundedMonth(
+    options.historyMonthEnd,
+    options.periodRange?.endMonth ?? selectedMonth,
+  );
   const historyRange = normalizePeriodRange({
     startYear: historyStartYear,
     startMonth: historyMonthStartRaw,

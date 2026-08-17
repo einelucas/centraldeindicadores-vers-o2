@@ -2,19 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, CloudDownload, History, Search } from "lucide-react";
 import type { CurrentUser } from "@/server/auth/session";
-import { TABS } from "./TabsNav";
 import { UserMenu } from "./UserMenu";
 
 /** Cabeçalho no estilo do hub de automação (identidade visual compartilhada). */
 export function AppHeader({ user }: { user: CurrentUser }) {
-  const pathname = usePathname();
   const router = useRouter();
-  const activeTab = TABS.find(
-    (tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`),
-  );
 
   return (
     <header className="flex h-16 items-center gap-4 border-b border-black/[0.07] bg-background px-4 sm:px-6">
@@ -42,12 +37,12 @@ export function AppHeader({ user }: { user: CurrentUser }) {
             Planejamento
           </p>
           <p className="mt-1 text-[16px] font-extrabold leading-none tracking-tight text-[#20324a]">
-            {activeTab?.label ?? "Central de Indicadores"}
+            Indicadores de Obra
           </p>
         </div>
       </div>
 
-      <label className="relative mx-auto hidden w-full max-w-[480px] flex-1 items-center sm:flex">
+      <label className="relative mx-auto hidden w-[480px] max-w-full shrink items-center sm:flex">
         <Search className="pointer-events-none absolute left-3.5 size-4 text-muted-foreground" />
         <input
           type="search"

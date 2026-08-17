@@ -19,8 +19,10 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +41,7 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRncFiles } from "@/features/rnc/importers";
 import { exportRncPdf } from "@/features/rnc/exports/pdf";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
@@ -120,14 +122,22 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
-  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
+  /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. */
+  const { year, semester, cycle: publishPeriod, setPeriod } = useReadingContextCycle();
+  /** Filtro de "Consulta": undefined = segue o período de publicação; null =
+      Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
+  const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
+  const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
+  const effectivePeriodKey = effectivePeriod
+    ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
+    : "all";
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(
-    async (meta = metaDias, nextPeriod = periodRange) => {
+    async (meta = metaDias, nextPeriod = effectivePeriod) => {
       setError(null);
       const params = new URLSearchParams({
         meta: String(meta),
@@ -153,7 +163,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
         return keys.includes(current) ? current : (keys.at(-1) ?? "");
       });
     },
-    [metaDias, periodRange],
+    [metaDias, effectivePeriod],
   );
 
   async function loadPublication() {
@@ -166,9 +176,13 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
   }
 
   useEffect(() => {
-    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-    // A primeira leitura usa a meta padrão real do módulo.
+    void load().catch((err: Error) => setError(err.message));
+    // A primeira leitura usa a meta padrão real do módulo; refaz a busca sempre que o período muda.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePeriodKey]);
+
+  useEffect(() => {
+    void loadPublication();
   }, []);
 
   const unitOptions = useMemo(() => {
@@ -344,7 +358,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
       const response = await fetch("/api/publicacoes/rnc", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metaDias, ...periodToOptionalFields(periodRange) }),
+        body: JSON.stringify({ metaDias, ...periodToOptionalFields(publishPeriod) }),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o RNC.");
@@ -577,50 +591,30 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
           <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
             <Card className="p-4">
               <div className="flex flex-col gap-3">
-                <Label>Filtros</Label>
-                <div className="flex flex-wrap gap-3">
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="rncMonthSelect">Mês</Label>
-                    <Select
-                      id="rncMonthSelect"
-                      value={selectedMonth}
-                      onChange={(event) => setSelectedMonth(event.target.value)}
-                      className="w-40"
-                    >
-                      {result.months.map((month) => (
-                        <option
-                          key={monthKey(month.year, month.month)}
-                          value={monthKey(month.year, month.month)}
-                        >
-                          {month.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="rncMeta">Meta (dias, ≤)</Label>
-                    <Input
-                      id="rncMeta"
-                      type="number"
-                      min={0}
-                      value={metaDias}
-                      onChange={(event) => setMetaDias(Number(event.target.value))}
-                      className="w-24"
-                    />
-                  </div>
-                </div>
+                <Label htmlFor="rncMeta">Meta (dias, ≤)</Label>
+                <Input
+                  id="rncMeta"
+                  type="number"
+                  min={0}
+                  value={metaDias}
+                  onChange={(event) => setMetaDias(Number(event.target.value))}
+                  className="w-24"
+                />
               </div>
             </Card>
 
             <Card className="p-4">
               <div className="flex flex-col gap-3">
-                <Label>Período</Label>
-                <PeriodRangeFilter
-                  value={periodRange}
-                  onChange={setPeriodRange}
-                  yearsInData={availableYears}
-                  label=""
-                />
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="mb-0">Período de publicação</Label>
+                  <ViewFilterPopover
+                    value={viewFilter}
+                    onChange={setViewFilter}
+                    yearsInData={availableYears}
+                    publishedLabel={formatPeriodRangeLabel(publishPeriod)}
+                  />
+                </div>
+                <SemesterYearFilter year={year} semester={semester} onChange={setPeriod} label="" />
               </div>
             </Card>
 

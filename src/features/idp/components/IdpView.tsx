@@ -19,8 +19,10 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,7 +47,7 @@ import { parseIdpFile } from "@/features/idp/importers";
 import { formatIdpUnitLabel, normalizeIdpUnitCode } from "@/features/idp/utils/units";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
-import { normalizePeriodRange, toMonthIndex, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, type PeriodRange } from "@/lib/period";
 
 interface DocumentRow {
   id: string;
@@ -141,20 +143,6 @@ function competenceLabel(year: number, month: number): string {
   return `${MONTH_NAMES_FULL[month - 1] ?? month}/${year}`;
 }
 
-/** Expande o intervalo do gráfico para incluir uma competência recém-importada, se necessário. */
-function expandRangeToInclude(range: PeriodRange, year: number, month: number): PeriodRange {
-  const idx = toMonthIndex(year, month);
-  const startIdx = toMonthIndex(range.startYear, range.startMonth);
-  const endIdx = toMonthIndex(range.endYear, range.endMonth);
-  if (idx >= startIdx && idx <= endIdx) return range;
-  return normalizePeriodRange({
-    startYear: idx < startIdx ? year : range.startYear,
-    startMonth: idx < startIdx ? month : range.startMonth,
-    endYear: idx > endIdx ? year : range.endYear,
-    endMonth: idx > endIdx ? month : range.endMonth,
-  });
-}
-
 function shortDate(value: string | null): string {
   if (!value) return "—";
   const [year, month, day] = value.split("-");
@@ -190,14 +178,18 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const inputRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<ApiResponse | null>(null);
   const [threshold, setThreshold] = useState(90);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [historyRange, setHistoryRange] = useState<PeriodRange>(() => ({
-    startYear: new Date().getFullYear(),
-    startMonth: 1,
-    endYear: new Date().getFullYear(),
-    endMonth: 12,
-  }));
+  /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. A
+      competência efetiva (mês exato usado no cálculo) é resolvida pelo
+      servidor como a mais recente com RSO dentro desse intervalo. */
+  const { year: publishYear, semester: publishSemester, cycle: publishPeriod, setPeriod } =
+    useReadingContextCycle();
+  /** Filtro de "Consulta": undefined = segue o período de publicação; null =
+      Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
+  const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
+  const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
+  const effectivePeriodKey = effectivePeriod
+    ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
+    : "all";
   const [selectedUnit, setSelectedUnit] = useState("");
   const [excludedDisciplinesDraft, setExcludedDisciplinesDraft] = useState("");
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
@@ -212,43 +204,21 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function load(
-    filters?: Partial<{
-      year: number;
-      month: number;
-      history: PeriodRange;
-      threshold: number;
-    }>,
-    useCurrentSelection = true,
-  ) {
+  async function load(period: PeriodRange | null = effectivePeriod, nextThreshold = threshold) {
     setError(null);
     const params = new URLSearchParams();
-    const year = filters?.year ?? (useCurrentSelection ? selectedYear : undefined);
-    const month = filters?.month ?? (useCurrentSelection ? selectedMonth : undefined);
-    const history = filters?.history ?? (useCurrentSelection ? historyRange : undefined);
-    const target = filters?.threshold ?? (useCurrentSelection ? threshold : undefined);
-    if (year !== undefined) params.set("year", String(year));
-    if (month !== undefined) params.set("month", String(month));
-    if (history !== undefined) {
-      params.set("historyStart", String(history.startMonth));
-      params.set("historyEnd", String(history.endMonth));
-      params.set("historyStartYear", String(history.startYear));
-      params.set("historyEndYear", String(history.endYear));
+    if (period) {
+      params.set("periodStartYear", String(period.startYear));
+      params.set("periodStartMonth", String(period.startMonth));
+      params.set("periodEndYear", String(period.endYear));
+      params.set("periodEndMonth", String(period.endMonth));
     }
-    if (target !== undefined) params.set("threshold", String(target));
+    params.set("threshold", String(nextThreshold));
     const suffix = params.toString();
     const response = await fetch(`/api/idp${suffix ? `?${suffix}` : ""}`, { cache: "no-store" });
     if (!response.ok) throw await responseError(response, "Falha ao carregar o IDP.");
     const body = (await response.json()) as ApiResponse;
     setData(body);
-    setSelectedYear(body.selectedYear);
-    setSelectedMonth(body.selectedMonth);
-    setHistoryRange({
-      startYear: body.historyStartYear,
-      startMonth: body.historyMonthStart,
-      endYear: body.historyEndYear,
-      endMonth: body.historyMonthEnd,
-    });
     setThreshold(body.threshold * 100);
     setExcludedDisciplinesDraft(body.excludedDisciplines.join("\n"));
     setExcludedUnits(body.result.excludedUnits);
@@ -267,12 +237,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   }
 
   useEffect(() => {
-    void Promise.all([
-      load(undefined, false).catch((err: Error) => setError(err.message)),
-      loadPublication(),
-    ]);
-    // A primeira leitura não envia mês/ano: a API abre a competência mais recente realmente armazenada.
+    void load().catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePeriodKey]);
+
+  useEffect(() => {
+    void loadPublication();
   }, []);
 
   function updatePending(
@@ -426,24 +396,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         `Importação concluída: ${totals.inserted} nova(s) versão(ões), ${totals.updated} corrigida(s), ${totals.ignored} idêntica(s) e ${totals.rejected} rejeitada(s).`,
       );
       setPendingFiles([]);
-      const importedCompetence = records
-        .filter((record) => record.referenceYear && record.referenceMonth)
-        .map((record) => ({ year: record.referenceYear!, month: record.referenceMonth! }))
-        .sort((a, b) => b.year - a.year || b.month - a.month)[0];
-      if (importedCompetence) {
-        await load({
-          year: importedCompetence.year,
-          month: importedCompetence.month,
-          history: expandRangeToInclude(
-            historyRange,
-            importedCompetence.year,
-            importedCompetence.month,
-          ),
-          threshold,
-        });
-      } else {
-        await load(undefined, false);
-      }
+      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na importação.");
     } finally {
@@ -460,19 +413,17 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          year: selectedYear,
-          month: selectedMonth,
-          historyStart: historyRange.startMonth,
-          historyEnd: historyRange.endMonth,
-          historyStartYear: historyRange.startYear,
-          historyEndYear: historyRange.endYear,
+          periodStartYear: publishPeriod.startYear,
+          periodStartMonth: publishPeriod.startMonth,
+          periodEndYear: publishPeriod.endYear,
+          periodEndMonth: publishPeriod.endMonth,
           threshold,
         }),
       });
       if (!response.ok) throw await responseError(response, "Falha ao publicar o IDP.");
       const body = (await response.json()) as { publication: PublicationSummary };
       setPublication(body.publication);
-      setMessage("IDP publicado com os RSOs exatos do mês analisado.");
+      setMessage("IDP publicado com os RSOs exatos da competência mais recente do semestre.");
       window.dispatchEvent(new Event("idp:published"));
       window.dispatchEvent(new Event("indicator:published"));
     } catch (err) {
@@ -846,58 +797,40 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       <Card>
         <CardHeader>
-          <CardTitle>Mês analisado e ajustes de cálculo</CardTitle>
+          <CardTitle>Período de publicação e ajustes de cálculo</CardTitle>
           <CardDescription>
-            Dois grupos com papéis diferentes: um define quais RSOs entram na conta e vão para o
-            Painel; o outro só ajusta como esse resultado é exibido, sem trocar os dados usados.
+            O semestre travado define quais RSOs entram na conta e vão para o Painel — a
+            competência efetiva é sempre a mais recente com RSO dentro dele. Use &ldquo;Consulta&rdquo; pra
+            olhar outro recorte sem mudar o que será publicado.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-0">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-border bg-muted/20 p-4">
-              <h4 className="text-sm font-semibold text-foreground">
-                Mês analisado — define os dados do Painel
-              </h4>
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-foreground">Período de publicação</h4>
+                <ViewFilterPopover
+                  value={viewFilter}
+                  onChange={setViewFilter}
+                  yearsInData={data?.years ?? []}
+                  publishedLabel={formatPeriodRangeLabel(publishPeriod)}
+                />
+              </div>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Escolha o ano e o mês. São os RSOs deste mês que alimentam todas as tabelas abaixo e
-                são exatamente os que vão para o Painel quando você clicar em
-                &ldquo;Publicar&rdquo;.
+                São os RSOs da competência mais recente dentro deste semestre que alimentam todas
+                as tabelas abaixo e vão para o Painel quando você clicar em &ldquo;Publicar&rdquo;.
               </p>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Ano</Label>
-                  <Select
-                    value={selectedYear}
-                    onChange={(event) => setSelectedYear(Number(event.target.value))}
-                  >
-                    {(data?.years ?? [selectedYear]).map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Mês analisado</Label>
-                  <Select
-                    value={selectedMonth}
-                    onChange={(event) => setSelectedMonth(Number(event.target.value))}
-                  >
-                    {MONTH_NAMES_FULL.map((month, index) => (
-                      <option key={month} value={index + 1}>
-                        {month}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+              <div className="mt-3">
+                <SemesterYearFilter
+                  year={publishYear}
+                  semester={publishSemester}
+                  onChange={setPeriod}
+                  label=""
+                />
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-4 border-primary bg-primary/5 px-3 py-2.5 text-xs">
                 <strong className="font-bold text-foreground">
-                  Mês analisado:{" "}
-                  {competenceLabel(
-                    data?.selectedYear ?? selectedYear,
-                    data?.selectedMonth ?? selectedMonth,
-                  )}
+                  Competência efetiva: {competenceLabel(data?.selectedYear ?? publishYear, data?.selectedMonth ?? 1)}
                 </strong>
                 <span className="text-muted-foreground">
                   {result?.activeDocuments ?? 0} RSO(s) ativo(s). Nenhuma versão de outro mês é
@@ -907,50 +840,28 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
             </div>
 
             <div className="rounded-lg border border-border bg-muted/20 p-4">
-              <h4 className="text-sm font-semibold text-foreground">Intervalo do gráfico e meta</h4>
+              <h4 className="text-sm font-semibold text-foreground">Meta</h4>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Não mudam quais RSOs são usados. &ldquo;De / Até&rdquo; define quais meses aparecem
-                no gráfico de tendência do Painel publicado. &ldquo;Meta&rdquo; define a aderência
-                mínima para marcar &ldquo;Dentro da meta&rdquo; aqui e no Painel.
+                Não muda quais RSOs são usados. Define a aderência mínima para marcar &ldquo;Dentro
+                da meta&rdquo; aqui e no Painel.
               </p>
-              <div className="mt-3 flex flex-wrap items-end gap-3">
-                <PeriodRangeFilter
-                  value={historyRange}
-                  onChange={(next) => next && setHistoryRange(next)}
-                  yearsInData={data?.years ?? []}
-                  showQuickActions={false}
-                  label="Intervalo do gráfico"
+              <div className="mt-3 flex flex-col gap-1.5">
+                <Label>Meta (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={200}
+                  value={threshold}
+                  onChange={(event) => setThreshold(Number(event.target.value))}
+                  className="w-24"
                 />
-                <div className="flex flex-col gap-1.5">
-                  <Label>Meta (%)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={200}
-                    value={threshold}
-                    onChange={(event) => setThreshold(Number(event.target.value))}
-                    className="w-24"
-                  />
-                </div>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  void load({
-                    year: selectedYear,
-                    month: selectedMonth,
-                    history: historyRange,
-                    threshold,
-                  })
-                }
-              >
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
                 <RotateCw className="size-3.5" />
                 Recalcular
               </Button>
@@ -987,8 +898,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                 moduleLabel="IDP — Cronograma"
                 target={threshold}
                 years={data?.years ?? []}
-                defaultYear={selectedYear}
-                defaultMonth={selectedMonth}
+                defaultYear={data?.selectedYear ?? publishYear}
+                defaultMonth={data?.selectedMonth ?? 1}
               />
               {canPublish ? (
                 <Button
@@ -1495,14 +1406,11 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
             Sem RSO neste mês
           </Badge>
           <CardTitle className="text-base">
-            {competenceLabel(
-              data?.selectedYear ?? selectedYear,
-              data?.selectedMonth ?? selectedMonth,
-            )}
+            {competenceLabel(data?.selectedYear ?? publishYear, data?.selectedMonth ?? 1)}
           </CardTitle>
           <CardDescription className="max-w-sm">
             O sistema não reutiliza automaticamente RSOs de meses anteriores. Importe um RSO para
-            este mês ou selecione outro mês analisado.
+            este semestre ou selecione outro semestre em &ldquo;Período de publicação&rdquo;.
           </CardDescription>
         </Card>
       )}

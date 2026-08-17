@@ -1,47 +1,51 @@
-# Design QA — cabeçalho dos módulos
+# Design QA — Contexto da leitura
 
-- Source visual truth path: imagem de referência anexada à conversa (sem caminho local disponível)
-- Implementation screenshot path: indisponível — nenhum navegador está conectado à sessão
-- Viewport da referência: aproximadamente 1890 × 535 px no recorte fornecido
-- Dimensões e densidade: a referência foi exibida na conversa; não foi possível normalizar a densidade sem uma captura local da implementação
-- Estado: Painel Geral, cabeçalho do módulo visível
-- Primary interactions tested: não aplicável ao ajuste tipográfico
-- Console errors checked: bloqueado pela indisponibilidade do navegador
+- Source visual truth path: segunda imagem de referência anexada à conversa (sem caminho local disponível)
+- Implementation screenshot path: indisponível — o navegador interno não está disponível nesta sessão
+- Viewport da referência: 1750 × 198 px no recorte fornecido
+- Dimensões e densidade: implementação ainda sem captura normalizada no mesmo viewport
+- Estado: aba RDO, ciclo atual 2026 S2
+- Primary interactions tested: seleção de período coberta por testes de estado/API; interação visual no navegador pendente
+- Console errors checked: bloqueado pela indisponibilidade do navegador interno
 
 ## Full-view comparison evidence
 
-Bloqueada. A referência visual está disponível na conversa, mas não foi possível capturar a implementação renderizada no mesmo viewport.
+Bloqueada. A referência foi medida a partir da imagem anexada, mas a implementação ainda precisa ser capturada no mesmo viewport para comparação lado a lado.
 
 ## Focused region comparison evidence
 
-Bloqueada pelo mesmo motivo. A região relevante é o cabeçalho com legenda, título e descrição, alinhado ao eixo esquerdo dos cards.
+Bloqueada pelo mesmo motivo. A região a comparar contém título, descrição, três chips, dois seletores e a borda/sombra do cartão.
 
 ## Fidelity surfaces
 
-- Fonts and typography: código ajustado para legenda de 11 px, título responsivo de 28–32 px e descrição de 14–16 px; validação renderizada pendente.
-- Spacing and layout rhythm: largura máxima de 1180 px e centralização preservadas; comparação visual pendente.
-- Colors and visual tokens: cores previamente ajustadas foram preservadas.
-- Image quality and asset fidelity: não há imagens ou novos assets nesta alteração.
-- Copy and content: conteúdo existente preservado.
+- Fonts and typography: Manrope preservada; título 16 px/800, descrição 15 px/500, legendas 12 px/500 e valores 15 px/500.
+- Spacing and layout rhythm: cartão com 180 px, padding 22–24 px, raio 22 px, dois campos em colunas de um terço e terceiro trilho vazio como na referência.
+- Colors and visual tokens: fundo `#ffffff`, título `#132d4f`, descrição `#6d7c92`, chips `#eef3fb`/`#2e5aac`, borda `#cbd2dc`.
+- Image quality and asset fidelity: não há imagens ou assets rasterizados neste componente.
+- Copy and content: “Contexto da leitura”, legenda integrada, “Período atual · 2026 S2” e nomes completos de cada guia.
 
 ## Findings
 
-- [P2] Comparação visual indisponível
-  - Location: cabeçalho compartilhado em `ModuleWorkspace`.
-  - Evidence: não há navegador conectado para capturar a implementação após a redução.
-  - Impact: não é possível confirmar fidelidade pixel a pixel nesta sessão.
-  - Fix: abrir a rota no navegador e comparar o cabeçalho renderizado com a referência no mesmo viewport.
+- [P2] Comparação visual renderizada indisponível
+  - Location: `ReadingContextCard` em todas as abas publicadas.
+  - Evidence: o runtime informou que nenhum navegador está disponível.
+  - Impact: dimensões e cores foram medidas e codificadas, mas ainda não há prova visual lado a lado.
+  - Fix: com autorização, capturar a rota RDO pelo Playwright local e executar a comparação final no mesmo viewport.
 
 ## Comparison history
 
-- Iteração atual: reduziu legenda de 12 px para 11 px, título máximo de 36 px para 32 px e descrição máxima de 18 px para 16 px.
-- Post-fix visual evidence: indisponível.
+- Iteração 1: apenas integrou legendas; rejeitada por baixa fidelidade.
+- Iteração 2: refez estrutura, cores, altura, raio, chips, tipografia e seletor único de período; estendeu o controle para as seis abas.
+- Post-fix visual evidence: pendente por indisponibilidade do navegador interno.
 
 ## Implementation checklist
 
-- [x] Reduzir a escala tipográfica.
-- [x] Preservar o alinhamento de 1180 px com os cards.
-- [x] Validar TypeScript, ESLint, Prettier e `git diff --check`.
-- [ ] Capturar e comparar a implementação renderizada.
+- [x] Reproduzir o cartão com duas colunas e terceiro trilho vazio.
+- [x] Integrar as legendas à borda.
+- [x] Unificar ano e semestre em um seletor.
+- [x] Exibir o contexto em Scorecard, RDO, IDP, RNC, 5S e Taxa de Acidentes.
+- [x] Fazer o período consultar os dados publicados da aba ativa.
+- [x] Validar lint, TypeScript, testes e build.
+- [ ] Capturar e comparar a implementação renderizada com a referência.
 
 final result: blocked

@@ -15,23 +15,55 @@ import {
 import { cn } from "@/lib/utils";
 import { ToolbarSlotOutlet } from "./ToolbarSlot";
 
-type Tab = { id: string; label: string; href: string; icon: LucideIcon };
+type Tab = {
+  id: string;
+  label: string;
+  contextLabel: string;
+  href: string;
+  icon: LucideIcon;
+};
 
 /** Ordem oficial dos módulos ativos no ciclo de 2026. */
 export const TABS: Tab[] = [
-  { id: "2026", label: "Scorecard", href: "/dashboard/scorecard", icon: LayoutDashboard },
-  { id: "rdo", label: "RDO", href: "/dashboard/rdo", icon: ChartColumn },
+  {
+    id: "2026",
+    label: "Scorecard",
+    contextLabel: "Indicadores de Obra",
+    href: "/dashboard/scorecard",
+    icon: LayoutDashboard,
+  },
+  {
+    id: "rdo",
+    label: "RDO",
+    contextLabel: "Aprovação RDO",
+    href: "/dashboard/rdo",
+    icon: ChartColumn,
+  },
   {
     id: "idp-disciplinas",
     label: "IDP - Disciplinas",
+    contextLabel: "IDP - Disciplinas",
     href: "/dashboard/idp",
     icon: CalendarCheck,
   },
-  { id: "rnc", label: "RNC", href: "/dashboard/rnc", icon: AlertTriangle },
-  { id: "5s", label: "5S", href: "/dashboard/cinco-s", icon: ListChecks },
+  {
+    id: "rnc",
+    label: "RNC",
+    contextLabel: "RNC",
+    href: "/dashboard/rnc",
+    icon: AlertTriangle,
+  },
+  {
+    id: "5s",
+    label: "5S",
+    contextLabel: "5S",
+    href: "/dashboard/cinco-s",
+    icon: ListChecks,
+  },
   {
     id: "taxa-acidentes",
     label: "Taxa de Acidentes",
+    contextLabel: "Taxa de Acidentes",
     href: "/dashboard/taxa-acidentes",
     icon: HardHat,
   },

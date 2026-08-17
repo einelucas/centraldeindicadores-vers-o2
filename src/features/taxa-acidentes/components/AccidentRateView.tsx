@@ -17,8 +17,10 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { ExportButtons } from "@/components/exports/ExportButtons";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { MONTH_NAMES } from "@/lib/dates";
-import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import {
   ACCIDENT_RATE_DEFAULT_TARGET,
   type AccidentMonthlyRecord,
@@ -116,10 +118,23 @@ export function AccidentRateView({
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
-  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
+  /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. */
+  const {
+    year: publishYear,
+    semester: publishSemester,
+    cycle: publishPeriod,
+    setPeriod,
+  } = useReadingContextCycle();
+  /** Filtro de "Consulta": undefined = segue o período de publicação; null =
+      Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
+  const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
+  const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
+  const effectivePeriodKey = effectivePeriod
+    ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
+    : "all";
 
   const load = useCallback(
-    async (nextPeriod = periodRange) => {
+    async (nextPeriod = effectivePeriod) => {
       const params = new URLSearchParams(
         Object.fromEntries(
           Object.entries(periodToOptionalFields(nextPeriod)).map(([key, value]) => [
@@ -140,7 +155,7 @@ export function AccidentRateView({
       setTarget(String(body.target ?? ACCIDENT_RATE_DEFAULT_TARGET));
       setExcludedUnits(body.excludedUnits ?? []);
     },
-    [periodRange],
+    [effectivePeriod],
   );
 
   const loadPublication = useCallback(async () => {
@@ -155,11 +170,13 @@ export function AccidentRateView({
   }, []);
 
   useEffect(() => {
-    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-    // Só na montagem: mudar o filtro de período não deve buscar sozinho,
-    // só ao clicar em "Recalcular do banco" (igual aos demais módulos).
+    void load().catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [effectivePeriodKey]);
+
+  useEffect(() => {
+    void loadPublication();
+  }, [loadPublication]);
 
   const monthlyFilterYears = useMemo(() => {
     const years = new Set((data?.monthly ?? []).map((row) => row.year));
@@ -503,7 +520,7 @@ export function AccidentRateView({
       const response = await fetch("/api/publicacoes/taxa-acidentes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(periodToOptionalFields(periodRange)),
+        body: JSON.stringify(periodToOptionalFields(publishPeriod)),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao publicar o indicador.");
@@ -567,11 +584,19 @@ export function AccidentRateView({
 
         <Card className="p-4">
           <div className="flex flex-col gap-3">
-            <Label>Período</Label>
-            <PeriodRangeFilter
-              value={periodRange}
-              onChange={setPeriodRange}
-              yearsInData={periodFilterYears}
+            <div className="flex items-center justify-between gap-2">
+              <Label className="mb-0">Período de publicação</Label>
+              <ViewFilterPopover
+                value={viewFilter}
+                onChange={setViewFilter}
+                yearsInData={periodFilterYears}
+                publishedLabel={formatPeriodRangeLabel(publishPeriod)}
+              />
+            </div>
+            <SemesterYearFilter
+              year={publishYear}
+              semester={publishSemester}
+              onChange={setPeriod}
               label=""
             />
           </div>

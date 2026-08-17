@@ -1,0 +1,267 @@
+- generic [ref=f54e1]:
+  - banner [ref=f54e2]:
+    - generic [ref=f54e3]:
+      - img "Inpasa" [ref=f54e4]
+      - button "Voltar" [ref=f54e5] [cursor=pointer]
+      - generic [ref=f54e8]:
+        - paragraph [ref=f54e9]: Planejamento
+        - paragraph [ref=f54e10]: Indicadores de Obra
+    - searchbox [ref=f54e12]
+    - generic [ref=f54e13]:
+      - button "Notificações" [ref=f54e14] [cursor=pointer]
+      - link "Registro de Atividades" [ref=f54e18] [cursor=pointer]:
+        - /url: /dashboard/auditoria
+      - button "Exportar dados" [ref=f54e23] [cursor=pointer]
+      - button "LP" [ref=f54e29] [cursor=pointer]
+  - navigation "Indicadores" [ref=f54e35]:
+    - generic [ref=f54e36]:
+      - link "Scorecard" [ref=f54e37] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f54e43]:
+      - link "RDO" [ref=f54e44] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f54e47]:
+      - link "IDP - Disciplinas" [ref=f54e48] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f54e52]:
+      - link "RNC" [ref=f54e53] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f54e56]:
+      - link "5S" [ref=f54e57] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f54e61]:
+      - link "Taxa de Acidentes" [ref=f54e62] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+    - generic [ref=f54e98]:
+      - button "Painel" [ref=f54e99] [cursor=pointer]
+      - button "Administração" [ref=f54e105] [cursor=pointer]
+      - button "Exportar PDF" [ref=f54e109] [cursor=pointer]
+  - main [ref=f54e68]:
+    - generic [ref=f54e69]:
+      - generic [ref=f54e70]:
+        - paragraph [ref=f54e71]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=f54e72]
+        - paragraph [ref=f54e73]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - generic [ref=f54e114]:
+        - generic [ref=f54e116]:
+          - heading "RDO — Aprovação de Relatórios" [level=2] [ref=f54e117]
+          - paragraph [ref=f54e118]: Aderência de aprovação por unidade e por mês, a partir da exportação de RDOs.
+        - generic [ref=f54e119]:
+          - button [ref=f54e120] [cursor=pointer]:
+            - heading "Arraste os arquivos de RDOs aqui, ou clique para escolher" [level=4] [ref=f54e125]
+            - paragraph [ref=f54e126]: "Pode soltar vários arquivos de uma vez (uma unidade por arquivo, ou exportações de períodos diferentes). Aceita .xlsx ou .csv com as colunas: data, status_descricao, empresa_nome."
+          - generic [ref=f54e127]:
+            - generic [ref=f54e128]:
+              - generic [ref=f54e130]:
+                - generic [ref=f54e131]: Meta de aderência (%)
+                - spinbutton "Meta de aderência (%)" [ref=f54e132]: "80"
+              - generic [ref=f54e134]:
+                - generic [ref=f54e135]:
+                  - generic [ref=f54e136]: Período de publicação
+                  - generic [ref=f54e137]:
+                    - button "Consulta" [active] [ref=f54e138] [cursor=pointer]
+                    - generic [ref=f54e139]:
+                      - paragraph [ref=f54e140]: Filtra só o que aparece aqui na Administração — não muda o que será publicado (Jun/2026 – Nov/2026).
+                      - generic [ref=f54e142]:
+                        - generic [ref=f54e143]:
+                          - generic [ref=f54e144]: De
+                          - generic [ref=f54e145]:
+                            - combobox [ref=f54e147]:
+                              - option "Janeiro"
+                              - option "Fevereiro"
+                              - option "Março"
+                              - option "Abril"
+                              - option "Maio"
+                              - option "Junho" [selected]
+                              - option "Julho"
+                              - option "Agosto"
+                              - option "Setembro"
+                              - option "Outubro"
+                              - option "Novembro"
+                              - option "Dezembro"
+                            - combobox [ref=f54e149]:
+                              - option "2025"
+                              - option "2026" [selected]
+                              - option "2027"
+                        - generic [ref=f54e150]:
+                          - generic [ref=f54e151]: Até
+                          - generic [ref=f54e152]:
+                            - combobox [ref=f54e154]:
+                              - option "Janeiro"
+                              - option "Fevereiro"
+                              - option "Março"
+                              - option "Abril"
+                              - option "Maio"
+                              - option "Junho"
+                              - option "Julho"
+                              - option "Agosto"
+                              - option "Setembro"
+                              - option "Outubro"
+                              - option "Novembro" [selected]
+                              - option "Dezembro"
+                            - combobox [ref=f54e156]:
+                              - option "2025"
+                              - option "2026" [selected]
+                              - option "2027"
+                        - button "Ciclo atual" [ref=f54e158] [cursor=pointer]
+                        - generic [ref=f54e159]: Tudo
+                - generic [ref=f54e161]:
+                  - combobox [ref=f54e163]:
+                    - option "Jun – Nov" [selected]
+                    - option "Dez – Mai"
+                  - combobox [ref=f54e165]:
+                    - option "2027"
+                    - option "2026" [selected]
+                    - option "2025"
+                    - option "2024"
+                    - option "2023"
+                    - option "2022"
+              - generic [ref=f54e167]:
+                - generic [ref=f54e168]: Ações
+                - generic [ref=f54e169]:
+                  - button "Recalcular" [ref=f54e170] [cursor=pointer]
+                  - button "Ignorar unidades 5" [ref=f54e171] [cursor=pointer]:
+                    - text: Ignorar unidades
+                    - generic [ref=f54e172]: "5"
+                  - button "Análise do resultado" [ref=f54e173] [cursor=pointer]
+                  - button "Baixar PDF" [ref=f54e174] [cursor=pointer]
+                  - button "Limpar tudo" [ref=f54e175] [cursor=pointer]
+                  - button "Publicar no Painel" [ref=f54e176] [cursor=pointer]
+            - generic [ref=f54e177]: Publicado em 14/08/2026, 16:02:36 por Lucas Pinheiro · versão 8
+            - generic [ref=f54e181]:
+              - generic [ref=f54e183]:
+                - generic [ref=f54e184]: Total emitidos
+                - generic [ref=f54e185]: "600"
+              - generic [ref=f54e190]:
+                - generic [ref=f54e191]: Aprovados
+                - generic [ref=f54e192]: 82%
+                - generic [ref=f54e193]: 489 relatórios
+              - generic [ref=f54e198]:
+                - generic [ref=f54e199]: A revisar
+                - generic [ref=f54e200]: 10%
+                - generic [ref=f54e201]: 59 relatórios
+              - generic [ref=f54e205]:
+                - generic [ref=f54e206]: Preenchendo
+                - generic [ref=f54e207]: 9%
+                - generic [ref=f54e208]: 52 relatórios
+            - generic [ref=f54e211]:
+              - generic [ref=f54e212]:
+                - generic [ref=f54e213]:
+                  - heading "Aderência por unidade" [level=3] [ref=f54e214]
+                  - paragraph [ref=f54e215]: Nº RDO emitidos x aprovados, por obra/unidade.
+                - generic [ref=f54e216]:
+                  - generic [ref=f54e217]: Unidade
+                  - combobox "Unidade" [ref=f54e219]:
+                    - option "Todas as unidades" [selected]
+                    - option "RONDONOPOLIS"
+                    - option "NOVA MUTUM"
+                    - option "RIO VERDE"
+              - table [ref=f54e222]:
+                - rowgroup [ref=f54e223]:
+                  - row [ref=f54e224]:
+                    - columnheader "Unidade" [ref=f54e225]
+                    - columnheader "Emitidos" [ref=f54e226]
+                    - columnheader "Aprovados" [ref=f54e227]
+                    - columnheader "Aderência" [ref=f54e228]
+                    - columnheader "Situação" [ref=f54e229]
+                - rowgroup [ref=f54e230]:
+                  - row [ref=f54e231]:
+                    - cell "RONDONOPOLIS" [ref=f54e232]
+                    - cell "204" [ref=f54e233]
+                    - cell "164" [ref=f54e234]
+                    - cell "80%" [ref=f54e235]
+                    - cell "Dentro da meta" [ref=f54e236]
+                  - row [ref=f54e238]:
+                    - cell "NOVA MUTUM" [ref=f54e239]
+                    - cell "198" [ref=f54e240]
+                    - cell "158" [ref=f54e241]
+                    - cell "80%" [ref=f54e242]
+                    - cell "Abaixo da meta" [ref=f54e243]
+                  - row [ref=f54e245]:
+                    - cell "RIO VERDE" [ref=f54e246]
+                    - cell "198" [ref=f54e247]
+                    - cell "167" [ref=f54e248]
+                    - cell "84%" [ref=f54e249]
+                    - cell "Dentro da meta" [ref=f54e250]
+                  - row [ref=f54e252]:
+                    - cell "Média das unidades" [ref=f54e253]
+                    - cell [ref=f54e254]
+                    - cell [ref=f54e255]
+                    - cell "82%" [ref=f54e256]
+                    - cell [ref=f54e257]
+            - generic [ref=f54e258]:
+              - generic [ref=f54e259]:
+                - generic [ref=f54e260]:
+                  - heading "Aderência por mês" [level=3] [ref=f54e261]
+                  - paragraph [ref=f54e262]: Consolidado mensal de todas as unidades.
+                - generic [ref=f54e263]:
+                  - generic [ref=f54e264]:
+                    - generic [ref=f54e265]: Mês
+                    - combobox "Mês" [ref=f54e267]:
+                      - option "Todos os meses" [selected]
+                      - option "Junho"
+                      - option "Julho"
+                      - option "Agosto"
+                      - option "Setembro"
+                      - option "Outubro"
+                      - option "Novembro"
+                  - generic [ref=f54e268]:
+                    - generic [ref=f54e269]: Ano
+                    - combobox "Ano" [ref=f54e271]:
+                      - option "Todos" [selected]
+                      - option "2026"
+              - table [ref=f54e274]:
+                - rowgroup [ref=f54e275]:
+                  - row [ref=f54e276]:
+                    - columnheader "Mês" [ref=f54e277]
+                    - columnheader "Emitidos" [ref=f54e278]
+                    - columnheader "Aprovados" [ref=f54e279]
+                    - columnheader "Aderência" [ref=f54e280]
+                    - columnheader "Situação" [ref=f54e281]
+                - rowgroup [ref=f54e282]:
+                  - row [ref=f54e283]:
+                    - cell "Jun/2026" [ref=f54e284]
+                    - cell "100" [ref=f54e285]
+                    - cell "80" [ref=f54e286]
+                    - cell "80%" [ref=f54e287]
+                    - cell "Dentro da meta" [ref=f54e288]
+                  - row [ref=f54e290]:
+                    - cell "Jul/2026" [ref=f54e291]
+                    - cell "100" [ref=f54e292]
+                    - cell "72" [ref=f54e293]
+                    - cell "72%" [ref=f54e294]
+                    - cell "Abaixo da meta" [ref=f54e295]
+                  - row [ref=f54e297]:
+                    - cell "Ago/2026" [ref=f54e298]
+                    - cell "100" [ref=f54e299]
+                    - cell "92" [ref=f54e300]
+                    - cell "92%" [ref=f54e301]
+                    - cell "Dentro da meta" [ref=f54e302]
+                  - row [ref=f54e304]:
+                    - cell "Set/2026" [ref=f54e305]
+                    - cell "100" [ref=f54e306]
+                    - cell "80" [ref=f54e307]
+                    - cell "80%" [ref=f54e308]
+                    - cell "Dentro da meta" [ref=f54e309]
+                  - row [ref=f54e311]:
+                    - cell "Out/2026" [ref=f54e312]
+                    - cell "100" [ref=f54e313]
+                    - cell "79" [ref=f54e314]
+                    - cell "79%" [ref=f54e315]
+                    - cell "Abaixo da meta" [ref=f54e316]
+                  - row [ref=f54e318]:
+                    - cell "Nov/2026" [ref=f54e319]
+                    - cell "100" [ref=f54e320]
+                    - cell "86" [ref=f54e321]
+                    - cell "86%" [ref=f54e322]
+                    - cell "Dentro da meta" [ref=f54e323]
+  - contentinfo [ref=f54e97]: Central de Indicadores - 2026
+  - button "Open Next.js Dev Tools" [ref=f54e330] [cursor=pointer]
+  - alert [ref=f54e334]
+  - generic [ref=f54e335]: 0%

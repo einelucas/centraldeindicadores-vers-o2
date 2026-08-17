@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileDown } from "lucide-react";
+import { Building2, FileDown, TrendingUp, Wrench, Zap, type LucideIcon } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -14,14 +14,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { IdpPublishedPayload } from "@/features/idp/publications";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
 import { formatIdpUnitLabel } from "@/features/idp/utils/units";
+import type { PeriodRange } from "@/lib/period";
 
 interface PublicationResponse {
+  historyCount?: number;
   publication: null | {
     id: string;
     version: number;
@@ -55,8 +61,13 @@ function competenceLabel(year: number, month: number): string {
 
 export function IdpPublishedPanel() {
   const [data, setData] = useState<PublicationResponse["publication"]>(null);
+  const [historyCount, setHistoryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { year, semester, cycle, isCurrent, setPeriod } = useReadingContextCycle();
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+  const requestIdRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
 
@@ -65,27 +76,50 @@ export function IdpPublishedPanel() {
     [exportPdf],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (period: PeriodRange) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+    setData(null);
     try {
-      const response = await fetch("/api/publicacoes/idp", { cache: "no-store" });
+      const response = await fetch(`/api/publicacoes/idp?${periodQueryString(period)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) throw new Error("Falha ao carregar o painel publicado.");
       const body = (await response.json()) as PublicationResponse;
+      if (requestId !== requestIdRef.current) return;
       setData(body.publication);
+      setHistoryCount(body.historyCount ?? 0);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Falha ao carregar o painel.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
-    const refresh = () => void load();
+    void load(cycle);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, cycle.startYear, cycle.startMonth, cycle.endYear, cycle.endMonth]);
+
+  useEffect(() => {
+    const refresh = () => void load(cycleRef.current);
     window.addEventListener("idp:published", refresh);
     return () => window.removeEventListener("idp:published", refresh);
   }, [load]);
+
+  const readingContext = (
+    <ReadingContextCard
+      activeHref="/dashboard/idp"
+      historyCount={historyCount}
+      year={year}
+      semester={semester}
+      onPeriodChange={setPeriod}
+      isCurrent={isCurrent}
+    />
+  );
 
   const exportButton = (
     <ToolbarSlotContent>
@@ -105,12 +139,45 @@ export function IdpPublishedPanel() {
     return (
       <div className="painel-frontend">
         {exportButton}
-        <div className="content"><div className="empty"><p className="ps">Carregando painel publicado…</p></div></div>
+        <div className="content">
+          {readingContext}
+          <div className="empty">
+            <p className="ps">Carregando painel publicado…</p>
+          </div>
+        </div>
       </div>
     );
   }
-  if (error && !data) return <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />;
-  if (!data) return <PublishedPanelPlaceholder />;
+  if (error && !data) {
+    return (
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content">
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Não foi possível carregar o painel</h2>
+            <p className="ps">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content">
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Nenhuma publicação neste período</h2>
+            <p className="ps">
+              Selecione outro período ou publique os dados deste ciclo na Administração.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const d = data.payload;
   const result = Math.round(d.resultado);
@@ -126,16 +193,47 @@ export function IdpPublishedPanel() {
       {exportButton}
       {exportError ? (
         <div className="content" style={{ padding: "8px 0 0" }}>
-          <p className="ps" style={{ color: RED }}>{exportError}</p>
+          <p className="ps" style={{ color: RED }}>
+            {exportError}
+          </p>
         </div>
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
+        {readingContext}
         <div className="mgrid">
-          <PanelMetric label="Execução geral" value={`${result}%`} meta={`Meta >${d.meta}%`} tone={resultOk ? "G" : "R"} ok={resultOk} />
-          <PanelMetric label="Civil" value={disciplineValue(d.civil)} meta="Por disciplina" tone={(d.civil ?? 0) >= d.meta ? "G" : "A"} ok={d.civil !== null && d.civil !== undefined && d.civil >= d.meta} />
-          <PanelMetric label="Mecânica" value={disciplineValue(d.mecanica)} meta="Por disciplina" tone={(d.mecanica ?? 0) >= d.meta ? "G" : "A"} ok={d.mecanica !== null && d.mecanica !== undefined && d.mecanica >= d.meta} />
-          <PanelMetric label="Elétrica" value={disciplineValue(d.eletrica ?? d.eia)} meta="Por disciplina" tone={(d.eletrica ?? d.eia ?? 0) >= d.meta ? "G" : "A"} ok={(d.eletrica ?? d.eia ?? 0) >= d.meta} />
+          <PanelMetric
+            label="Execução geral"
+            value={`${result}%`}
+            meta={`Meta >${d.meta}%`}
+            tone={resultOk ? "G" : "R"}
+            ok={resultOk}
+            icon={TrendingUp}
+          />
+          <PanelMetric
+            label="Civil"
+            value={disciplineValue(d.civil)}
+            meta="Por disciplina"
+            tone={(d.civil ?? 0) >= d.meta ? "G" : "A"}
+            ok={d.civil !== null && d.civil !== undefined && d.civil >= d.meta}
+            icon={Building2}
+          />
+          <PanelMetric
+            label="Mecânica"
+            value={disciplineValue(d.mecanica)}
+            meta="Por disciplina"
+            tone={(d.mecanica ?? 0) >= d.meta ? "G" : "A"}
+            ok={d.mecanica !== null && d.mecanica !== undefined && d.mecanica >= d.meta}
+            icon={Wrench}
+          />
+          <PanelMetric
+            label="Elétrica"
+            value={disciplineValue(d.eletrica ?? d.eia)}
+            meta="Por disciplina"
+            tone={(d.eletrica ?? d.eia ?? 0) >= d.meta ? "G" : "A"}
+            ok={(d.eletrica ?? d.eia ?? 0) >= d.meta}
+            icon={Zap}
+          />
         </div>
 
         {/* Container do indicador: agrupa os gráficos e a leitura por unidade
@@ -145,9 +243,15 @@ export function IdpPublishedPanel() {
           <div className="ph">Aderência do Cronograma — Avanço Físico (RSO)</div>
           <div className="ps rdo-panel-summary">
             <span className="rdo-panel-target">META: &gt;{d.meta}%</span>
-            <span>Resultado: <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong></span>
+            <span>
+              Resultado:{" "}
+              <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>{result}%</strong>
+            </span>
             <span style={{ color: "#bbb" }}>
-              — competência {competenceLabel(selectedYear, selectedMonth)} · {d.documentosAtivos ?? d.unidades.length} RSO(s) ativo(s) · publicado em {formatPublishedAt(data.publishedAt)} por {data.publishedBy.name} · versão {data.version}
+              — competência {competenceLabel(selectedYear, selectedMonth)} ·{" "}
+              {d.documentosAtivos ?? d.unidades.length} RSO(s) ativo(s) · publicado em{" "}
+              {formatPublishedAt(data.publishedAt)} por {data.publishedBy.name} · versão{" "}
+              {data.version}
             </span>
           </div>
 
@@ -161,13 +265,30 @@ export function IdpPublishedPanel() {
                     <LineChart data={d.mensal} margin={{ top: 8, right: 12, bottom: 2, left: -16 }}>
                       <CartesianGrid stroke="#f4f4f4" vertical={false} />
                       <XAxis dataKey="label" tick={{ fontFamily: "Montserrat", fontSize: 10 }} />
-                      <YAxis tick={{ fontFamily: "Montserrat", fontSize: 10 }} tickFormatter={(value) => `${value}%`} />
-                      <Tooltip formatter={(value) => [value === null ? "Sem dados" : `${value}%`, "Aderência"]} />
+                      <YAxis
+                        tick={{ fontFamily: "Montserrat", fontSize: 10 }}
+                        tickFormatter={(value) => `${value}%`}
+                      />
+                      <Tooltip
+                        formatter={(value) => [
+                          value === null ? "Sem dados" : `${value}%`,
+                          "Aderência",
+                        ]}
+                      />
                       <ReferenceLine y={d.meta} stroke={RED} strokeDasharray="5 4" />
-                      <Line connectNulls={false} type="monotone" dataKey="v" stroke={BLUE} strokeWidth={2} dot={{ r: 4 }} />
+                      <Line
+                        connectNulls={false}
+                        type="monotone"
+                        dataKey="v"
+                        stroke={BLUE}
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : <p className="ps">Sem dados mensais publicados.</p>}
+                ) : (
+                  <p className="ps">Sem dados mensais publicados.</p>
+                )}
               </div>
             </div>
 
@@ -177,9 +298,19 @@ export function IdpPublishedPanel() {
                 <div className="cs">Comparativo do percentual executado por disciplina.</div>
                 <div className="cw" style={{ height: 160 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 36, left: -10 }}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 8, right: 12, bottom: 36, left: -10 }}
+                    >
                       <CartesianGrid stroke="#f4f4f4" vertical={false} />
-                      <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={56} tick={{ fontSize: 9 }} />
+                      <XAxis
+                        dataKey="name"
+                        interval={0}
+                        angle={-18}
+                        textAnchor="end"
+                        height={56}
+                        tick={{ fontSize: 9 }}
+                      />
                       <YAxis tickFormatter={(value) => `${value}%`} tick={{ fontSize: 9 }} />
                       <Tooltip formatter={(value) => [`${value}%`, "Aderência"]} />
                       <ReferenceLine y={d.meta} stroke={RED} strokeDasharray="5 4" />
@@ -194,16 +325,30 @@ export function IdpPublishedPanel() {
           <div className="indicator-subcard">
             <div className="ct">Execução por unidade — RSO utilizado</div>
             <div className="cs">Leitura visual de desempenho por unidade.</div>
-            {d.unidades.length ? d.unidades.map((unit) => {
-              const ok = unit.v >= d.meta;
-              return (
-                <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
-                  <div className="uname">{formatIdpUnitLabel(unit.n)}</div>
-                  <div className="utrack"><div className="ufill" style={{ width: `${Math.min(100, Math.max(0, unit.v))}%`, background: ok ? GREEN : RED }} /></div>
-                  <div className="uval" style={{ color: ok ? GREEN : RED }}>{Math.round(unit.v)}%</div>
-                </div>
-              );
-            }) : <p className="ps">Sem unidades publicadas.</p>}
+            {d.unidades.length ? (
+              d.unidades.map((unit) => {
+                const ok = unit.v >= d.meta;
+                return (
+                  <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
+                    <div className="uname">{formatIdpUnitLabel(unit.n)}</div>
+                    <div className="utrack">
+                      <div
+                        className="ufill"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, unit.v))}%`,
+                          background: ok ? GREEN : RED,
+                        }}
+                      />
+                    </div>
+                    <div className="uval" style={{ color: ok ? GREEN : RED }}>
+                      {Math.round(unit.v)}%
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="ps">Sem unidades publicadas.</p>
+            )}
           </div>
         </div>
       </div>
@@ -211,16 +356,31 @@ export function IdpPublishedPanel() {
   );
 }
 
-function PanelMetric({ label, value, meta, tone, ok }: {
+function PanelMetric({
+  label,
+  value,
+  meta,
+  tone,
+  ok,
+  icon: Icon,
+}: {
   label: string;
   value: string;
   meta: string;
   tone: "G" | "A" | "R";
   ok: boolean;
+  icon?: LucideIcon;
 }) {
   return (
     <div className={`mc ${tone}`}>
-      <div className="ml">{label}</div>
+      <div className="mc-head">
+        <div className="ml">{label}</div>
+        {Icon ? (
+          <div className="mc-icon">
+            <Icon />
+          </div>
+        ) : null}
+      </div>
       <div className={`mv ${tone}`}>{value}</div>
       <div className="mm">{meta}</div>
       <div className={`ms ${ok ? "ok" : "no"}`}>{ok ? "✓ Atingida" : "✗ Abaixo"}</div>

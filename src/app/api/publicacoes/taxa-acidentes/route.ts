@@ -6,12 +6,13 @@ import {
   loadAccidentRateData,
   saveAccidentIndicatorResult,
 } from "@/features/taxa-acidentes/services";
-import { periodFromOptionalFields } from "@/lib/period";
+import { parsePeriodRangeParams, periodFromOptionalFields } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
+import { selectPublicationForPeriod } from "@/server/publications/period-selection";
 
 const MODULE = "taxa-acidentes";
 const INDICATOR = "taxa";
@@ -43,22 +44,29 @@ function serializePublication(publication: {
   return { ...publication, publishedAt: publication.publishedAt.toISOString() };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
-    const publication = await prisma.indicatorPublication.findFirst({
-      where: { module: MODULE, indicator: INDICATOR, active: true },
+    const requestedPeriod = parsePeriodRangeParams(req.nextUrl.searchParams);
+    const publications = await prisma.indicatorPublication.findMany({
+      where: { module: MODULE, indicator: INDICATOR },
       orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
       include: {
         publishedBy: { select: { id: true, name: true, email: true } },
       },
     });
+    const { publication, historyCount } = selectPublicationForPeriod(
+      MODULE,
+      publications,
+      requestedPeriod,
+    );
     return NextResponse.json({
       publication: publication ? serializePublication(publication) : null,
+      historyCount,
     });
   } catch (error) {
     if (missingTables(error)) {
-      return NextResponse.json({ publication: null, setupRequired: true });
+      return NextResponse.json({ publication: null, historyCount: 0, setupRequired: true });
     }
     return handleApiError(error);
   }

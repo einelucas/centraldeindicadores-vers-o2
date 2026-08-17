@@ -1,0 +1,11 @@
+- generic [ref=f11e3]:
+  - img "Inpasa" [ref=f11e4]
+  - heading "Central de Indicadores" [level=1] [ref=f11e5]
+  - paragraph [ref=f11e6]: Acesse com suas credenciais.
+  - generic [ref=f11e7]:
+    - generic [ref=f11e8]: E-mail
+    - textbox "E-mail" [ref=f11e9]
+  - generic [ref=f11e10]:
+    - generic [ref=f11e11]: Senha
+    - textbox "Senha" [ref=f11e12]
+  - button "Entrar" [ref=f11e13] [cursor=pointer]

@@ -1,7 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Medal, Percent, Trophy, type LucideIcon } from "lucide-react";
+import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { StatusBadge } from "@/components/indicators/StatusBadge";
 import type {
   GeneralPanelData,
@@ -9,6 +14,9 @@ import type {
   GeneralPanelMonthCell,
 } from "@/features/scorecard/publications";
 import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
+import type { PeriodRange } from "@/lib/period";
+
+type DashboardResponse = GeneralPanelData & { historyCount?: number };
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -94,6 +102,7 @@ function SummaryMetric({
   sub,
   state,
   color,
+  icon: Icon,
 }: {
   label: string;
   value: string;
@@ -103,13 +112,21 @@ function SummaryMetric({
       com mais níveis do que G/A/R, ex.: o degradê de 5 faixas da legenda
       setorial. */
   color?: string;
+  icon?: LucideIcon;
 }) {
   return (
     <div
       className={`mc${state ? ` ${state}` : ""}`}
       style={color ? { borderLeftColor: color } : undefined}
     >
-      <div className="ml">{label}</div>
+      <div className="mc-head">
+        <div className="ml">{label}</div>
+        {Icon ? (
+          <div className="mc-icon">
+            <Icon />
+          </div>
+        ) : null}
+      </div>
       <div className={`mv${state ? ` ${state}` : ""}`} style={color ? { color } : undefined}>
         {value}
       </div>
@@ -129,27 +146,43 @@ function sectoralTone(value: number): string {
 }
 
 export function DashboardOverview() {
-  const [data, setData] = useState<GeneralPanelData | null>(null);
+  const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { year, semester, cycle, isCurrent, setPeriod } = useReadingContextCycle();
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+  const requestIdRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (period: PeriodRange) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+    setData(null);
     try {
-      const response = await fetch("/api/dashboard", { cache: "no-store" });
+      const response = await fetch(`/api/dashboard?${periodQueryString(period)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) throw new Error("Falha ao carregar o Painel Geral.");
-      setData((await response.json()) as GeneralPanelData);
+      const body = (await response.json()) as DashboardResponse;
+      if (requestId !== requestIdRef.current) return;
+      setData(body);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Falha ao carregar o Painel Geral.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
-    const refresh = () => void load();
+    void load(cycle);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, cycle.startYear, cycle.startMonth, cycle.endYear, cycle.endMonth]);
+
+  useEffect(() => {
+    const refresh = () => void load(cycleRef.current);
     window.addEventListener("rdo:published", refresh);
     window.addEventListener("indicator:published", refresh);
     return () => {
@@ -157,6 +190,17 @@ export function DashboardOverview() {
       window.removeEventListener("indicator:published", refresh);
     };
   }, [load]);
+
+  const readingContext = (
+    <ReadingContextCard
+      activeHref="/dashboard/scorecard"
+      historyCount={data?.historyCount ?? 0}
+      year={year}
+      semester={semester}
+      onPeriodChange={setPeriod}
+      isCurrent={isCurrent}
+    />
+  );
 
   const monthlyPointTotals = useMemo(() => {
     if (!data) return [];
@@ -172,6 +216,7 @@ export function DashboardOverview() {
     return (
       <div className="painel-frontend">
         <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
           <div className="empty">
             <p className="ps">Carregando Painel Geral…</p>
           </div>
@@ -182,19 +227,31 @@ export function DashboardOverview() {
 
   if (error && !data) {
     return (
-      <PublishedPanelPlaceholder
-        title="Não foi possível carregar o Painel Geral"
-        description={error}
-      />
+      <div className="painel-frontend">
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Não foi possível carregar o Painel Geral</h2>
+            <p className="ps">{error}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!data?.hasData) {
     return (
-      <PublishedPanelPlaceholder
-        title="Nenhum indicador publicado ainda"
-        description='Vá em cada aba, carregue os dados na Administração e clique em "Publicar no Painel". O Painel Geral será montado somente com os snapshots publicados.'
-      />
+      <div className="painel-frontend">
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Nenhum indicador publicado neste período</h2>
+            <p className="ps">
+              Selecione outro período ou publique os dados deste ciclo nas abas de Administração.
+            </p>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -207,28 +264,33 @@ export function DashboardOverview() {
   return (
     <div className="painel-frontend">
       <div className="content" style={{ padding: "14px 0 0" }}>
+        {readingContext}
         <div className="mgrid">
           <SummaryMetric
             label="Pontuação Prevista — Semestre"
             value={formatPoints(data.pontuacaoPrevistaSemestre)}
             sub="Meta total dos 6 meses"
+            icon={Trophy}
           />
           <SummaryMetric
             label="Pontuação Prevista — Período"
             value={formatPoints(data.pontuacaoPrevista)}
             sub={`Meta dos ${data.monthKeys.length} mês(es) com dados`}
+            icon={Trophy}
           />
           <SummaryMetric
             label="Pontos Realizados"
             value={data.pontosRealizados.toLocaleString("pt-BR")}
             sub="Acumulado no período com dados"
             state="A"
+            icon={Medal}
           />
           <SummaryMetric
             label="Atendimento Geral"
             value={`${roundedAtendimentoGeral}%`}
             sub="Realizado ÷ previsto do período"
             color={sectoralTone(roundedAtendimentoGeral)}
+            icon={Percent}
           />
         </div>
 
@@ -375,7 +437,9 @@ export function DashboardOverview() {
             <div className="indicator-subcard">
               <div className="ct">Legenda · Indicadores setoriais</div>
 
-              <div className="cs">Faixas de leitura para os indicadores setoriais (por unidade).</div>
+              <div className="cs">
+                Faixas de leitura para os indicadores setoriais (por unidade).
+              </div>
 
               <LegendRow
                 dot={<span className="dot" style={{ background: "#609346" }} />}

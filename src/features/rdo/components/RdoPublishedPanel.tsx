@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileDown } from "lucide-react";
+import {
+  CircleCheckBig,
+  FileDown,
+  FileText,
+  Hourglass,
+  PencilLine,
+  type LucideIcon,
+} from "lucide-react";
 import {
   CartesianGrid,
   Cell,
@@ -17,10 +24,14 @@ import {
   YAxis,
 } from "recharts";
 import type { RdoPublishedPayload } from "@/features/rdo/publications";
-import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
-import { formatPeriodRangeLabel } from "@/lib/period";
+import { formatPeriodRangeLabel, type PeriodRange } from "@/lib/period";
 import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 
 interface PublicationResponse {
@@ -52,37 +63,68 @@ function formatPublishedAt(value: string): string {
 
 export function RdoPublishedPanel() {
   const [data, setData] = useState<PublicationResponse["publication"]>(null);
+  const [historyCount, setHistoryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { year, semester, cycle, isCurrent, setPeriod } = useReadingContextCycle();
   const panelRef = useRef<HTMLDivElement>(null);
   const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
+
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+  /** Só a resposta da requisição mais recente pode gravar estado — evita que
+      uma troca rápida de período seja sobrescrita por uma resposta antiga
+      que chegue fora de ordem. */
+  const requestIdRef = useRef(0);
 
   const handleExportPdf = useCallback(
     () => exportPdf(`RDO_painel_${new Date().toISOString().slice(0, 10)}.pdf`),
     [exportPdf],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (period: PeriodRange) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+    setData(null);
     try {
-      const response = await fetch("/api/publicacoes/rdo", { cache: "no-store" });
+      const response = await fetch(`/api/publicacoes/rdo?${periodQueryString(period)}`, {
+        cache: "no-store",
+      });
       if (!response.ok) throw new Error("Falha ao carregar o painel publicado.");
-      const body = (await response.json()) as PublicationResponse;
+      const body = (await response.json()) as PublicationResponse & { historyCount?: number };
+      if (requestId !== requestIdRef.current) return;
       setData(body.publication);
+      setHistoryCount(body.historyCount ?? 0);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Falha ao carregar o painel.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
-    const refresh = () => void load();
+    void load(cycle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, cycle.startYear, cycle.startMonth, cycle.endYear, cycle.endMonth]);
+
+  useEffect(() => {
+    const refresh = () => void load(cycleRef.current);
     window.addEventListener("rdo:published", refresh);
     return () => window.removeEventListener("rdo:published", refresh);
   }, [load]);
+
+  const readingContext = (
+    <ReadingContextCard
+      activeHref="/dashboard/rdo"
+      historyCount={historyCount}
+      year={year}
+      semester={semester}
+      onPeriodChange={setPeriod}
+      isCurrent={isCurrent}
+    />
+  );
 
   const exportButton = (
     <ToolbarSlotContent>
@@ -103,6 +145,7 @@ export function RdoPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
           <div className="empty">
             <p className="ps">Carregando painel publicado…</p>
           </div>
@@ -113,11 +156,33 @@ export function RdoPublishedPanel() {
 
   if (error && !data) {
     return (
-      <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Não foi possível carregar o painel</h2>
+            <p className="ps">{error}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  if (!data) return <PublishedPanelPlaceholder />;
+  if (!data) {
+    return (
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Nenhuma publicação para este período</h2>
+            <p className="ps">Escolha outro ano ou semestre acima, ou clique em “Ciclo atual”.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const d = data.payload;
   const result = Math.round(d.resultado);
@@ -142,6 +207,7 @@ export function RdoPublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
+        {readingContext}
         <div className="mgrid">
           <PanelMetric
             label="Resultado"
@@ -149,24 +215,28 @@ export function RdoPublishedPanel() {
             meta={`Meta >${d.meta}%`}
             tone={resultOk ? "G" : "R"}
             ok={resultOk}
+            icon={CircleCheckBig}
           />
           <PanelMetric
             label="Relatórios aprovados"
             value={d.aprovados.toLocaleString("pt-BR")}
             meta={`De ${d.emitidos.toLocaleString("pt-BR")} emitidos`}
             tone="G"
+            icon={FileText}
           />
           <PanelMetric
             label="Em revisão"
             value={`${d.emRevisaoPct.toFixed(1)}%`}
             meta={`${reviewingCount.toLocaleString("pt-BR")} relatórios`}
             tone="A"
+            icon={Hourglass}
           />
           <PanelMetric
             label="Preenchendo"
             value={`${d.preenchendoPct.toFixed(1)}%`}
             meta={`${fillingCount.toLocaleString("pt-BR")} relatórios`}
             tone="A"
+            icon={PencilLine}
           />
         </div>
 
@@ -190,7 +260,9 @@ export function RdoPublishedPanel() {
           <div className="g2 indicator-subgrid">
             <div className="indicator-subcard">
               <div className="ct">Distribuição de status</div>
-              <div className="cs">Proporção entre relatórios aprovados, em revisão e preenchendo.</div>
+              <div className="cs">
+                Proporção entre relatórios aprovados, em revisão e preenchendo.
+              </div>
               <div className="cw" style={{ height: 130 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart margin={{ top: 2, right: 4, bottom: 2, left: 4 }}>
@@ -302,17 +374,26 @@ function PanelMetric({
   meta,
   tone,
   ok,
+  icon: Icon,
 }: {
   label: string;
   value: string;
   meta: string;
   tone: "G" | "A" | "R";
   ok?: boolean;
+  icon?: LucideIcon;
 }) {
   const success = ok ?? tone === "G";
   return (
     <div className={`mc ${tone}`}>
-      <div className="ml">{label}</div>
+      <div className="mc-head">
+        <div className="ml">{label}</div>
+        {Icon ? (
+          <div className="mc-icon">
+            <Icon />
+          </div>
+        ) : null}
+      </div>
       <div className={`mv ${tone}`}>{value}</div>
       <div className="mm">{meta}</div>
       {ok !== undefined ? (

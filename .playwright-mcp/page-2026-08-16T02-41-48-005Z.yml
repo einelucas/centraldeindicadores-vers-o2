@@ -1,0 +1,167 @@
+- generic [active] [ref=f35e1]:
+  - banner [ref=f35e2]:
+    - generic [ref=f35e3]:
+      - img "Inpasa" [ref=f35e4]
+      - button "Voltar" [ref=f35e5] [cursor=pointer]
+      - generic [ref=f35e8]:
+        - paragraph [ref=f35e9]: Planejamento
+        - paragraph [ref=f35e10]: Indicadores de Obra
+    - searchbox [ref=f35e12]
+    - generic [ref=f35e13]:
+      - button "Notificações" [ref=f35e14] [cursor=pointer]
+      - link "Registro de Atividades" [ref=f35e18] [cursor=pointer]:
+        - /url: /dashboard/auditoria
+      - button "Exportar dados" [ref=f35e23] [cursor=pointer]
+      - button "LP" [ref=f35e29] [cursor=pointer]
+  - navigation "Indicadores" [ref=f35e35]:
+    - generic [ref=f35e36]:
+      - link "Scorecard" [ref=f35e37] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f35e43]:
+      - link "RDO" [ref=f35e44] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f35e47]:
+      - link "IDP - Disciplinas" [ref=f35e48] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f35e52]:
+      - link "RNC" [ref=f35e53] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f35e56]:
+      - link "5S" [ref=f35e57] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f35e61]:
+      - link "Taxa de Acidentes" [ref=f35e62] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+    - generic [ref=f35e104]:
+      - button "Painel" [ref=f35e105] [cursor=pointer]
+      - button "Administração" [ref=f35e111] [cursor=pointer]
+      - button "Exportar PDF" [ref=f35e115] [cursor=pointer]
+  - main [ref=f35e68]:
+    - generic [ref=f35e69]:
+      - generic [ref=f35e70]:
+        - paragraph [ref=f35e71]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=f35e72]
+        - paragraph [ref=f35e73]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - generic [ref=f35e120]:
+        - generic [ref=f35e121]:
+          - generic [ref=f35e122]:
+            - generic [ref=f35e123]:
+              - generic [ref=f35e124]: Contexto da leitura
+              - paragraph [ref=f35e125]: Selecione o contexto desejado para a leitura dos indicadores.
+            - generic [ref=f35e126]:
+              - generic [ref=f35e127]: 2026 S2
+              - generic [ref=f35e128]: RDO
+              - generic [ref=f35e129]: Histórico 5
+          - generic [ref=f35e130]:
+            - generic [ref=f35e131]:
+              - generic [ref=f35e132]: Guia ativa
+              - button "RDO" [ref=f35e133] [cursor=pointer]
+            - generic [ref=f35e143]:
+              - generic [ref=f35e144]: Período
+              - combobox "Período" [ref=f35e145]:
+                - option "Jun – Nov" [selected]
+                - option "Dez – Mai"
+            - generic [ref=f35e146]:
+              - generic [ref=f35e147]: Ano
+              - combobox "Ano" [ref=f35e148]:
+                - option "2027"
+                - option "2026" [selected]
+                - option "2025"
+                - option "2024"
+                - option "2023"
+                - option "2022"
+          - generic [ref=f35e149]:
+            - paragraph [ref=f35e150]: Período atual · 2026 S2
+            - button "Ciclo atual" [disabled] [ref=f35e151]
+        - generic [ref=f35e152]:
+          - generic [ref=f35e153]:
+            - generic [ref=f35e154]: Resultado
+            - generic [ref=f35e160]: 82%
+            - generic [ref=f35e161]: Meta >80%
+            - generic [ref=f35e162]: ✓ Atingida
+          - generic [ref=f35e163]:
+            - generic [ref=f35e164]: Relatórios aprovados
+            - generic [ref=f35e170]: "489"
+            - generic [ref=f35e171]: De 600 emitidos
+          - generic [ref=f35e172]:
+            - generic [ref=f35e173]: Em revisão
+            - generic [ref=f35e179]: 9.8%
+            - generic [ref=f35e180]: 59 relatórios
+          - generic [ref=f35e181]:
+            - generic [ref=f35e182]: Preenchendo
+            - generic [ref=f35e188]: 8.7%
+            - generic [ref=f35e189]: 52 relatórios
+        - generic [ref=f35e190]:
+          - generic [ref=f35e191]: Aprovação de RDO
+          - generic [ref=f35e192]:
+            - generic [ref=f35e193]: "META: >80%"
+            - generic [ref=f35e194]:
+              - text: "Resultado:"
+              - strong [ref=f35e195]: 82%
+            - generic [ref=f35e196]: "— publicado em 14/08/2026, 16:02 por Lucas Pinheiro · Período: Jun/2026 – Nov/2026"
+          - generic [ref=f35e197]:
+            - generic [ref=f35e198]:
+              - generic [ref=f35e199]: Distribuição de status
+              - generic [ref=f35e200]: Proporção entre relatórios aprovados, em revisão e preenchendo.
+              - generic [ref=f35e203]:
+                - list [ref=f35e205]:
+                  - listitem [ref=f35e206]:
+                    - img "Aprovado legend icon" [ref=f35e207]
+                    - text: Aprovado
+                  - listitem [ref=f35e209]:
+                    - img "Em revisão legend icon" [ref=f35e210]
+                    - text: Em revisão
+                  - listitem [ref=f35e212]:
+                    - img "Preenchendo legend icon" [ref=f35e213]
+                    - text: Preenchendo
+                - application [ref=f35e215]:
+                  - generic [ref=f35e228]:
+                    - generic [ref=f35e229]: 82%
+                    - generic [ref=f35e231]: 10%
+                    - generic [ref=f35e233]: 9%
+            - generic [ref=f35e235]:
+              - generic [ref=f35e236]: Aprovação mensal
+              - generic [ref=f35e237]: Aderência mensal comparada com a meta do indicador.
+              - generic [ref=f35e240]:
+                - list [ref=f35e242]:
+                  - listitem [ref=f35e243]:
+                    - img "Aprovação (%) legend icon" [ref=f35e244]
+                    - text: Aprovação (%)
+                - application [ref=f35e246]:
+                  - generic [ref=f35e269]:
+                    - generic [ref=f35e270]:
+                      - generic [ref=f35e271]: Jun/2026
+                      - generic [ref=f35e273]: Jul/2026
+                      - generic [ref=f35e275]: Ago/2026
+                      - generic [ref=f35e277]: Set/2026
+                      - generic [ref=f35e279]: Out/2026
+                      - generic [ref=f35e281]: Nov/2026
+                    - generic [ref=f35e283]:
+                      - generic [ref=f35e284]: 0%
+                      - generic [ref=f35e286]: 25%
+                      - generic [ref=f35e288]: 50%
+                      - generic [ref=f35e290]: 75%
+                      - generic [ref=f35e292]: 100%
+                    - generic [ref=f35e294]: Meta (80%)
+          - generic [ref=f35e295]:
+            - generic [ref=f35e296]: Aprovação por unidade
+            - generic [ref=f35e297]: Leitura visual de desempenho por unidade.
+            - generic [ref=f35e298]:
+              - generic [ref=f35e299]: RIO VERDE
+              - generic [ref=f35e302]: 84%
+            - generic [ref=f35e303]:
+              - generic [ref=f35e304]: RONDONOPOLIS
+              - generic [ref=f35e307]: 80%
+            - generic [ref=f35e308]:
+              - generic [ref=f35e309]: NOVA MUTUM
+              - generic [ref=f35e312]: 80%
+  - contentinfo [ref=f35e103]: Central de Indicadores - 2026
+  - button "Open Next.js Dev Tools" [ref=f35e318] [cursor=pointer]
+  - alert [ref=f35e322]
+  - generic [ref=f35e323]: 0%

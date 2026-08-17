@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 
 import {
@@ -9,10 +9,16 @@ import {
 } from "@/features/scorecard/publications";
 import { loadScorecardPanelPeriod } from "@/features/scorecard/services";
 import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
-import { enumeratePeriodMonths, getCurrentCycle, type PeriodRange } from "@/lib/period";
+import {
+  enumeratePeriodMonths,
+  getCurrentCycle,
+  parsePeriodRangeParams,
+  type PeriodRange,
+} from "@/lib/period";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
+import { publicationPeriod, type PublishedModule } from "@/server/publications/period-selection";
 
 type PanelTargetIndicator = Pick<GeneralPanelIndicator, "key" | "direction" | "meta">;
 
@@ -121,7 +127,7 @@ function isMissingPublicationTable(error: unknown): boolean {
 }
 
 /** GET /api/dashboard — Painel Geral 2026 baseado em snapshots publicados. */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
 
@@ -137,13 +143,38 @@ export async function GET() {
       }),
       loadScorecardPanelPeriod(prisma),
     ]);
-    const period = savedPeriod ?? getCurrentCycle();
+    const period =
+      parsePeriodRangeParams(req.nextUrl.searchParams) ?? savedPeriod ?? getCurrentCycle();
+    const supportedModules = new Set<PublishedModule>([
+      "rdo",
+      "idp",
+      "rnc",
+      "cinco-s",
+      "taxa-acidentes",
+    ]);
+    const historyPeriods = new Set<string>();
+    for (const publication of publications) {
+      if (!supportedModules.has(publication.module as PublishedModule)) continue;
+      const itemPeriod = publicationPeriod(
+        publication.module as PublishedModule,
+        publication.payload,
+      );
+      if (itemPeriod) {
+        historyPeriods.add(
+          `${itemPeriod.startYear}-${itemPeriod.startMonth}:${itemPeriod.endYear}-${itemPeriod.endMonth}`,
+        );
+      }
+    }
 
-    return NextResponse.json(applySpreadsheetScore(buildGeneralPanelData(publications), period));
+    return NextResponse.json({
+      ...applySpreadsheetScore(buildGeneralPanelData(publications), period),
+      historyCount: historyPeriods.size,
+    });
   } catch (error) {
     if (isMissingPublicationTable(error)) {
       return NextResponse.json({
         ...applySpreadsheetScore(buildGeneralPanelData([]), getCurrentCycle()),
+        historyCount: 0,
         setupRequired: true,
       });
     }

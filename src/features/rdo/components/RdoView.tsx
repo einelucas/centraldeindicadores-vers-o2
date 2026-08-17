@@ -16,8 +16,10 @@ import {
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
+import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
 import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 import { exportRdoPdf } from "@/features/rdo/exports/pdf";
@@ -93,12 +95,17 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
-  const [periodRange, setPeriodRange] = useState<PeriodRange | null>(null);
+  /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. */
+  const { year, semester, cycle: publishPeriod, setPeriod } = useReadingContextCycle();
+  /** Filtro de "Consulta": undefined = segue o período de publicação; null =
+      Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
+  const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
+  const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
 
   const load = useCallback(
-    async (nextThreshold = threshold, nextPeriod = periodRange) => {
+    async (nextThreshold = threshold, nextPeriod = effectivePeriod) => {
       setError(null);
       const params = new URLSearchParams({
         threshold: String(nextThreshold),
@@ -117,7 +124,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
       setData(body);
       setExcludedUnits(body.result.excludedUnits);
     },
-    [periodRange, threshold],
+    [effectivePeriod, threshold],
   );
 
   const loadPublication = useCallback(async () => {
@@ -127,9 +134,18 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
     setPublication(body.publication);
   }, []);
 
+  const effectivePeriodKey = effectivePeriod
+    ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
+    : "all";
+
   useEffect(() => {
-    void Promise.all([load().catch((err: Error) => setError(err.message)), loadPublication()]);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void load().catch((err: Error) => setError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectivePeriodKey]);
+
+  useEffect(() => {
+    void loadPublication();
+  }, [loadPublication]);
 
   const unitOptions = useMemo(() => {
     const codes = new Set<string>([
@@ -268,7 +284,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
       const response = await fetch("/api/publicacoes/rdo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold, ...periodToOptionalFields(periodRange) }),
+        body: JSON.stringify({ threshold, ...periodToOptionalFields(publishPeriod) }),
       });
       const body = (await response.json().catch(() => ({}))) as {
         error?: string;
@@ -498,13 +514,16 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
 
             <Card className="p-4">
               <div className="flex flex-col gap-3">
-                <Label>Período</Label>
-                <PeriodRangeFilter
-                  value={periodRange}
-                  onChange={setPeriodRange}
-                  yearsInData={availableYears}
-                  label=""
-                />
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="mb-0">Período de publicação</Label>
+                  <ViewFilterPopover
+                    value={viewFilter}
+                    onChange={setViewFilter}
+                    yearsInData={availableYears}
+                    publishedLabel={formatPeriodRangeLabel(publishPeriod)}
+                  />
+                </div>
+                <SemesterYearFilter year={year} semester={semester} onChange={setPeriod} label="" />
               </div>
             </Card>
 

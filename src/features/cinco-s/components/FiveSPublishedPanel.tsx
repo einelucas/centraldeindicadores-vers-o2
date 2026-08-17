@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileDown } from "lucide-react";
+import { FileDown, ShieldCheck, type LucideIcon } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -13,14 +13,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { FiveSPublishedPayload } from "@/features/cinco-s/publications";
 import { formatPeriodRangeLabel } from "@/lib/period";
 import { formatFiveSUnitLabel } from "@/features/cinco-s/utils/units";
+import type { PeriodRange } from "@/lib/period";
 
 interface PublicationResponse {
+  historyCount?: number;
   publication: null | {
     id: string;
     version: number;
@@ -52,9 +58,13 @@ function formatPublishedAt(value: string): string {
 
 export function FiveSPublishedPanel() {
   const [publication, setPublication] = useState<PublicationResponse["publication"]>(null);
-
+  const [historyCount, setHistoryCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { year, semester, cycle, isCurrent, setPeriod } = useReadingContextCycle();
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+  const requestIdRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
 
@@ -63,12 +73,14 @@ export function FiveSPublishedPanel() {
     [exportPdf],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (period: PeriodRange) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
+    setPublication(null);
 
     try {
-      const response = await fetch("/api/publicacoes/cinco-s", {
+      const response = await fetch(`/api/publicacoes/cinco-s?${periodQueryString(period)}`, {
         cache: "no-store",
       });
 
@@ -77,19 +89,26 @@ export function FiveSPublishedPanel() {
       }
 
       const body = (await response.json()) as PublicationResponse;
-
+      if (requestId !== requestIdRef.current) return;
       setPublication(body.publication);
+      setHistoryCount(body.historyCount ?? 0);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Falha ao carregar o painel.");
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(cycle);
 
-    const refresh = () => void load();
+    // cycle is represented by its primitive fields to avoid redundant requests.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, cycle.startYear, cycle.startMonth, cycle.endYear, cycle.endMonth]);
+
+  useEffect(() => {
+    const refresh = () => void load(cycleRef.current);
 
     window.addEventListener("cinco-s:published", refresh);
 
@@ -97,6 +116,17 @@ export function FiveSPublishedPanel() {
       window.removeEventListener("cinco-s:published", refresh);
     };
   }, [load]);
+
+  const readingContext = (
+    <ReadingContextCard
+      activeHref="/dashboard/cinco-s"
+      historyCount={historyCount}
+      year={year}
+      semester={semester}
+      onPeriodChange={setPeriod}
+      isCurrent={isCurrent}
+    />
+  );
 
   const exportButton = (
     <ToolbarSlotContent>
@@ -117,6 +147,7 @@ export function FiveSPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
           <div className="empty">
             <p className="ps">Carregando painel publicado…</p>
           </div>
@@ -127,12 +158,34 @@ export function FiveSPublishedPanel() {
 
   if (error && !publication) {
     return (
-      <PublishedPanelPlaceholder title="Não foi possível carregar o painel" description={error} />
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Não foi possível carregar o painel</h2>
+            <p className="ps">{error}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!publication) {
-    return <PublishedPanelPlaceholder />;
+    return (
+      <div className="painel-frontend">
+        {exportButton}
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">Nenhuma publicação neste período</h2>
+            <p className="ps">
+              Selecione outro período ou publique os dados deste ciclo na Administração.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const data = publication.payload;
@@ -151,6 +204,7 @@ export function FiveSPublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
+        {readingContext}
         {/* Apenas o card de resultado semestral */}
         <div
           className="mgrid"
@@ -165,6 +219,7 @@ export function FiveSPublishedPanel() {
             meta={`Meta ≥${data.meta} pts`}
             tone={resultOk ? "G" : "R"}
             ok={resultOk}
+            icon={ShieldCheck}
           />
         </div>
 
@@ -334,18 +389,27 @@ function PanelMetric({
   meta,
   tone,
   ok,
+  icon: Icon,
 }: {
   label: string;
   value: string;
   meta: string;
   tone: "G" | "A" | "R";
   ok?: boolean;
+  icon?: LucideIcon;
 }) {
   const success = ok ?? tone === "G";
 
   return (
     <div className={`mc ${tone}`}>
-      <div className="ml">{label}</div>
+      <div className="mc-head">
+        <div className="ml">{label}</div>
+        {Icon ? (
+          <div className="mc-icon">
+            <Icon />
+          </div>
+        ) : null}
+      </div>
 
       <div className={`mv ${tone}`}>{value}</div>
 

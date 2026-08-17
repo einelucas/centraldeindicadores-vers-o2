@@ -4,7 +4,7 @@ import { computeIdpResult } from "@/features/idp/calculations";
 import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp/configuration";
 import { storedIdpRowToRecord } from "@/features/idp/services";
 import { IDP_DEFAULT_MONTH_START, IDP_DEFAULT_TARGET } from "@/features/idp/types";
-import { normalizePeriodRange } from "@/lib/period";
+import { parsePeriodRangeParams } from "@/lib/period";
 import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
@@ -13,20 +13,6 @@ function isMissingRsoTable(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError && ["P2021", "P2022"].includes(error.code)
   );
-}
-
-function boundedMonth(value: string | null, fallback: number): number {
-  if (value === null || value.trim() === "") return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed)) return fallback;
-  return Math.max(1, Math.min(12, parsed));
-}
-
-function boundedYear(value: string | null, fallback: number): number {
-  if (value === null || value.trim() === "") return fallback;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 2000 || parsed > 2200) return fallback;
-  return parsed;
 }
 
 function dateIso(value: Date | null): string | null {
@@ -88,57 +74,22 @@ export async function GET(req: NextRequest) {
 
     const records = rows.map(storedIdpRowToRecord);
     const years = Array.from(new Set(rows.map((row) => row.referenceYear))).sort((a, b) => b - a);
-    const latest = rows[0]
-      ? { year: rows[0].referenceYear, month: rows[0].referenceMonth }
-      : { year: new Date().getFullYear(), month: new Date().getMonth() + 1 };
 
-    const requestedYearParam = searchParams.get("year");
-    const requestedYear =
-      requestedYearParam === null || requestedYearParam.trim() === ""
-        ? Number.NaN
-        : Number(requestedYearParam);
-    const selectedYear =
-      Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2200
-        ? requestedYear
-        : latest.year;
-
-    const monthsForYear = rows
-      .filter((row) => row.referenceYear === selectedYear)
-      .map((row) => row.referenceMonth);
-    const latestMonthForYear = monthsForYear.length ? Math.max(...monthsForYear) : latest.month;
-    const selectedMonth = boundedMonth(searchParams.get("month"), latestMonthForYear);
-
-    const historyMonthStartRaw = boundedMonth(
-      searchParams.get("historyStart"),
-      IDP_DEFAULT_MONTH_START,
-    );
-    const historyMonthEndRaw = boundedMonth(
-      searchParams.get("historyEnd"),
-      Math.max(selectedMonth, IDP_DEFAULT_MONTH_START),
-    );
-    const historyStartYear = boundedYear(searchParams.get("historyStartYear"), selectedYear);
-    const historyEndYear = boundedYear(searchParams.get("historyEndYear"), selectedYear);
-    const historyRange = normalizePeriodRange({
-      startYear: historyStartYear,
-      startMonth: historyMonthStartRaw,
-      endYear: historyEndYear,
-      endMonth: historyMonthEndRaw,
-    });
+    /** Intervalo travado (Ano + Semestre, vindo do "Contexto da leitura" da
+        Administração) ou de uma consulta pontual — a competência efetiva é a
+        mais recente com RSO dentro dele. Sem período na query ("Tudo"), cai
+        na competência mais recente do histórico inteiro. */
+    const periodRange = parsePeriodRangeParams(searchParams) ?? undefined;
 
     const result = computeIdpResult(
       records,
       threshold,
       excludedDisciplines,
-      {
-        selectedYear,
-        selectedMonth,
-        historyStartYear: historyRange.startYear,
-        historyMonthStart: historyRange.startMonth,
-        historyEndYear: historyRange.endYear,
-        historyMonthEnd: historyRange.endMonth,
-      },
+      { periodRange },
       excludedUnits,
     );
+    const selectedYear = result.selectedYear;
+    const selectedMonth = result.selectedMonth;
     const activeIds = new Set(result.unitRows.map((row) => row.sourceId).filter(Boolean));
 
     return NextResponse.json({
@@ -148,10 +99,10 @@ export async function GET(req: NextRequest) {
       years: years.length ? years : [selectedYear],
       selectedYear,
       selectedMonth,
-      historyStartYear: historyRange.startYear,
-      historyMonthStart: historyRange.startMonth,
-      historyEndYear: historyRange.endYear,
-      historyMonthEnd: historyRange.endMonth,
+      historyStartYear: result.historyStartYear,
+      historyMonthStart: result.historyMonthStart,
+      historyEndYear: result.historyEndYear,
+      historyMonthEnd: result.historyMonthEnd,
       excludedDisciplines,
       result,
       documents: rows.map((row) => ({

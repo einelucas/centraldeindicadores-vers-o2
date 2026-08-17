@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileDown } from "lucide-react";
+import { Activity, AlertTriangle, FileDown, Flag, HeartPulse, type LucideIcon } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -18,17 +18,22 @@ import {
   YAxis,
 } from "recharts";
 import type { BarShapeProps } from "recharts";
-import { PublishedPanelPlaceholder } from "@/components/layout/PublishedPanelPlaceholder";
+import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { usePanelPdfExport } from "@/lib/exports/panel-screenshot-pdf";
 import type { AccidentRatePublishedPayload } from "@/features/taxa-acidentes/publications";
-import { formatPeriodRangeLabel } from "@/lib/period";
+import { formatPeriodRangeLabel, type PeriodRange } from "@/lib/period";
 import {
   compareAccidentUnits,
   formatAccidentUnitLabel,
 } from "@/features/taxa-acidentes/utils/units";
 
 interface PublicationResponse {
+  historyCount?: number;
   publication: null | {
     version: number;
     payload: AccidentRatePublishedPayload;
@@ -96,6 +101,10 @@ export function AccidentRatePublishedPanel() {
   const [response, setResponse] = useState<PublicationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState("");
+  const { year, semester, cycle, isCurrent, setPeriod } = useReadingContextCycle();
+  const cycleRef = useRef(cycle);
+  cycleRef.current = cycle;
+  const requestIdRef = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const { exporting, error: exportError, exportPdf } = usePanelPdfExport(panelRef);
 
@@ -104,9 +113,12 @@ export function AccidentRatePublishedPanel() {
     [exportPdf],
   );
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (period: PeriodRange) => {
+    const requestId = ++requestIdRef.current;
+    setResponse(null);
+    setError(null);
     try {
-      const request = await fetch("/api/publicacoes/taxa-acidentes", {
+      const request = await fetch(`/api/publicacoes/taxa-acidentes?${periodQueryString(period)}`, {
         cache: "no-store",
       });
 
@@ -114,16 +126,42 @@ export function AccidentRatePublishedPanel() {
         throw new Error("Falha ao carregar a publicação.");
       }
 
-      setResponse((await request.json()) as PublicationResponse);
+      const body = (await request.json()) as PublicationResponse;
+      if (requestId !== requestIdRef.current) return;
+      setResponse(body);
       setError(null);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Falha ao carregar o painel.");
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(cycle);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, cycle.startYear, cycle.startMonth, cycle.endYear, cycle.endMonth]);
+
+  useEffect(() => {
+    const refresh = () => void load(cycleRef.current);
+    window.addEventListener("taxa-acidentes:published", refresh);
+    window.addEventListener("indicator:published", refresh);
+    return () => {
+      window.removeEventListener("taxa-acidentes:published", refresh);
+      window.removeEventListener("indicator:published", refresh);
+    };
   }, [load]);
+
+  const readingContext = (
+    <ReadingContextCard
+      activeHref="/dashboard/taxa-acidentes"
+      historyCount={response?.historyCount ?? 0}
+      year={year}
+      semester={semester}
+      onPeriodChange={setPeriod}
+      isCurrent={isCurrent}
+    />
+  );
 
   const unitPeriods = useMemo(() => {
     const units = response?.publication?.payload.unidades ?? [];
@@ -184,19 +222,34 @@ export function AccidentRatePublishedPanel() {
 
   if (error) {
     return (
-      <>
+      <div className="painel-frontend">
         {exportButton}
-        <div className="error-box">{error}</div>
-      </>
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="error-box">{error}</div>
+        </div>
+      </div>
     );
   }
 
   if (!response?.publication) {
     return (
-      <>
+      <div className="painel-frontend">
         {exportButton}
-        <PublishedPanelPlaceholder />
-      </>
+        <div className="content" style={{ padding: "14px 0 0" }}>
+          {readingContext}
+          <div className="empty">
+            <h2 className="ph">
+              {response ? "Nenhuma publicação neste período" : "Carregando painel publicado…"}
+            </h2>
+            {response ? (
+              <p className="ps">
+                Selecione outro período ou publique os dados deste ciclo na Administração.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -218,6 +271,7 @@ export function AccidentRatePublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
+        {readingContext}
         <div className="mgrid">
           <PanelMetric
             label="Taxa Semestral"
@@ -225,6 +279,7 @@ export function AccidentRatePublishedPanel() {
             meta={`Meta ≤ ${decimal(data.meta)}`}
             tone={resultOk ? "G" : "R"}
             ok={resultOk}
+            icon={HeartPulse}
           />
 
           <PanelMetric
@@ -232,6 +287,7 @@ export function AccidentRatePublishedPanel() {
             value={decimal(data.metaFrequencia)}
             meta="Meta da frequência"
             tone="G"
+            icon={Flag}
           />
 
           <PanelMetric
@@ -239,6 +295,7 @@ export function AccidentRatePublishedPanel() {
             value={String(data.acidentesCaf)}
             meta="Total mensal do período"
             tone="A"
+            icon={AlertTriangle}
           />
 
           <PanelMetric
@@ -247,6 +304,7 @@ export function AccidentRatePublishedPanel() {
             meta="Leitura mais recente"
             tone={latestOk ? "G" : "R"}
             ok={latestOk}
+            icon={Activity}
           />
         </div>
 
@@ -640,16 +698,25 @@ function PanelMetric({
   meta,
   tone,
   ok,
+  icon: Icon,
 }: {
   label: string;
   value: string;
   meta: string;
   tone: "G" | "A" | "R";
   ok?: boolean;
+  icon?: LucideIcon;
 }) {
   return (
     <div className={`mc ${tone}`}>
-      <div className="ml">{label}</div>
+      <div className="mc-head">
+        <div className="ml">{label}</div>
+        {Icon ? (
+          <div className="mc-icon">
+            <Icon />
+          </div>
+        ) : null}
+      </div>
       <div className={`mv ${tone}`}>{value}</div>
       <div className="mm">{meta}</div>
 

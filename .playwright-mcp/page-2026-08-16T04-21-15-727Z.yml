@@ -1,0 +1,75 @@
+- generic [active] [ref=f56e1]:
+  - banner [ref=f56e2]:
+    - generic [ref=f56e3]:
+      - img "Inpasa" [ref=f56e4]
+      - button "Voltar" [ref=f56e5] [cursor=pointer]
+      - generic [ref=f56e8]:
+        - paragraph [ref=f56e9]: Planejamento
+        - paragraph [ref=f56e10]: Indicadores de Obra
+    - searchbox [ref=f56e12]
+    - generic [ref=f56e13]:
+      - button "Notificações" [ref=f56e14] [cursor=pointer]
+      - link "Registro de Atividades" [ref=f56e18] [cursor=pointer]:
+        - /url: /dashboard/auditoria
+      - button "Exportar dados" [ref=f56e23] [cursor=pointer]
+      - button "LP" [ref=f56e29] [cursor=pointer]
+  - navigation "Indicadores" [ref=f56e35]:
+    - generic [ref=f56e36]:
+      - link "Scorecard" [ref=f56e37] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f56e43]:
+      - link "RDO" [ref=f56e44] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f56e47]:
+      - link "IDP - Disciplinas" [ref=f56e48] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f56e52]:
+      - link "RNC" [ref=f56e53] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f56e56]:
+      - link "5S" [ref=f56e57] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f56e61]:
+      - link "Taxa de Acidentes" [ref=f56e62] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+  - main [ref=f56e68]:
+    - generic [ref=f56e69]:
+      - generic [ref=f56e70]:
+        - paragraph [ref=f56e71]: Planejamento · RNC
+        - heading "Não Conformidades" [level=1] [ref=f56e72]
+        - paragraph [ref=f56e73]: Painel de acompanhamento das RNCs e do tempo de tratativa por unidade.
+      - generic [ref=f56e76]:
+        - region [ref=f56e77]:
+          - generic [ref=f56e78]:
+            - generic [ref=f56e79]:
+              - heading "Contexto da leitura" [level=2] [ref=f56e80]
+              - paragraph [ref=f56e81]: Selecione o contexto desejado para a leitura dos indicadores.
+            - generic "Resumo do contexto selecionado" [ref=f56e82]:
+              - generic [ref=f56e83]: 2026 S2
+              - generic [ref=f56e84]: RNC
+              - generic [ref=f56e85]: Histórico 0
+          - generic [ref=f56e86]:
+            - group "Guia ativa" [ref=f56e87]:
+              - button "RNC" [ref=f56e89] [cursor=pointer]
+            - group "Período" [ref=f56e92]:
+              - combobox "Período" [ref=f56e94] [cursor=pointer]:
+                - option "2027 S2 · Jun – Nov"
+                - option "2027 S1 · Dez – Mai"
+                - option "Período atual · 2026 S2" [selected]
+                - option "2026 S1 · Dez – Mai"
+                - option "2025 S2 · Jun – Nov"
+                - option "2025 S1 · Dez – Mai"
+                - option "2024 S2 · Jun – Nov"
+                - option "2024 S1 · Dez – Mai"
+                - option "2023 S2 · Jun – Nov"
+                - option "2023 S1 · Dez – Mai"
+                - option "2022 S2 · Jun – Nov"
+                - option "2022 S1 · Dez – Mai"
+        - paragraph [ref=f56e96]: Carregando painel publicado…
+  - contentinfo [ref=f56e97]: Central de Indicadores - 2026

@@ -10,12 +10,13 @@ import {
   recalcFiveSIndicators,
 } from "@/features/cinco-s/services";
 import type { FiveSArea, FiveSNormalizedRecord } from "@/features/cinco-s/types";
-import { periodFromOptionalFields } from "@/lib/period";
+import { parsePeriodRangeParams, periodFromOptionalFields } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
+import { selectPublicationForPeriod } from "@/server/publications/period-selection";
 
 const MODULE = "cinco-s";
 const INDICATOR = "aderencia";
@@ -47,22 +48,29 @@ function serializePublication(publication: {
 }
 
 /** GET /api/publicacoes/cinco-s — último snapshot publicado. */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
-    const publication = await prisma.indicatorPublication.findFirst({
-      where: { module: MODULE, indicator: INDICATOR, active: true },
+    const requestedPeriod = parsePeriodRangeParams(req.nextUrl.searchParams);
+    const publications = await prisma.indicatorPublication.findMany({
+      where: { module: MODULE, indicator: INDICATOR },
       orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
       include: {
         publishedBy: { select: { id: true, name: true, email: true } },
       },
     });
+    const { publication, historyCount } = selectPublicationForPeriod(
+      MODULE,
+      publications,
+      requestedPeriod,
+    );
     return NextResponse.json({
       publication: publication ? serializePublication(publication) : null,
+      historyCount,
     });
   } catch (error) {
     if (isMissingPublicationTable(error)) {
-      return NextResponse.json({ publication: null, setupRequired: true });
+      return NextResponse.json({ publication: null, historyCount: 0, setupRequired: true });
     }
     return handleApiError(error);
   }

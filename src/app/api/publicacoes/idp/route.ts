@@ -6,23 +6,22 @@ import { loadIdpExcludedDisciplines, loadIdpExcludedUnits } from "@/features/idp
 import { toIdpPublishedPayload } from "@/features/idp/publications";
 import { storedIdpRowToRecord } from "@/features/idp/services";
 import { IDP_DEFAULT_TARGET } from "@/features/idp/types";
-import { enumeratePeriodMonths, normalizePeriodRange } from "@/lib/period";
+import { enumeratePeriodMonths, normalizePeriodRange, parsePeriodRangeParams } from "@/lib/period";
 import { recordAudit } from "@/server/audit";
 import { requirePermission } from "@/server/auth/session";
 import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
+import { selectPublicationForPeriod } from "@/server/publications/period-selection";
 
 const MODULE = "idp";
 const INDICATOR = "aderencia";
 
 const publishSchema = z.object({
-  year: z.number().int().min(2000).max(2200),
-  month: z.number().int().min(1).max(12),
-  historyStart: z.number().int().min(1).max(12),
-  historyEnd: z.number().int().min(1).max(12),
-  historyStartYear: z.number().int().min(2000).max(2200).optional(),
-  historyEndYear: z.number().int().min(2000).max(2200).optional(),
+  periodStartYear: z.number().int().min(2000).max(2200),
+  periodStartMonth: z.number().int().min(1).max(12),
+  periodEndYear: z.number().int().min(2000).max(2200),
+  periodEndMonth: z.number().int().min(1).max(12),
   threshold: z
     .number()
     .min(0)
@@ -47,20 +46,27 @@ function serializePublication(publication: {
   return { ...publication, publishedAt: publication.publishedAt.toISOString() };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:read");
-    const publication = await prisma.indicatorPublication.findFirst({
-      where: { module: MODULE, indicator: INDICATOR, active: true },
+    const requestedPeriod = parsePeriodRangeParams(req.nextUrl.searchParams);
+    const publications = await prisma.indicatorPublication.findMany({
+      where: { module: MODULE, indicator: INDICATOR },
       orderBy: [{ publishedAt: "desc" }, { version: "desc" }],
       include: { publishedBy: { select: { id: true, name: true, email: true } } },
     });
+    const { publication, historyCount } = selectPublicationForPeriod(
+      MODULE,
+      publications,
+      requestedPeriod,
+    );
     return NextResponse.json({
       publication: publication ? serializePublication(publication) : null,
+      historyCount,
     });
   } catch (error) {
     if (isMissingPublicationTable(error)) {
-      return NextResponse.json({ publication: null, setupRequired: true });
+      return NextResponse.json({ publication: null, historyCount: 0, setupRequired: true });
     }
     return handleApiError(error);
   }
@@ -72,14 +78,14 @@ export async function POST(req: NextRequest) {
     const user = await requirePermission("indicators:publish");
     const input = publishSchema.parse(await req.json());
     const thresholdFraction = input.threshold / 100;
-    const historyRange = normalizePeriodRange({
-      startYear: input.historyStartYear ?? input.year,
-      startMonth: input.historyStart,
-      endYear: input.historyEndYear ?? input.year,
-      endMonth: input.historyEnd,
+    const periodRange = normalizePeriodRange({
+      startYear: input.periodStartYear,
+      startMonth: input.periodStartMonth,
+      endYear: input.periodEndYear,
+      endMonth: input.periodEndMonth,
     });
     const referenceYears = Array.from(
-      new Set([...enumeratePeriodMonths(historyRange).map((item) => item.year), input.year]),
+      new Set(enumeratePeriodMonths(periodRange).map((item) => item.year)),
     );
 
     const [rows, excludedDisciplines, excludedUnits] = await Promise.all([
@@ -108,20 +114,13 @@ export async function POST(req: NextRequest) {
       records,
       thresholdFraction,
       excludedDisciplines,
-      {
-        selectedYear: input.year,
-        selectedMonth: input.month,
-        historyStartYear: historyRange.startYear,
-        historyMonthStart: historyRange.startMonth,
-        historyEndYear: historyRange.endYear,
-        historyMonthEnd: historyRange.endMonth,
-      },
+      { periodRange },
       excludedUnits,
     );
 
     if (!result.activeDocuments) {
       return NextResponse.json(
-        { error: "Não há RSO para a competência selecionada." },
+        { error: "Não há RSO no semestre selecionado para publicar." },
         { status: 400 },
       );
     }
@@ -167,8 +166,12 @@ export async function POST(req: NextRequest) {
         module: MODULE,
         indicator: INDICATOR,
         version: publication.version,
-        year: input.year,
-        month: input.month,
+        year: result.selectedYear,
+        month: result.selectedMonth,
+        periodStartYear: input.periodStartYear,
+        periodStartMonth: input.periodStartMonth,
+        periodEndYear: input.periodEndYear,
+        periodEndMonth: input.periodEndMonth,
         target: input.threshold,
         result: payload.resultado,
         status,

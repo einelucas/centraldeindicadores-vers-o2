@@ -1,0 +1,79 @@
+- generic [active] [ref=f36e1]:
+  - banner [ref=f36e2]:
+    - generic [ref=f36e3]:
+      - img "Inpasa" [ref=f36e4]
+      - button "Voltar" [ref=f36e5] [cursor=pointer]
+      - generic [ref=f36e8]:
+        - paragraph [ref=f36e9]: Planejamento
+        - paragraph [ref=f36e10]: Indicadores de Obra
+    - searchbox [ref=f36e12]
+    - generic [ref=f36e13]:
+      - button "Notificações" [ref=f36e14] [cursor=pointer]
+      - link "Registro de Atividades" [ref=f36e18] [cursor=pointer]:
+        - /url: /dashboard/auditoria
+      - button "Exportar dados" [ref=f36e23] [cursor=pointer]
+      - button "LP" [ref=f36e29] [cursor=pointer]
+  - navigation "Indicadores" [ref=f36e35]:
+    - generic [ref=f36e36]:
+      - link "Scorecard" [ref=f36e37] [cursor=pointer]:
+        - /url: /dashboard/scorecard
+      - tooltip "Scorecard"
+    - generic [ref=f36e43]:
+      - link "RDO" [ref=f36e44] [cursor=pointer]:
+        - /url: /dashboard/rdo
+      - tooltip "RDO"
+    - generic [ref=f36e47]:
+      - link "IDP - Disciplinas" [ref=f36e48] [cursor=pointer]:
+        - /url: /dashboard/idp
+      - tooltip "IDP - Disciplinas"
+    - generic [ref=f36e52]:
+      - link "RNC" [ref=f36e53] [cursor=pointer]:
+        - /url: /dashboard/rnc
+      - tooltip "RNC"
+    - generic [ref=f36e56]:
+      - link "5S" [ref=f36e57] [cursor=pointer]:
+        - /url: /dashboard/cinco-s
+      - tooltip "5S"
+    - generic [ref=f36e61]:
+      - link "Taxa de Acidentes" [ref=f36e62] [cursor=pointer]:
+        - /url: /dashboard/taxa-acidentes
+      - tooltip "Taxa de Acidentes"
+  - main [ref=f36e68]:
+    - generic [ref=f36e69]:
+      - generic [ref=f36e70]:
+        - paragraph [ref=f36e71]: Planejamento · RDO
+        - heading "Aprovação de RDO" [level=1] [ref=f36e72]
+        - paragraph [ref=f36e73]: Painel de aprovação dos Relatórios Diários de Obra (RDO) por unidade e por mês.
+      - generic [ref=f36e76]:
+        - generic [ref=f36e77]:
+          - generic [ref=f36e78]:
+            - generic [ref=f36e79]:
+              - generic [ref=f36e80]: Contexto da leitura
+              - paragraph [ref=f36e81]: Selecione o contexto desejado para a leitura dos indicadores.
+            - generic [ref=f36e82]:
+              - generic [ref=f36e83]: 2026 S2
+              - generic [ref=f36e84]: RDO
+              - generic [ref=f36e85]: Histórico 0
+          - generic [ref=f36e86]:
+            - generic [ref=f36e87]:
+              - generic [ref=f36e88]: Guia ativa
+              - button "RDO" [ref=f36e89] [cursor=pointer]
+            - generic [ref=f36e92]:
+              - generic [ref=f36e93]: Período
+              - combobox "Período" [ref=f36e94]:
+                - option "Jun – Nov" [selected]
+                - option "Dez – Mai"
+            - generic [ref=f36e95]:
+              - generic [ref=f36e96]: Ano
+              - combobox "Ano" [ref=f36e97]:
+                - option "2027"
+                - option "2026" [selected]
+                - option "2025"
+                - option "2024"
+                - option "2023"
+                - option "2022"
+          - generic [ref=f36e98]:
+            - paragraph [ref=f36e99]: Período atual · 2026 S2
+            - button "Ciclo atual" [disabled] [ref=f36e100]
+        - paragraph [ref=f36e102]: Carregando painel publicado…
+  - contentinfo [ref=f36e103]: Central de Indicadores - 2026
