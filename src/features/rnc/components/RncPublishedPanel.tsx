@@ -218,7 +218,7 @@ export function RncPublishedPanel() {
         <div className="mgrid">
           <PanelMetric
             label="Resultado"
-            value={`${result.toFixed(1).replace(".", ",")} dias`}
+            value={`${Math.round(result)} dias`}
             meta={`Meta ≤${data.meta} dias`}
             tone={resultOk ? "G" : "R"}
             ok={resultOk}
@@ -243,7 +243,7 @@ export function RncPublishedPanel() {
             <span>
               Resultado:{" "}
               <strong style={{ color: resultOk ? GREEN : RED, fontSize: 14 }}>
-                {result.toFixed(1).replace(".", ",")} dias
+                {Math.round(result)} dias
               </strong>
             </span>
             <span style={{ color: "#bbb" }}>
@@ -288,14 +288,11 @@ export function RncPublishedPanel() {
                           fontFamily: "Montserrat",
                           fontSize: 10,
                         }}
-                        tickFormatter={(value) => `${value}d`}
+                        tickFormatter={(value) => `${Math.round(Number(value))}d`}
                       />
 
                       <Tooltip
-                        formatter={(value) => [
-                          `${Number(value).toFixed(1).replace(".", ",")} dias`,
-                          "Tempo médio",
-                        ]}
+                        formatter={(value) => [`${Math.round(Number(value))} dias`, "Tempo médio"]}
                       />
 
                       <Legend

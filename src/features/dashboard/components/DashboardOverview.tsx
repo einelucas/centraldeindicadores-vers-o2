@@ -60,10 +60,11 @@ function unitSuffix(indicator: Pick<GeneralPanelIndicator, "unit">): string {
   return indicator.unit;
 }
 
-/** Média/Parcial do indicador. RNC sem casas decimais: "15 dias", não "15,0 dias". */
+/** Média/Parcial do indicador. RNC mostra só o número inteiro — sem decimais
+    e sem repetir "dias", já que a coluna Meta já deixa a unidade explícita. */
 function formatValue(indicator: Pick<GeneralPanelIndicator, "unit">, value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
-  if (indicator.unit === "dias") return `${Math.round(value)} dias`;
+  if (indicator.unit === "dias") return `${Math.round(value)}`;
   if (indicator.unit === "%") return `${value.toFixed(1)}%`;
   return value.toFixed(1);
 }
@@ -74,6 +75,7 @@ function formatMonthValue(
   value: number | null,
 ): string {
   if (value === null || !Number.isFinite(value)) return "—";
+  if (indicator.unit === "dias") return `${Math.round(value)}`;
   if (indicator.unit === "%") return `${value.toFixed(1)}%`;
   return value.toFixed(1);
 }
@@ -355,7 +357,7 @@ export function DashboardOverview() {
                   <col className="general-scorecard-col-points" />
                   <col className="general-scorecard-col-status" />
                 </colgroup>
-                <thead className="bg-[#EEF1F6] text-left text-[11px] font-medium uppercase tracking-wide text-brand-dark">
+                <thead className="bg-[#EEF1F6] text-left text-[11px] font-bold uppercase tracking-wide text-brand-dark">
                   <tr>
                     <th className="px-3 py-3">Indicador</th>
                     <th className="px-3 py-3 text-right">Peso</th>
@@ -381,19 +383,19 @@ export function DashboardOverview() {
                         <td className="general-scorecard-label text-brand-dark">
                           {indicator.label}
                         </td>
-                        <td className="px-3 py-3 text-right font-normal text-brand-dark">
+                        <td className="px-3 py-3 text-right font-bold text-brand-dark">
                           {indicator.peso.toFixed(2)}%
                         </td>
-                        <td className="px-3 py-3 text-right font-normal">
+                        <td className="px-3 py-3 text-right font-bold">
                           {formatMeta(indicator)}
                         </td>
                         {indicator.months.map((month) => {
-                          const monthBadgeClassName = `general-scorecard-month inline-flex items-center justify-center rounded-lg border text-xs font-medium ${
+                          const monthBadgeClassName = `general-scorecard-month inline-flex items-center justify-center rounded-lg border text-xs font-bold ${
                             month.value === null
                               ? "border-neutralbrand/20 bg-neutralbrand/5 text-neutralbrand"
                               : month.pass
-                                ? "border-green-200 bg-green-50 text-green-700"
-                                : "border-red-200 bg-red-50 text-red-700"
+                                ? "border-green-300 bg-green-100 text-green-800"
+                                : "border-red-300 bg-red-100 text-red-800"
                           }`;
                           const monthBadgeTitle = `${indicator.label} — ${month.label}`;
                           return (
@@ -417,20 +419,20 @@ export function DashboardOverview() {
                             </td>
                           );
                         })}
-                        <td className="px-3 py-3 text-right font-normal">
+                        <td className="px-3 py-3 text-right font-bold">
                           {formatValue(indicator, indicator.partial)}
                         </td>
                         <td className="px-3 py-3 text-right">
                           <div className="font-extrabold text-brand-dark">
                             {formatPoints(indicatorPoints(indicator))}
                           </div>
-                          <div className="text-[10px] text-neutralbrand">
+                          <div className="text-[10px] font-bold text-neutralbrand">
                             de {formatPoints(indicatorMaxPoints(indicator))}
                           </div>
                         </td>
                         <td className="general-scorecard-status px-3 py-3 text-center">
                           {indicator.partialPass === null ? (
-                            <span className="text-xs font-normal text-neutralbrand">Sem dados</span>
+                            <span className="text-xs font-bold text-neutralbrand">Sem dados</span>
                           ) : (
                             <StatusBadge ok={indicator.partialPass} className="w-28 text-center">
                               {indicator.partialPass ? "Dentro da meta" : "Fora da meta"}

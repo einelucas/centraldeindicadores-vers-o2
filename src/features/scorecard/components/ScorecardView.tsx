@@ -80,11 +80,12 @@ function formatPoints(value: number, digits = 2): string {
 
 function formatValue(value: number | null, unit: string): string {
   if (value === null || !Number.isFinite(value)) return "—";
+  if (unit === "dias") return `${Math.round(value)}`;
   const formatted = value.toLocaleString("pt-BR", {
-    minimumFractionDigits: unit === "dias" ? 1 : 2,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  return unit === "dias" ? `${formatted} dias` : `${formatted}${unit}`;
+  return `${formatted}${unit}`;
 }
 
 function resultRow(computation: Computation | undefined, key: string): ScorecardRow | undefined {

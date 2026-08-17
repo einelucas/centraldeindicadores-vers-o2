@@ -8,7 +8,7 @@ function pct(value: number): string {
 }
 
 function days(value: number | null): string {
-  return value === null ? "—" : value.toFixed(1).replace(".", ",");
+  return value === null ? "—" : String(Math.round(value));
 }
 
 export function exportRncPdf(result: RncResult): void {

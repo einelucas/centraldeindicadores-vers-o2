@@ -107,7 +107,7 @@ function monthKey(year: number, monthZeroBased: number): string {
 }
 
 function formatDays(value: number | null): string {
-  return value === null ? "—" : value.toFixed(1).replace(".", ",");
+  return value === null ? "—" : String(Math.round(value));
 }
 
 export function RncView({ canPublish, canClear }: { canPublish: boolean; canClear: boolean }) {
