@@ -46,6 +46,7 @@ const BLUE = "#304F7E";
 const GREEN = "#609346";
 const GOLD = "#EAA239";
 const RED = "#CC5121";
+const DARK_GRAY = "#374151";
 
 function decimal(value: number): string {
   return value.toFixed(1).replace(".", ",");
@@ -431,259 +432,259 @@ export function AccidentRatePublishedPanel() {
             </div>
 
             <div className="indicator-subcard">
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 16,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                  <div className="ct">Correlação CAF e SAF por unidade</div>
-                  <div className="cs">Barras agrupadas por unidade.</div>
-                </div>
+              <div className="ct">Acidentes mensais (CAF)</div>
+              <div className="cs">Quantidade de acidentes CAF registrados por mês.</div>
 
-                {unitPeriods.length > 1 ? (
-                  <select
-                    value={selectedPeriod}
-                    onChange={(event) => setSelectedPeriod(event.target.value)}
-                    aria-label="Selecionar competência"
-                    style={{
-                      minWidth: 130,
-                      height: 32,
-                      padding: "0 30px 0 10px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      backgroundColor: "#ffffff",
-                      color: "#0f172a",
-                      fontFamily: "Montserrat",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      outline: "none",
+              <div className="cw" style={{ height: 160 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data.mensal}
+                    layout="vertical"
+                    margin={{
+                      top: 18,
+                      right: 42,
+                      bottom: 12,
+                      left: 4,
                     }}
+                    barCategoryGap="28%"
                   >
-                    {unitPeriods.map((period) => (
-                      <option key={period.key} value={period.key}>
-                        {period.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : unitPeriods[0] ? (
-                  <strong
-                    className="ps"
-                    style={{
-                      padding: "6px 10px",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      backgroundColor: "#ffffff",
-                      color: "#0f172a",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {unitPeriods[0].label}
-                  </strong>
-                ) : null}
-              </div>
+                    <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" horizontal={false} />
 
-              <div className="cw" style={{ height: 160, marginTop: 8 }}>
-                {unitChartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={unitChartData}
-                      margin={{
-                        top: 8,
-                        right: 12,
-                        bottom: 8,
-                        left: 0,
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 10,
+                        fill: "#64748b",
                       }}
-                      barCategoryGap="28%"
-                      barGap={6}
+                    />
+
+                    <YAxis
+                      type="category"
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      width={104}
+                      tickMargin={8}
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        fill: "#475569",
+                      }}
+                    />
+
+                    <Tooltip
+                      cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
+                      contentStyle={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        backgroundColor: "#ffffff",
+                        boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
+                        padding: "10px 14px",
+                        fontFamily: "Montserrat",
+                        fontSize: 12,
+                      }}
+                      labelStyle={{
+                        color: "#0f172a",
+                        fontWeight: 700,
+                        marginBottom: 6,
+                      }}
+                      itemStyle={{
+                        color: DARK_GRAY,
+                        fontWeight: 600,
+                      }}
+                    />
+
+                    <Bar
+                      dataKey="caf"
+                      name="Acidentes CAF"
+                      fill={DARK_GRAY}
+                      radius={[0, 8, 8, 0]}
+                      maxBarSize={34}
                     >
-                      <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
-
-                      <XAxis
-                        dataKey="unidade"
-                        axisLine={false}
-                        tickLine={false}
-                        interval={0}
-                        height={30}
-                        tickMargin={6}
-                        tick={{
-                          fontFamily: "Montserrat",
-                          fontSize: 9,
-                          fontWeight: 600,
-                          fill: "#475569",
-                        }}
-                      />
-
-                      <YAxis
-                        allowDecimals={false}
-                        axisLine={false}
-                        tickLine={false}
-                        width={24}
-                        tickMargin={6}
-                        tick={{
-                          fontFamily: "Montserrat",
-                          fontSize: 9,
-                          fill: "#64748b",
-                        }}
-                      />
-
-                      <Tooltip
-                        cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
-                        contentStyle={{
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 12,
-                          backgroundColor: "#ffffff",
-                          boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
-                          padding: "10px 14px",
-                          fontFamily: "Montserrat",
-                          fontSize: 12,
-                        }}
-                        labelStyle={{
-                          color: "#0f172a",
-                          fontWeight: 700,
-                          marginBottom: 6,
-                        }}
-                        itemStyle={{
-                          fontWeight: 600,
-                        }}
-                      />
-
-                      <Legend
-                        verticalAlign="top"
-                        align="center"
-                        iconType="circle"
-                        iconSize={8}
-                        height={24}
-                        wrapperStyle={{
-                          fontFamily: "Montserrat",
-                          fontSize: 10,
-                          fontWeight: 600,
-                        }}
-                      />
-
-                      <Bar
+                      <LabelList
                         dataKey="caf"
-                        name="Acidentes CAF"
-                        fill={GOLD}
-                        radius={[6, 6, 0, 0]}
-                        maxBarSize={32}
-                        shape={ZeroAwareBar}
-                      >
-                        <LabelList dataKey="caf" content={ZeroAwareLabel} />
-                      </Bar>
-
-                      <Bar
-                        dataKey="saf"
-                        name="Acidentes SAF"
-                        fill={BLUE}
-                        radius={[6, 6, 0, 0]}
-                        maxBarSize={32}
-                        shape={ZeroAwareBar}
-                      >
-                        <LabelList dataKey="saf" content={ZeroAwareLabel} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="ps" style={{ margin: 0, textAlign: "center" }}>
-                    Nenhuma unidade foi publicada para esta competência.
-                  </p>
-                )}
+                        position="right"
+                        fill="#475569"
+                        fontFamily="Montserrat"
+                        fontSize={10}
+                        fontWeight={700}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
 
           <div className="indicator-subcard">
-            <div className="ct">Acidentes mensais (CAF)</div>
-            <div className="cs">Quantidade de acidentes CAF registrados por mês.</div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 16,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                <div className="ct">Correlação CAF e SAF por unidade</div>
+                <div className="cs">Barras agrupadas por unidade.</div>
+              </div>
 
-            <div className="cw" style={{ height: 220 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={data.mensal}
-                  layout="vertical"
-                  margin={{
-                    top: 18,
-                    right: 42,
-                    bottom: 12,
-                    left: 12,
+              {unitPeriods.length > 1 ? (
+                <select
+                  value={selectedPeriod}
+                  onChange={(event) => setSelectedPeriod(event.target.value)}
+                  aria-label="Selecionar competência"
+                  style={{
+                    minWidth: 130,
+                    height: 32,
+                    padding: "0 30px 0 10px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    backgroundColor: "#ffffff",
+                    color: "#0f172a",
+                    fontFamily: "Montserrat",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    outline: "none",
                   }}
-                  barCategoryGap="28%"
                 >
-                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" horizontal={false} />
+                  {unitPeriods.map((period) => (
+                    <option key={period.key} value={period.key}>
+                      {period.label}
+                    </option>
+                  ))}
+                </select>
+              ) : unitPeriods[0] ? (
+                <strong
+                  className="ps"
+                  style={{
+                    padding: "6px 10px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 8,
+                    backgroundColor: "#ffffff",
+                    color: "#0f172a",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {unitPeriods[0].label}
+                </strong>
+              ) : null}
+            </div>
 
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{
-                      fontFamily: "Montserrat",
-                      fontSize: 10,
-                      fill: "#64748b",
+            <div className="cw" style={{ height: 160, marginTop: 8 }}>
+              {unitChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={unitChartData}
+                    margin={{
+                      top: 8,
+                      right: 12,
+                      bottom: 8,
+                      left: 0,
                     }}
-                  />
-
-                  <YAxis
-                    type="category"
-                    dataKey="label"
-                    axisLine={false}
-                    tickLine={false}
-                    width={82}
-                    tickMargin={10}
-                    tick={{
-                      fontFamily: "Montserrat",
-                      fontSize: 10,
-                      fontWeight: 600,
-                      fill: "#475569",
-                    }}
-                  />
-
-                  <Tooltip
-                    cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
-                    contentStyle={{
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 12,
-                      backgroundColor: "#ffffff",
-                      boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
-                      padding: "10px 14px",
-                      fontFamily: "Montserrat",
-                      fontSize: 12,
-                    }}
-                    labelStyle={{
-                      color: "#0f172a",
-                      fontWeight: 700,
-                      marginBottom: 6,
-                    }}
-                    itemStyle={{
-                      color: BLUE,
-                      fontWeight: 600,
-                    }}
-                  />
-
-                  <Bar
-                    dataKey="caf"
-                    name="Acidentes CAF"
-                    fill={BLUE}
-                    radius={[0, 8, 8, 0]}
-                    maxBarSize={34}
+                    barCategoryGap="28%"
+                    barGap={6}
                   >
-                    <LabelList
-                      dataKey="caf"
-                      position="right"
-                      fill="#475569"
-                      fontFamily="Montserrat"
-                      fontSize={10}
-                      fontWeight={700}
+                    <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
+
+                    <XAxis
+                      dataKey="unidade"
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                      height={30}
+                      tickMargin={6}
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        fill: "#475569",
+                      }}
                     />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+
+                    <YAxis
+                      allowDecimals={false}
+                      axisLine={false}
+                      tickLine={false}
+                      width={24}
+                      tickMargin={6}
+                      tick={{
+                        fontFamily: "Montserrat",
+                        fontSize: 9,
+                        fill: "#64748b",
+                      }}
+                    />
+
+                    <Tooltip
+                      cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
+                      contentStyle={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        backgroundColor: "#ffffff",
+                        boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
+                        padding: "10px 14px",
+                        fontFamily: "Montserrat",
+                        fontSize: 12,
+                      }}
+                      labelStyle={{
+                        color: "#0f172a",
+                        fontWeight: 700,
+                        marginBottom: 6,
+                      }}
+                      itemStyle={{
+                        fontWeight: 600,
+                      }}
+                    />
+
+                    <Legend
+                      verticalAlign="top"
+                      align="center"
+                      iconType="circle"
+                      iconSize={8}
+                      height={24}
+                      wrapperStyle={{
+                        fontFamily: "Montserrat",
+                        fontSize: 10,
+                        fontWeight: 600,
+                      }}
+                    />
+
+                    <Bar
+                      dataKey="caf"
+                      name="Acidentes CAF"
+                      fill={GOLD}
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={32}
+                      shape={ZeroAwareBar}
+                    >
+                      <LabelList dataKey="caf" content={ZeroAwareLabel} />
+                    </Bar>
+
+                    <Bar
+                      dataKey="saf"
+                      name="Acidentes SAF"
+                      fill={BLUE}
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={32}
+                      shape={ZeroAwareBar}
+                    >
+                      <LabelList dataKey="saf" content={ZeroAwareLabel} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="ps" style={{ margin: 0, textAlign: "center" }}>
+                  Nenhuma unidade foi publicada para esta competência.
+                </p>
+              )}
             </div>
           </div>
         </div>

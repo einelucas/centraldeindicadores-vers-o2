@@ -54,8 +54,12 @@ Esse isolamento permite portar um módulo de cada vez sem afetar os demais.
 - **Better Auth** com e-mail/senha e cadastro público desabilitado.
 - Perfis **VIEWER / ANALYST / ADMIN**, verificados sempre no servidor via
   `requirePermission`. Veja `roles-permissions.md`.
-- A camada de auth é abstraída (`server/auth/provider.ts`) para permitir troca
-  futura por um provedor corporativo (SSO). Veja `corporate-integration.md`.
+- `server/auth/provider.ts` declara uma interface `AuthenticationProvider`
+  para uma futura troca de provedor, mas ela **não está conectada** ao fluxo
+  real hoje (`getCurrentUser`/login usam o Better Auth diretamente). O plano
+  de substituição por SSO corporativo (Keycloak + Microsoft Entra ID) está em
+  `migration-authentication-keycloak.md`; `corporate-integration.md` descreve
+  o ponto de extensão genérico.
 
 ## Decisão de versões
 

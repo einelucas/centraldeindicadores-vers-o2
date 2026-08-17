@@ -85,7 +85,9 @@ O payload publicado deve conter apenas o necessário para reconstruir o painel. 
 - desabilite ações enquanto uma operação incompatível estiver em andamento;
 - apresente mensagens de erro com contexto suficiente para correção;
 - agrupe os gráficos e a leitura por unidade de um mesmo indicador em um único `indicator-card` com `indicator-subcard`s internos (padrão usado em todos os painéis publicados atuais);
-- exponha o botão "Exportar PDF" de cada painel publicado via `ToolbarSlotContent` (`src/components/layout/ToolbarSlot.tsx`) usando `usePanelPdfExport` (`src/lib/exports/panel-screenshot-pdf.ts`), em vez de recriar a lógica de captura por módulo.
+- exponha o botão "Exportar PDF" de cada painel publicado via `ToolbarSlotContent` (`src/components/layout/ToolbarSlot.tsx`) usando `usePanelPdfExport` (`src/lib/exports/panel-screenshot-pdf.ts`), em vez de recriar a lógica de captura por módulo;
+- trave o período de publicação de cada painel administrativo com `SemesterYearFilter` + `useReadingContextCycle` (Ano + Semestre), e ofereça um filtro de leitura independente com `ViewFilterPopover` — nunca um `PeriodRangeFilter` livre direto na tela principal de Administração;
+- para qualquer ação de "limpar"/excluir em massa da base administrativa, use `ClearRecordsDialog` (`src/components/admin/ClearRecordsDialog.tsx`): ele exige escolher um período (ou "Tudo"), busca no servidor a contagem real de registros afetados antes de exibir o botão de exclusão e só libera a exclusão após o usuário digitar a frase de confirmação. Nunca use `window.confirm` para excluir dados administrativos — o padrão espera um endpoint `GET .../registros` (contagem) e `DELETE .../registros` (exclusão por `ids`, período ou `all`) equivalente ao de `src/app/api/rdo/registros/route.ts`.
 
 ## Commits
 

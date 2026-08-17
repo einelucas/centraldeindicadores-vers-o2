@@ -37,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
 import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
@@ -262,6 +263,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       const finish = await fetch(`/api/importacoes/${importJobId}/finalizar`, { method: "POST" });
       if (!finish.ok) throw new Error("Os lotes foram enviados, mas a finalização falhou.");
+      notifyIndicatorDataChanged();
 
       setMessage(
         `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s).`,
@@ -329,6 +331,7 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
         deleted?: number;
       };
       if (!response.ok) throw new Error(responseBody.error ?? "Falha ao limpar os registros.");
+      notifyIndicatorDataChanged();
       setMessage(`${responseBody.deleted ?? 0} registro(s) removido(s).`);
       setFiles([]);
       setDuplicates(0);

@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
@@ -41,6 +42,7 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importRncFiles } from "@/features/rnc/importers";
 import { exportRncPdf } from "@/features/rnc/exports/pdf";
@@ -135,6 +137,8 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
 
   const load = useCallback(
     async (meta = metaDias, nextPeriod = effectivePeriod) => {
@@ -337,6 +341,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
       if (!finish.ok) {
         throw await responseError(finish, "Falha ao finalizar a importação.");
       }
+      notifyIndicatorDataChanged();
 
       setMessage(
         `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s) e ${totals.rejected} rejeitado(s).`,
@@ -377,30 +382,52 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
     }
   }
 
-  async function clearAll() {
-    if (
-      !window.confirm(
-        "Excluir todos os registros administrativos do RNC? O painel publicado continuará preservado.",
-      )
-    ) {
-      return;
-    }
+  function openClearDialog() {
+    setClearPeriod(null);
+    setClearDialogOpen(true);
+  }
+
+  const fetchClearAffectedCount = useCallback(async (period: PeriodRange | null) => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(period)).map(([key, value]) => [key, String(value)]),
+      ),
+    );
+    const response = await fetch(`/api/rnc/registros?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Falha ao calcular os registros afetados.");
+    const body = (await response.json()) as { count: number };
+    return body.count;
+  }, []);
+
+  async function executeClear() {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
+      const body = clearPeriod
+        ? {
+            periodStartYear: clearPeriod.startYear,
+            periodStartMonth: clearPeriod.startMonth,
+            periodEndYear: clearPeriod.endYear,
+            periodEndMonth: clearPeriod.endMonth,
+          }
+        : { all: true as const };
       const response = await fetch("/api/rnc/registros", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ all: true }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         throw await responseError(response, "Falha ao limpar os registros do RNC.");
       }
-      const body = (await response.json()) as { deleted: number };
-      setMessage(`${body.deleted} registro(s) removido(s).`);
+      const responseBody = (await response.json()) as { deleted: number };
+      notifyIndicatorDataChanged();
+      setMessage(`${responseBody.deleted} registro(s) removido(s).`);
       setPrepared(null);
       setProgress(null);
+      setClearDialogOpen(false);
       await load(metaDias);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao limpar o RNC.");
@@ -672,7 +699,7 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
                       size="sm"
                       className="w-full"
                       disabled={busy}
-                      onClick={() => void clearAll()}
+                      onClick={openClearDialog}
                     >
                       <Trash2 className="size-3.5" />
                       Limpar tudo
@@ -964,6 +991,20 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
         excluded={excludedUnits}
         busy={unitDialogBusy}
         onSave={(next) => void saveExcludedUnits(next)}
+      />
+
+      <ClearRecordsDialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="Limpar registros do RNC"
+        description="Exclui permanentemente os registros da base administrativa do RNC no banco de dados. O painel já publicado não é afetado."
+        periodRange={clearPeriod}
+        onPeriodRangeChange={setClearPeriod}
+        yearsInData={availableYears}
+        fetchAffectedCount={fetchClearAffectedCount}
+        affectedLabel="registro(s) de RNC"
+        busy={busy}
+        onConfirm={() => void executeClear()}
       />
     </div>
   );

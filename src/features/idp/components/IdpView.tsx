@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Ban,
@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
@@ -42,12 +43,13 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { parseIdpFile } from "@/features/idp/importers";
 import { formatIdpUnitLabel, normalizeIdpUnitCode } from "@/features/idp/utils/units";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
-import { formatPeriodRangeLabel, type PeriodRange } from "@/lib/period";
+import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 
 interface DocumentRow {
   id: string;
@@ -181,8 +183,12 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. A
       competência efetiva (mês exato usado no cálculo) é resolvida pelo
       servidor como a mais recente com RSO dentro desse intervalo. */
-  const { year: publishYear, semester: publishSemester, cycle: publishPeriod, setPeriod } =
-    useReadingContextCycle();
+  const {
+    year: publishYear,
+    semester: publishSemester,
+    cycle: publishPeriod,
+    setPeriod,
+  } = useReadingContextCycle();
   /** Filtro de "Consulta": undefined = segue o período de publicação; null =
       Tudo; PeriodRange = recorte específico. Nunca afeta o que é publicado. */
   const [viewFilter, setViewFilter] = useState<PeriodRange | null | undefined>(undefined);
@@ -203,6 +209,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
 
   async function load(period: PeriodRange | null = effectivePeriod, nextThreshold = threshold) {
     setError(null);
@@ -391,6 +399,7 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       const finish = await fetch(`/api/importacoes/${importJobId}/finalizar`, { method: "POST" });
       if (!finish.ok) throw await responseError(finish, "Falha ao finalizar a importação.");
+      notifyIndicatorDataChanged();
 
       setMessage(
         `Importação concluída: ${totals.inserted} nova(s) versão(ões), ${totals.updated} corrigida(s), ${totals.ignored} idêntica(s) e ${totals.rejected} rejeitada(s).`,
@@ -433,23 +442,50 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
     }
   }
 
-  async function clearAll() {
-    if (
-      !window.confirm(
-        "Excluir todo o histórico administrativo de RSOs do IDP? A publicação ativa será preservada.",
-      )
-    )
-      return;
+  function openClearDialog() {
+    setClearPeriod(null);
+    setClearDialogOpen(true);
+  }
+
+  const fetchClearAffectedCount = useCallback(async (period: PeriodRange | null) => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(period)).map(([key, value]) => [key, String(value)]),
+      ),
+    );
+    const response = await fetch(`/api/idp/registros?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Falha ao calcular os registros afetados.");
+    const body = (await response.json()) as { count: number };
+    return body.count;
+  }, []);
+
+  async function executeClear() {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const response = await fetch("/api/idp/registros", { method: "DELETE" });
+      const body = clearPeriod
+        ? {
+            periodStartYear: clearPeriod.startYear,
+            periodStartMonth: clearPeriod.startMonth,
+            periodEndYear: clearPeriod.endYear,
+            periodEndMonth: clearPeriod.endMonth,
+          }
+        : { all: true as const };
+      const response = await fetch("/api/idp/registros", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!response.ok) throw await responseError(response, "Falha ao limpar os RSOs.");
-      const body = (await response.json()) as { deleted: number };
-      setMessage(`${body.deleted} versão(ões) de RSO removida(s).`);
+      const responseBody = (await response.json()) as { deleted: number };
+      notifyIndicatorDataChanged();
+      setMessage(`${responseBody.deleted} versão(ões) de RSO removida(s).`);
       setPendingFiles([]);
       setProgress(null);
+      setClearDialogOpen(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao limpar os registros.");
@@ -799,8 +835,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         <CardHeader>
           <CardTitle>Período de publicação e ajustes de cálculo</CardTitle>
           <CardDescription>
-            O semestre travado define quais RSOs entram na conta e vão para o Painel — a
-            competência efetiva é sempre a mais recente com RSO dentro dele. Use &ldquo;Consulta&rdquo; pra
+            O semestre travado define quais RSOs entram na conta e vão para o Painel — a competência
+            efetiva é sempre a mais recente com RSO dentro dele. Use &ldquo;Consulta&rdquo; pra
             olhar outro recorte sem mudar o que será publicado.
           </CardDescription>
         </CardHeader>
@@ -817,8 +853,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                 />
               </div>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                São os RSOs da competência mais recente dentro deste semestre que alimentam todas
-                as tabelas abaixo e vão para o Painel quando você clicar em &ldquo;Publicar&rdquo;.
+                São os RSOs da competência mais recente dentro deste semestre que alimentam todas as
+                tabelas abaixo e vão para o Painel quando você clicar em &ldquo;Publicar&rdquo;.
               </p>
               <div className="mt-3">
                 <SemesterYearFilter
@@ -830,7 +866,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-4 border-primary bg-primary/5 px-3 py-2.5 text-xs">
                 <strong className="font-bold text-foreground">
-                  Competência efetiva: {competenceLabel(data?.selectedYear ?? publishYear, data?.selectedMonth ?? 1)}
+                  Competência efetiva:{" "}
+                  {competenceLabel(data?.selectedYear ?? publishYear, data?.selectedMonth ?? 1)}
                 </strong>
                 <span className="text-muted-foreground">
                   {result?.activeDocuments ?? 0} RSO(s) ativo(s). Nenhuma versão de outro mês é
@@ -878,10 +915,10 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   variant="destructive"
                   size="sm"
                   disabled={busy || !data?.total}
-                  onClick={() => void clearAll()}
+                  onClick={openClearDialog}
                 >
                   <Trash2 className="size-3.5" />
-                  Limpar histórico
+                  Limpar tudo
                 </Button>
               ) : null}
               <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
@@ -1423,6 +1460,20 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
         busy={unitDialogBusy}
         onSave={(next) => void saveExcludedUnits(next)}
         description="Unidades marcadas continuam visíveis no histórico de RSOs, mas ficam de fora da execução geral, das disciplinas e do painel publicado."
+      />
+
+      <ClearRecordsDialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="Limpar registros do IDP"
+        description="Exclui permanentemente os RSOs da base administrativa do IDP no banco de dados. O painel já publicado não é afetado."
+        periodRange={clearPeriod}
+        onPeriodRangeChange={setClearPeriod}
+        yearsInData={data?.years ?? []}
+        fetchAffectedCount={fetchClearAffectedCount}
+        affectedLabel="RSO(s) de IDP"
+        busy={busy}
+        onConfirm={() => void executeClear()}
       />
     </div>
   );

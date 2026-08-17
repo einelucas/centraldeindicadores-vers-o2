@@ -28,7 +28,7 @@ export const TABS: Tab[] = [
   {
     id: "2026",
     label: "Scorecard",
-    contextLabel: "Indicadores de Obra",
+    contextLabel: "Resumo Geral",
     href: "/dashboard/scorecard",
     icon: LayoutDashboard,
   },

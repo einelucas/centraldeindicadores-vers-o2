@@ -298,7 +298,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const kind = req.nextUrl.searchParams.get("kind");
-    const user = await requirePermission(kind === "all" ? "indicators:edit" : "import:run");
+    const user = await requirePermission("import:run");
 
     if (kind === "month") {
       const year = Number(req.nextUrl.searchParams.get("year"));
@@ -345,31 +345,6 @@ export async function DELETE(req: NextRequest) {
         });
       }
       return NextResponse.json({ ok: true, deleted: previous ? 1 : 0 });
-    }
-
-    if (kind === "all") {
-      const [monthlyCount, unitCount] = await Promise.all([
-        prisma.accidentMonthlyRecord.count(),
-        prisma.accidentUnitRecord.count(),
-      ]);
-      await prisma.$transaction(async (tx) => {
-        await tx.accidentMonthlyRecord.deleteMany();
-        await tx.accidentUnitRecord.deleteMany();
-        await tx.indicatorResult.deleteMany({
-          where: { module: "taxa-acidentes" },
-        });
-      });
-      await recordAudit({
-        userId: user.id,
-        action: "RECORDS_CLEARED",
-        entity: "AccidentRate",
-        previousData: { monthlyCount, unitCount },
-        metadata: { module: "taxa-acidentes", escopo: "todos" },
-      });
-      return NextResponse.json({
-        ok: true,
-        deleted: monthlyCount + unitCount,
-      });
     }
 
     return NextResponse.json({ error: "Operação inválida." }, { status: 400 });

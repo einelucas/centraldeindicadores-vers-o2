@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
@@ -42,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
 import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
@@ -154,6 +156,8 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
 
   const load = useCallback(
     async (nextPeriod = effectivePeriod) => {
@@ -452,6 +456,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       if (!finish.ok) {
         throw await responseError(finish, "Falha ao finalizar a importação.");
       }
+      notifyIndicatorDataChanged();
 
       setMessage(
         `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s) e ${totals.rejected} rejeitado(s).`,
@@ -507,20 +512,52 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
     }
   }
 
-  async function clearAll() {
-    if (!window.confirm("Excluir todos os registros administrativos do 5S?")) return;
+  function openClearDialog() {
+    setClearPeriod(null);
+    setClearDialogOpen(true);
+  }
+
+  const fetchClearAffectedCount = useCallback(async (period: PeriodRange | null) => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(period)).map(([key, value]) => [key, String(value)]),
+      ),
+    );
+    const response = await fetch(`/api/cinco-s/registros?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Falha ao calcular os registros afetados.");
+    const body = (await response.json()) as { count: number };
+    return body.count;
+  }, []);
+
+  async function executeClear() {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const response = await fetch("/api/cinco-s", { method: "DELETE" });
+      const body = clearPeriod
+        ? {
+            periodStartYear: clearPeriod.startYear,
+            periodStartMonth: clearPeriod.startMonth,
+            periodEndYear: clearPeriod.endYear,
+            periodEndMonth: clearPeriod.endMonth,
+          }
+        : { all: true as const };
+      const response = await fetch("/api/cinco-s/registros", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!response.ok) {
         throw await responseError(response, "Falha ao limpar a base do 5S.");
       }
-      const body = (await response.json()) as { deleted: number };
+      const responseBody = (await response.json()) as { deleted: number };
+      notifyIndicatorDataChanged();
       setPrepared(null);
       setProgress(null);
-      setMessage(`${body.deleted} registro(s) removido(s) da Administração.`);
+      setMessage(`${responseBody.deleted} registro(s) removido(s) da Administração.`);
+      setClearDialogOpen(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao limpar o 5S.");
@@ -743,7 +780,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
                   size="sm"
                   className="w-full"
                   disabled={!data?.total || busy}
-                  onClick={() => void clearAll()}
+                  onClick={openClearDialog}
                 >
                   <Trash2 className="size-3.5" />
                   Limpar tudo
@@ -783,6 +820,20 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
         busy={unitDialogBusy}
         onSave={(next) => void saveExcludedUnits(next)}
         description="Unidades marcadas continuam visíveis na tabela e no detalhamento, mas não entram na média GERAL nem no painel publicado."
+      />
+
+      <ClearRecordsDialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="Limpar registros do 5S"
+        description="Exclui permanentemente os registros da base administrativa do 5S no banco de dados. O painel já publicado não é afetado."
+        periodRange={clearPeriod}
+        onPeriodRangeChange={setClearPeriod}
+        yearsInData={availableYears}
+        fetchAffectedCount={fetchClearAffectedCount}
+        affectedLabel="registro(s) de 5S"
+        busy={busy}
+        onConfirm={() => void executeClear()}
       />
 
       {result?.unitMonths.length ? (

@@ -3,7 +3,8 @@
 ## Estrutura do ciclo
 
 - Pontuação máxima: **11.582 pontos**.
-- Meses considerados: **junho, julho, agosto, setembro, outubro e novembro**.
+- Meses considerados: os 6 meses do semestre selecionado — **junho a
+  novembro (S2)** ou **dezembro a maio (S1)**. Ver [`scorecard-2026.md`](scorecard-2026.md#período).
 - Pontuação máxima por mês: **1.930,333333 pontos**.
 
 ```text

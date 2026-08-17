@@ -14,14 +14,16 @@ export function AppHeader({ user }: { user: CurrentUser }) {
   return (
     <header className="flex h-16 items-center gap-4 border-b border-black/[0.07] bg-background px-4 sm:px-6">
       <div className="flex shrink-0 items-center gap-3">
-        <Image
-          src="/brand/logo-inpasa.png"
-          alt="Inpasa"
-          width={2087}
-          height={601}
-          className="h-9 w-auto"
-          priority
-        />
+        <Link href="#">
+          <Image
+            src="/brand/hub-logo.png"
+            alt="Hub"
+            width={1698}
+            height={492}
+            className="h-9 w-auto"
+            priority
+          />
+        </Link>
 
         <button
           type="button"

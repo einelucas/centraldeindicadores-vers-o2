@@ -19,6 +19,11 @@ export interface PeriodRange {
   endMonth: number; // 1-12
 }
 
+export interface MonthReference {
+  year: number;
+  month: number;
+}
+
 /** Índice inteiro contínuo de um mês, usado para comparar/ordenar intervalos mesmo entre anos. */
 export function toMonthIndex(year: number, month: number): number {
   return year * 12 + (month - 1);
@@ -87,6 +92,51 @@ export function getCurrentCycle(reference: Date = new Date()): PeriodRange {
   }
   // Janeiro-maio pertencem ao ciclo iniciado em dezembro do ano anterior.
   return { startYear: year - 1, startMonth: 12, endYear: year, endMonth: 5 };
+}
+
+/**
+ * Converte uma competência mensal no ciclo operacional que a contém.
+ * Junho–novembro formam S2; dezembro–maio formam o S1 iniciado em dezembro.
+ */
+export function cycleForMonth(year: number, month: number): PeriodRange {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError("Competência mensal inválida.");
+  }
+
+  if (month >= 6 && month <= 11) {
+    return { startYear: year, startMonth: 6, endYear: year, endMonth: 11 };
+  }
+
+  const startYear = month === 12 ? year : year - 1;
+  return { startYear, startMonth: 12, endYear: startYear + 1, endMonth: 5 };
+}
+
+/**
+ * Lista somente os ciclos representados por ao menos uma competência real,
+ * sem duplicidade e do mais recente para o mais antigo.
+ */
+export function availableCyclesFromMonths(months: readonly MonthReference[]): PeriodRange[] {
+  const cycles = new Map<string, PeriodRange>();
+
+  for (const item of months) {
+    if (
+      !Number.isInteger(item.year) ||
+      !Number.isInteger(item.month) ||
+      item.month < 1 ||
+      item.month > 12
+    ) {
+      continue;
+    }
+
+    const cycle = cycleForMonth(item.year, item.month);
+    cycles.set(`${cycle.startYear}:${cycle.startMonth}`, cycle);
+  }
+
+  return Array.from(cycles.values()).sort(
+    (left, right) =>
+      toMonthIndex(right.startYear, right.startMonth) -
+      toMonthIndex(left.startYear, left.startMonth),
+  );
 }
 
 /** Ex.: "Dez/2026 – Mai/2027". Retorna "Tudo" quando `range` é `null`. */
@@ -175,21 +225,39 @@ export function periodFromOptionalFields(fields: {
  * (inclusive nos dois extremos, atravessando a virada do ano civil quando
  * necessário). O retorno não é tipado para um model Prisma específico — faça
  * cast para o `WhereInput` do model em uso no call site.
+ *
+ * `fields` sobrescreve os nomes das colunas para models cujas colunas não se
+ * chamam `year`/`month` (ex.: `IdpRsoRecord.referenceYear`/`referenceMonth`).
  */
-export function periodRangeWhere(range: PeriodRange) {
+export function periodRangeWhere(
+  range: PeriodRange,
+  fields: { year?: string; month?: string } = {},
+) {
+  const yearField = fields.year ?? "year";
+  const monthField = fields.month ?? "month";
   const normalized = normalizePeriodRange(range);
   return {
     AND: [
       {
         OR: [
-          { year: { gt: normalized.startYear } },
-          { AND: [{ year: normalized.startYear }, { month: { gte: normalized.startMonth } }] },
+          { [yearField]: { gt: normalized.startYear } },
+          {
+            AND: [
+              { [yearField]: normalized.startYear },
+              { [monthField]: { gte: normalized.startMonth } },
+            ],
+          },
         ],
       },
       {
         OR: [
-          { year: { lt: normalized.endYear } },
-          { AND: [{ year: normalized.endYear }, { month: { lte: normalized.endMonth } }] },
+          { [yearField]: { lt: normalized.endYear } },
+          {
+            AND: [
+              { [yearField]: normalized.endYear },
+              { [monthField]: { lte: normalized.endMonth } },
+            ],
+          },
         ],
       },
     ],

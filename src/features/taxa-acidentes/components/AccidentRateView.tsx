@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
+import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
@@ -39,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { ExportButtons } from "@/components/exports/ExportButtons";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { MONTH_NAMES } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 import {
   ACCIDENT_RATE_DEFAULT_TARGET,
@@ -118,6 +120,8 @@ export function AccidentRateView({
   const [excludedUnits, setExcludedUnits] = useState<string[]>([]);
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitDialogBusy, setUnitDialogBusy] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
   /** Período travado (Ano + Semestre) — é sempre o que vai ser publicado. */
   const {
     year: publishYear,
@@ -422,6 +426,7 @@ export function AccidentRateView({
           : "Falha ao salvar o lançamento mensal.",
       );
       await load();
+      notifyIndicatorDataChanged();
       const edited = Boolean(editingMonthId);
       resetMonthForm();
       setMessage(edited ? "Lançamento mensal atualizado." : "Lançamento mensal salvo no Neon.");
@@ -472,6 +477,7 @@ export function AccidentRateView({
           : "Falha ao salvar os acidentes da unidade.",
       );
       await load();
+      notifyIndicatorDataChanged();
       const edited = Boolean(editingUnitId);
       resetUnitForm();
       setMessage(
@@ -494,6 +500,7 @@ export function AccidentRateView({
       const response = await fetch(url, { method: "DELETE" });
       if (!response.ok) throw await responseError(response, "Falha ao remover.");
       await load();
+      notifyIndicatorDataChanged();
       setMessage("Registro removido e cálculo administrativo atualizado.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao remover.");
@@ -534,17 +541,58 @@ export function AccidentRateView({
     }
   }
 
-  async function clearAll() {
-    if (
-      !window.confirm(
-        "Remover todos os lançamentos administrativos da Taxa de Acidentes? A publicação anterior será preservada.",
-      )
-    ) {
-      return;
+  function openClearDialog() {
+    setClearPeriod(null);
+    setClearDialogOpen(true);
+  }
+
+  const fetchClearAffectedCount = useCallback(async (period: PeriodRange | null) => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(period)).map(([key, value]) => [key, String(value)]),
+      ),
+    );
+    const response = await fetch(`/api/taxa-acidentes/registros?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Falha ao calcular os registros afetados.");
+    const body = (await response.json()) as { count: number };
+    return body.count;
+  }, []);
+
+  async function executeClear() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const body = clearPeriod
+        ? {
+            periodStartYear: clearPeriod.startYear,
+            periodStartMonth: clearPeriod.startMonth,
+            periodEndYear: clearPeriod.endYear,
+            periodEndMonth: clearPeriod.endMonth,
+          }
+        : { all: true as const };
+      const response = await fetch("/api/taxa-acidentes/registros", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        throw await responseError(response, "Falha ao limpar os lançamentos da Taxa de Acidentes.");
+      }
+      const responseBody = (await response.json()) as { deleted: number };
+      notifyIndicatorDataChanged();
+      resetMonthForm();
+      resetUnitForm();
+      setMessage(`${responseBody.deleted} registro(s) removido(s).`);
+      setClearDialogOpen(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao limpar a Taxa de Acidentes.");
+    } finally {
+      setBusy(false);
     }
-    resetMonthForm();
-    resetUnitForm();
-    await remove("/api/taxa-acidentes?kind=all");
   }
 
   if (data?.setupRequired) {
@@ -660,7 +708,7 @@ export function AccidentRateView({
                   size="sm"
                   className="w-full"
                   disabled={busy}
-                  onClick={() => void clearAll()}
+                  onClick={openClearDialog}
                 >
                   <Trash2 className="size-3.5" />
                   Limpar tudo
@@ -1174,6 +1222,20 @@ export function AccidentRateView({
         busy={unitDialogBusy}
         onSave={(next) => void saveExcludedUnits(next)}
         description="Unidades marcadas ficam de fora das somas de acidentes CAF/SAF por unidade e do painel publicado."
+      />
+
+      <ClearRecordsDialog
+        open={clearDialogOpen}
+        onOpenChange={setClearDialogOpen}
+        title="Limpar registros da Taxa de Acidentes"
+        description="Exclui permanentemente os lançamentos da base administrativa da Taxa de Acidentes no banco de dados. O painel já publicado não é afetado."
+        periodRange={clearPeriod}
+        onPeriodRangeChange={setClearPeriod}
+        yearsInData={periodFilterYears}
+        fetchAffectedCount={fetchClearAffectedCount}
+        affectedLabel="registro(s) de Taxa de Acidentes"
+        busy={busy}
+        onConfirm={() => void executeClear()}
       />
     </div>
   );

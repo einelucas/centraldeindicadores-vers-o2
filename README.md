@@ -13,7 +13,7 @@ A identidade visual (cabeçalho, abas por ícone, hierarquia de cartões dos pai
 - publicação versionada de resultados;
 - painéis de consulta separados da área administrativa;
 - histórico de snapshots publicados;
-- scorecard consolidado do ciclo de junho a novembro de 2026;
+- scorecard consolidado por ciclo semestral (junho–novembro ou dezembro–maio);
 - exportações em Excel e PDF;
 - auditoria de operações administrativas;
 - testes unitários, testes de integração e testes de interface.
@@ -165,7 +165,8 @@ Os painéis de consulta utilizam snapshots publicados. Alterações feitas na Ad
 
 ## Scorecard 2026
 
-O ciclo considera junho, julho, agosto, setembro, outubro e novembro de 2026.
+O ciclo é semestral, travado por um seletor de Ano + Semestre (igual aos
+demais painéis administrativos): junho–novembro (S2) ou dezembro–maio (S1).
 
 - pontuação máxima do ciclo: **11.582 pontos**;
 - pontuação máxima mensal: **1.930,333333 pontos**;
@@ -173,7 +174,10 @@ O ciclo considera junho, julho, agosto, setembro, outubro e novembro de 2026.
 - resultado ausente: zero ponto;
 - precisão mantida no cálculo e arredondamento somente na exibição.
 
-No histórico do ciclo, clicar em um farol edita apenas o valor daquele indicador no mês selecionado. A ação não troca o mês da tabela administrativa nem recarrega os demais valores.
+O painel de Administração do Scorecard é somente leitura em relação aos
+valores: não há edição manual de indicadores nem do histórico do ciclo. Todo
+valor vem do módulo de origem publicado (ao vivo) ou do último snapshot
+salvo via "Salvar snapshot".
 
 Consulte [`docs/scorecard-2026.md`](docs/scorecard-2026.md).
 

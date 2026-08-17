@@ -2,7 +2,7 @@
 
 ## Painel Geral e Scorecard 2026
 
-Consolida exclusivamente os snapshots publicados dos cinco indicadores ativos. O ciclo de junho a novembro possui pontuação máxima de 11.582 pontos.
+Consolida exclusivamente os snapshots publicados dos cinco indicadores ativos. O ciclo (semestre junho–novembro ou dezembro–maio, ver `scorecard-2026.md`) possui pontuação máxima de 11.582 pontos. A Administração do Scorecard é somente leitura: nenhum valor é digitado manualmente, só vem do módulo de origem ou do último snapshot salvo.
 
 ## RDO — aprovação de relatórios
 
@@ -27,3 +27,11 @@ Recebe a frequência mensal e os dados complementares por unidade. Possui peso d
 ## Administração
 
 A área administrativa reúne histórico de importações, usuários, auditoria e configurações dos módulos ativos.
+
+Cada painel administrativo (RDO, IDP, RNC, 5S, Taxa de Acidentes) trava o
+período de publicação em um seletor de Ano + Semestre, com um filtro de
+"Consulta" separado para olhar outro recorte sem mudar o que será publicado.
+O botão "Limpar tudo" é padronizado em todos eles: exige escolher um período
+(ou "Tudo"), mostra a contagem real de registros afetados e só libera a
+exclusão após confirmação por frase digitada — nunca apaga a publicação
+vigente, só a base administrativa.

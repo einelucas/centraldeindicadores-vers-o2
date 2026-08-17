@@ -56,6 +56,12 @@ Cada lote retorna um `UpsertOutcome`:
 
 ## Módulos
 
-Hoje o roteador de lotes (`/api/importacoes/[id]/lotes`) processa **RDO** de
-ponta a ponta. Para os demais módulos o endpoint responde `501 Not Implemented`
-até que o importer correspondente seja portado (ver `migration-map.md`).
+O roteador de lotes (`/api/importacoes/[id]/lotes`) resolve o módulo pelo
+registro central `src/server/modules/registry.ts`. Hoje **RDO, IDP, RNC e 5S**
+estão registrados e processam de ponta a ponta por esse fluxo. Um módulo
+ausente do registro responde `501 Not Implemented` (ver `migration-map.md`).
+
+**Taxa de Acidentes não usa esse roteador.** Ela não tem importação por
+planilha — os lançamentos mensais e por unidade são cadastrados diretamente
+via formulário administrativo (`POST /api/taxa-acidentes`), sem `ImportJob`
+nem deduplicação por business key.

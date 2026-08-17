@@ -49,11 +49,11 @@ framework e de linguagem de backend.
 
 | Métrica | Valor |
 |---|---:|
-| Arquivos TypeScript/TSX em `src/` | 151 |
-| Rotas de API (`route.ts`) | 28 |
-| Modelos Prisma | 19 |
-| Páginas (`page.tsx`) | 13 |
-| Arquivos de teste (unit + integração + e2e) | 28 |
+| Arquivos TypeScript/TSX em `src/` | 180 |
+| Rotas de API (`route.ts`) | 33 |
+| Modelos Prisma | 20 |
+| Páginas (`page.tsx`) | 14 |
+| Arquivos de teste (unit + integração + e2e) | 36 |
 
 Os cálculos, importadores, serviços, repositórios e componentes ficam
 separados dentro de `src/features/<modulo>`, um por indicador, seguindo
@@ -152,20 +152,24 @@ capitalização das tabelas existentes.
 ## Autenticação
 
 A autenticação atual usa Better Auth e tabelas `User`, `Session` e `Account`.
-Ela é uma das partes mais acopladas ao Next.js. A migração deve ocorrer em
-duas etapas:
+Ela é uma das partes mais acopladas ao Next.js. A decisão já tomada é
+substituí-la por **Keycloak** (com Microsoft Entra ID configurado dentro
+dele) em vez de um SSO genérico. A migração deve ocorrer em duas etapas:
 
 1. FastAPI reconhece temporariamente as sessões existentes ou recebe chamadas
    por um proxy controlado;
-2. depois, a autenticação passa para um provedor próprio/corporativo (SSO),
+2. depois, a autenticação passa a validar tokens OIDC emitidos pelo Keycloak,
    mantendo os perfis `VIEWER`, `ANALYST` e `ADMIN`.
 
-O ponto de extensão já existe no projeto atual: `src/server/auth/provider.ts`
-define a interface `AuthenticationProvider`, e o modelo `User` já tem os
-campos `authProvider` e `externalUserId` preparados para login federado.
-Consulte [`corporate-integration.md`](corporate-integration.md) para o
-caminho de migração da autenticação em detalhe — ele independe de o backend
-ser Next.js ou FastAPI.
+`src/server/auth/provider.ts` define a interface `AuthenticationProvider`,
+mas **não está conectada ao fluxo real** hoje — não subestime o esforço achando
+que basta implementá-la. O modelo `User` já tem os campos `authProvider` e
+`externalUserId` preparados para login federado. Consulte
+[`migration-authentication-keycloak.md`](migration-authentication-keycloak.md)
+para o plano completo (arquivos a trocar, fluxo OIDC, JWKS, provisionamento
+JIT, variáveis de ambiente e fases) — ele independe de o backend ser Next.js
+ou FastAPI, mas assume que o corte definitivo acontece na stack Nuxt/FastAPI
+(ver seção 9 daquele documento).
 
 Nenhuma rota de negócio deve ser publicada sem autorização no servidor.
 

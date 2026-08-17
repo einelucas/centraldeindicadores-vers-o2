@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { recalcIdpIndicators } from "@/features/idp/services";
+import { recalcFiveSIndicators } from "@/features/cinco-s/services";
 import {
   formatPeriodRangeLabel,
   normalizePeriodRange,
@@ -13,22 +13,18 @@ import { requirePermission } from "@/server/auth/session";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 
-const REFERENCE_FIELDS = { year: "referenceYear", month: "referenceMonth" };
-
 /**
- * GET /api/idp/registros — contagem de RSOs para um período (ou toda a base,
- * sem período). Usado pela tela de exclusão para mostrar quantos registros
- * serão apagados antes de confirmar.
+ * GET /api/cinco-s/registros — contagem de registros para um período (ou
+ * toda a base, sem período). Usado pela tela de exclusão para mostrar
+ * quantos registros serão apagados antes de confirmar.
  */
 export async function GET(req: NextRequest) {
   try {
     await requirePermission("indicators:edit");
     const { searchParams } = new URL(req.url);
     const period = parsePeriodRangeParams(searchParams);
-    const where = period
-      ? (periodRangeWhere(period, REFERENCE_FIELDS) as Prisma.IdpRsoRecordWhereInput)
-      : {};
-    const count = await prisma.idpRsoRecord.count({ where });
+    const where = period ? (periodRangeWhere(period) as Prisma.FiveSRecordWhereInput) : {};
+    const count = await prisma.fiveSRecord.count({ where });
     return NextResponse.json({ count });
   } catch (error) {
     return handleApiError(error);
@@ -46,8 +42,8 @@ const deleteSchema = z.union([
 ]);
 
 /**
- * DELETE /api/idp/registros — limpa o histórico administrativo de RSOs, todo
- * ou apenas um período específico (só ADMIN); publicação permanece.
+ * DELETE /api/cinco-s/registros — limpa a base administrativa do 5S, toda ou
+ * apenas um período específico (só ADMIN).
  */
 export async function DELETE(req: NextRequest) {
   try {
@@ -55,20 +51,20 @@ export async function DELETE(req: NextRequest) {
     const body = deleteSchema.parse(await req.json());
 
     if ("all" in body) {
-      const count = await prisma.idpRsoRecord.count();
+      const count = await prisma.fiveSRecord.count();
       if (count === 0) return NextResponse.json({ ok: true, deleted: 0 });
 
       await prisma.$transaction(async (tx) => {
-        await tx.idpRsoRecord.deleteMany();
-        await tx.indicatorResult.deleteMany({ where: { module: "idp" } });
+        await tx.fiveSRecord.deleteMany();
+        await tx.indicatorResult.deleteMany({ where: { module: "cinco-s" } });
       });
 
       await recordAudit({
         userId: user.id,
         action: "RECORDS_CLEARED",
-        entity: "IdpRsoRecord",
+        entity: "FiveSRecord",
         previousData: { quantidade: count },
-        metadata: { module: "idp", escopo: "todos_rsos" },
+        metadata: { module: "cinco-s", escopo: "todos" },
       });
 
       return NextResponse.json({ ok: true, deleted: count });
@@ -80,14 +76,14 @@ export async function DELETE(req: NextRequest) {
       endYear: body.periodEndYear,
       endMonth: body.periodEndMonth,
     });
-    const where = periodRangeWhere(range, REFERENCE_FIELDS) as Prisma.IdpRsoRecordWhereInput;
-    const count = await prisma.idpRsoRecord.count({ where });
+    const where = periodRangeWhere(range) as Prisma.FiveSRecordWhereInput;
+    const count = await prisma.fiveSRecord.count({ where });
     if (count === 0) return NextResponse.json({ ok: true, deleted: 0 });
 
     await prisma.$transaction(
       async (tx) => {
-        await tx.idpRsoRecord.deleteMany({ where });
-        await recalcIdpIndicators(tx);
+        await tx.fiveSRecord.deleteMany({ where });
+        await recalcFiveSIndicators(tx);
       },
       { maxWait: 10_000, timeout: 60_000 },
     );
@@ -95,9 +91,9 @@ export async function DELETE(req: NextRequest) {
     await recordAudit({
       userId: user.id,
       action: "RECORDS_CLEARED",
-      entity: "IdpRsoRecord",
+      entity: "FiveSRecord",
       previousData: { quantidade: count },
-      metadata: { module: "idp", escopo: "periodo", periodo: formatPeriodRangeLabel(range) },
+      metadata: { module: "cinco-s", escopo: "periodo", periodo: formatPeriodRangeLabel(range) },
     });
 
     return NextResponse.json({ ok: true, deleted: count });

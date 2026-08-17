@@ -1215,12 +1215,22 @@ footer.app {
   margin-bottom: 12px;
 }
 .painel-frontend .uname {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
   font-size: 13.44px;
   font-weight: 700;
   color: #20324a;
   width: 170px;
   flex-shrink: 0;
   line-height: 1.3;
+}
+.painel-frontend .uname-rso {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.02em;
 }
 .painel-frontend .utrack {
   flex: 1;

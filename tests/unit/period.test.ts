@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  availableCyclesFromMonths,
+  cycleForMonth,
   enumeratePeriodMonths,
   formatPeriodRangeLabel,
   getCurrentCycle,
@@ -117,6 +119,50 @@ describe("getCurrentCycle", () => {
       endYear: 2027,
       endMonth: 5,
     });
+  });
+});
+
+describe("cycleForMonth", () => {
+  it("maps june through november to S2 of the same year", () => {
+    expect(cycleForMonth(2027, 6)).toEqual({
+      startYear: 2027,
+      startMonth: 6,
+      endYear: 2027,
+      endMonth: 11,
+    });
+  });
+
+  it("maps december through may to the cycle that starts in december", () => {
+    expect(cycleForMonth(2026, 12)).toEqual({
+      startYear: 2026,
+      startMonth: 12,
+      endYear: 2027,
+      endMonth: 5,
+    });
+    expect(cycleForMonth(2027, 5)).toEqual({
+      startYear: 2026,
+      startMonth: 12,
+      endYear: 2027,
+      endMonth: 5,
+    });
+  });
+});
+
+describe("availableCyclesFromMonths", () => {
+  it("deduplicates cycles and sorts them from newest to oldest", () => {
+    expect(
+      availableCyclesFromMonths([
+        { year: 2026, month: 6 },
+        { year: 2027, month: 5 },
+        { year: 2026, month: 12 },
+        { year: 2027, month: 7 },
+        { year: 2026, month: 8 },
+      ]),
+    ).toEqual([
+      { startYear: 2027, startMonth: 6, endYear: 2027, endMonth: 11 },
+      { startYear: 2026, startMonth: 12, endYear: 2027, endMonth: 5 },
+      { startYear: 2026, startMonth: 6, endYear: 2026, endMonth: 11 },
+    ]);
   });
 });
 

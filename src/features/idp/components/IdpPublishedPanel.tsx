@@ -330,7 +330,12 @@ export function IdpPublishedPanel() {
                 const ok = unit.v >= d.meta;
                 return (
                   <div className="urow" key={`${unit.n}-${unit.rsoNumero ?? "rso"}`}>
-                    <div className="uname">{formatIdpUnitLabel(unit.n)}</div>
+                    <div className="uname">
+                      {formatIdpUnitLabel(unit.n)}
+                      {unit.rsoNumero ? (
+                        <span className="uname-rso">RSO {unit.rsoNumero}</span>
+                      ) : null}
+                    </div>
                     <div className="utrack">
                       <div
                         className="ufill"

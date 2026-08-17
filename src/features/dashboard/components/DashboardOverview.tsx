@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Medal, Percent, Trophy, type LucideIcon } from "lucide-react";
 import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
 import {
@@ -13,8 +14,27 @@ import type {
   GeneralPanelIndicator,
   GeneralPanelMonthCell,
 } from "@/features/scorecard/publications";
-import { SCORECARD_MAX_POINTS, SCORECARD_MONTHLY_POOL } from "@/features/scorecard/types";
+import {
+  SC_INDICATORS,
+  SCORECARD_MAX_POINTS,
+  SCORECARD_MONTHLY_POOL,
+} from "@/features/scorecard/types";
 import type { PeriodRange } from "@/lib/period";
+
+/** Rota da aba de cada módulo de origem, para linkar as células mensais do
+    Scorecard geral à leitura detalhada do indicador correspondente. */
+const MODULE_HREF: Record<string, string> = {
+  rdo: "/dashboard/rdo",
+  idp: "/dashboard/idp",
+  rnc: "/dashboard/rnc",
+  "cinco-s": "/dashboard/cinco-s",
+  "taxa-acidentes": "/dashboard/taxa-acidentes",
+};
+
+function indicatorHref(indicatorKey: string): string | null {
+  const source = SC_INDICATORS.find((item) => item.key === indicatorKey)?.source;
+  return source ? (MODULE_HREF[source.module] ?? null) : null;
+}
 
 type DashboardResponse = GeneralPanelData & { historyCount?: number };
 
@@ -351,54 +371,75 @@ export function DashboardOverview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.indicators.map((indicator) => (
-                    <tr
-                      key={indicator.key}
-                      className="general-scorecard-row border-t border-neutralbrand/15 hover:bg-canvas/60"
-                    >
-                      <td className="general-scorecard-label text-brand-dark">{indicator.label}</td>
-                      <td className="px-3 py-3 text-right font-normal text-brand-dark">
-                        {indicator.peso.toFixed(2)}%
-                      </td>
-                      <td className="px-3 py-3 text-right font-normal">{formatMeta(indicator)}</td>
-                      {indicator.months.map((month) => (
-                        <td key={month.key} className="general-scorecard-month-cell text-center">
-                          <span
-                            className={`general-scorecard-month inline-flex items-center justify-center rounded-lg border text-xs font-medium ${
-                              month.value === null
-                                ? "border-neutralbrand/20 bg-neutralbrand/5 text-neutralbrand"
-                                : month.pass
-                                  ? "border-green-200 bg-green-50 text-green-700"
-                                  : "border-red-200 bg-red-50 text-red-700"
-                            }`}
-                            title={`${indicator.label} — ${month.label}`}
-                          >
-                            {formatMonthValue(indicator, month.value)}
-                          </span>
+                  {data.indicators.map((indicator) => {
+                    const href = indicatorHref(indicator.key);
+                    return (
+                      <tr
+                        key={indicator.key}
+                        className="general-scorecard-row border-t border-neutralbrand/15 hover:bg-canvas/60"
+                      >
+                        <td className="general-scorecard-label text-brand-dark">
+                          {indicator.label}
                         </td>
-                      ))}
-                      <td className="px-3 py-3 text-right font-normal">
-                        {formatValue(indicator, indicator.partial)}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="font-extrabold text-brand-dark">
-                          {formatPoints(indicatorPoints(indicator))}
-                        </div>
-                        <div className="text-[10px] text-neutralbrand">
-                          de {formatPoints(indicatorMaxPoints(indicator))}
-                        </div>
-                      </td>
-                      <td className="general-scorecard-status px-3 py-3 text-center">
-                        {indicator.partialPass === null ? (
-                          <span className="text-xs font-normal text-neutralbrand">Sem dados</span>
-                        ) : (
-                          <StatusBadge ok={indicator.partialPass} className="w-28 text-center">
-                            {indicator.partialPass ? "Dentro da meta" : "Fora da meta"}
-                          </StatusBadge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-3 py-3 text-right font-normal text-brand-dark">
+                          {indicator.peso.toFixed(2)}%
+                        </td>
+                        <td className="px-3 py-3 text-right font-normal">
+                          {formatMeta(indicator)}
+                        </td>
+                        {indicator.months.map((month) => {
+                          const monthBadgeClassName = `general-scorecard-month inline-flex items-center justify-center rounded-lg border text-xs font-medium ${
+                            month.value === null
+                              ? "border-neutralbrand/20 bg-neutralbrand/5 text-neutralbrand"
+                              : month.pass
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : "border-red-200 bg-red-50 text-red-700"
+                          }`;
+                          const monthBadgeTitle = `${indicator.label} — ${month.label}`;
+                          return (
+                            <td
+                              key={month.key}
+                              className="general-scorecard-month-cell text-center"
+                            >
+                              {href ? (
+                                <Link
+                                  href={href}
+                                  className={`${monthBadgeClassName} cursor-pointer transition hover:-translate-y-0.5 hover:shadow-sm`}
+                                  title={`${monthBadgeTitle} — ver detalhes em ${indicator.label}`}
+                                >
+                                  {formatMonthValue(indicator, month.value)}
+                                </Link>
+                              ) : (
+                                <span className={monthBadgeClassName} title={monthBadgeTitle}>
+                                  {formatMonthValue(indicator, month.value)}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-3 text-right font-normal">
+                          {formatValue(indicator, indicator.partial)}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <div className="font-extrabold text-brand-dark">
+                            {formatPoints(indicatorPoints(indicator))}
+                          </div>
+                          <div className="text-[10px] text-neutralbrand">
+                            de {formatPoints(indicatorMaxPoints(indicator))}
+                          </div>
+                        </td>
+                        <td className="general-scorecard-status px-3 py-3 text-center">
+                          {indicator.partialPass === null ? (
+                            <span className="text-xs font-normal text-neutralbrand">Sem dados</span>
+                          ) : (
+                            <StatusBadge ok={indicator.partialPass} className="w-28 text-center">
+                              {indicator.partialPass ? "Dentro da meta" : "Fora da meta"}
+                            </StatusBadge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot className="border-t-2 border-brand/20 bg-canvas font-extrabold text-brand-dark">
                   <tr>

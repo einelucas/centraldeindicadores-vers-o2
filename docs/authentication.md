@@ -48,6 +48,14 @@ Troque a senha do admin no primeiro acesso.
 
 ## Substituição futura por SSO corporativo
 
-A abstração `server/auth/provider.ts` isola a aplicação do provedor concreto.
+`server/auth/provider.ts` declara a interface `AuthenticationProvider`, mas
+**não está conectada ao fluxo real** — `getCurrentUser()`/`requirePermission()`
+(`server/auth/session.ts`) e a tela de login importam o Better Auth
+diretamente, sem passar por essa interface. Trocar o provedor exige
+substituir esses pontos concretos, não apenas implementar a interface.
+
 Os campos `authProvider` e `externalUserId` já preveem contas vindas de um
-sistema externo. Veja `corporate-integration.md`.
+sistema externo. O plano de migração está detalhado em
+[`migration-authentication-keycloak.md`](migration-authentication-keycloak.md)
+(Keycloak + Microsoft Entra ID, decisão recomendada para este projeto); veja
+também `corporate-integration.md` para o ponto de extensão genérico.

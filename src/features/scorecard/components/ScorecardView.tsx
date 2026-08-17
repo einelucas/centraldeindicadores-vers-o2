@@ -1,15 +1,20 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCw, Save, Trash2 } from "lucide-react";
 
 import { ExportButtons } from "@/components/exports/ExportButtons";
-import { PeriodRangeFilter } from "@/components/admin/PeriodRangeFilter";
+import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { MetricCard } from "@/components/indicators/MetricCard";
 import { StatusBadge } from "@/components/indicators/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import {
+  cycleFromYearSemester,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
+import type { ReadingSemester } from "@/components/layout/ReadingContextCard";
 import { computeScorecard } from "@/features/scorecard/calculations";
 import {
   SC_INDICATORS,
@@ -19,12 +24,11 @@ import {
   type ScorecardRow,
 } from "@/features/scorecard/types";
 import { MONTH_NAMES } from "@/lib/dates";
+import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import {
   enumeratePeriodMonths,
   formatPeriodRangeLabel,
-  getCurrentCycle,
   periodToOptionalFields,
-  toMonthIndex,
   type PeriodRange,
 } from "@/lib/period";
 
@@ -83,22 +87,6 @@ function formatValue(value: number | null, unit: string): string {
   return unit === "dias" ? `${formatted} dias` : `${formatted}${unit}`;
 }
 
-function targetLabel(row: Pick<ScorecardRow, "direction" | "meta" | "unit">): string {
-  const operator = row.direction === "lower" ? "≤" : "≥";
-  return `${operator} ${formatValue(row.meta, row.unit)}`;
-}
-
-function inputsFromValues(values: Record<string, number | null>): Record<string, string> {
-  return Object.fromEntries(
-    SC_INDICATORS.map((indicator) => [
-      indicator.key,
-      values[indicator.key] === null || values[indicator.key] === undefined
-        ? ""
-        : String(values[indicator.key]),
-    ]),
-  );
-}
-
 function resultRow(computation: Computation | undefined, key: string): ScorecardRow | undefined {
   return computation?.result.rows.find((row) => row.key === key);
 }
@@ -117,25 +105,29 @@ export function ScorecardView({
   /** Período salvo (Administração) na última vez que alguém o alterou; `null` = nunca foi salvo. */
   initialPeriod: PeriodRange | null;
 }) {
-  const [cycleRange, setCycleRange] = useState<PeriodRange>(initialPeriod ?? getCurrentCycle);
-  // Mês de referência para "Indicadores do mês" e "Salvar snapshot": sempre o
-  // fim do intervalo do filtro de Período — não existe mais um seletor
-  // independente, para não haver dois controles de período divergentes.
+  // Período travado de Ano + Semestre, igual aos demais painéis de
+  // Administração (RDO/IDP/RNC/5S/Taxa) — substitui o antigo filtro livre de
+  // "De/Até", que permitia recortes fora dos 6 meses de um ciclo e quebrava a
+  // premissa de pontuação do Scorecard (SCORECARD_MONTHLY_POOL × 6 meses).
+  const {
+    year: cycleYear,
+    semester: cycleSemester,
+    cycle: cycleRange,
+    setPeriod: setCyclePeriod,
+  } = useReadingContextCycle(initialPeriod);
+  // Mês de referência para "Salvar snapshot": sempre o fim do intervalo do
+  // ciclo travado — não existe mais um seletor independente, para não haver
+  // dois controles de período divergentes.
   const { year, month } = useMemo(() => endOfRange(cycleRange), [cycleRange]);
   const cycleMonths = useMemo(() => enumeratePeriodMonths(cycleRange), [cycleRange]);
   const [data, setData] = useState<Computation | null>(null);
   const [history, setHistory] = useState<Computation[]>([]);
   const [semesterPreview, setSemesterPreview] = useState<Computation[]>([]);
-  const [inputs, setInputs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [statusError, setStatusError] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const currentRequestId = useRef(0);
-  // Guarda o último valor "ao vivo" aplicado a cada campo, para saber se o
-  // usuário editou manualmente desde então — assim uma atualização em tempo
-  // real não apaga um ajuste que ainda não foi salvo.
-  const lastLiveInputsRef = useRef<Record<string, string>>({});
   const previousPeriodKeyRef = useRef<string | null>(null);
 
   const loadHistory = useCallback(async () => {
@@ -226,10 +218,9 @@ export function ScorecardView({
     };
   }, [refreshLive]);
 
-  // Mantém "Indicadores do mês" em sincronia com o snapshot ao vivo do mês
-  // selecionado. Ao trocar de mês/ano, os campos assumem o valor publicado;
-  // numa atualização em segundo plano, só os campos que o usuário não tocou
-  // desde a última sincronização são sobrescritos.
+  // Mantém o snapshot exibido em sincronia com o valor ao vivo do mês
+  // selecionado (fim do período filtrado). Os dados vêm sempre do módulo de
+  // origem ou do snapshot salvo — não há mais edição manual no cliente.
   useEffect(() => {
     const current =
       semesterPreview.find(
@@ -240,44 +231,15 @@ export function ScorecardView({
     previousPeriodKeyRef.current = currentPeriodKey;
 
     // Sem entrada ao vivo para o mês selecionado e o período não mudou: o
-    // salvamento (ver save()/editHistoryCell) removeu esse mês da prévia de
-    // propósito, para não sobrepor o snapshot recém-salvo com um valor ao
-    // vivo desatualizado. O próximo ciclo de sincronização o repõe.
+    // salvamento (ver save()) removeu esse mês da prévia de propósito, para
+    // não sobrepor o snapshot recém-salvo com um valor ao vivo desatualizado.
+    // O próximo ciclo de sincronização o repõe.
     if (!current && !periodChanged) return;
 
     setData(current);
-
-    const liveInputs = current ? inputsFromValues(current.values) : {};
-    setInputs((currentInputs) => {
-      if (periodChanged) return liveInputs;
-      const next = { ...currentInputs };
-      for (const indicator of SC_INDICATORS) {
-        const key = indicator.key;
-        const untouched = (currentInputs[key] ?? "") === (lastLiveInputsRef.current[key] ?? "");
-        if (untouched) next[key] = liveInputs[key] ?? "";
-      }
-      return next;
-    });
-    lastLiveInputsRef.current = liveInputs;
   }, [month, year, semesterPreview]);
 
-  const displayedValues = useMemo(() => {
-    const values: Record<string, number | null> = { ...(data?.values ?? {}) };
-
-    for (const indicator of SC_INDICATORS) {
-      const raw = inputs[indicator.key];
-      if (raw === undefined) continue;
-      const trimmed = raw.trim();
-      if (!trimmed) {
-        values[indicator.key] = null;
-        continue;
-      }
-      const parsed = Number(trimmed.replace(",", "."));
-      values[indicator.key] = Number.isFinite(parsed) ? parsed : null;
-    }
-
-    return values;
-  }, [data?.values, inputs]);
+  const displayedValues = useMemo(() => data?.values ?? {}, [data?.values]);
 
   const displayedResult = useMemo(() => computeScorecard(displayedValues), [displayedValues]);
 
@@ -418,12 +380,12 @@ export function ScorecardView({
   // Persiste a escolha de Período no servidor, para que ela sobreviva a um
   // recarregamento e seja o mesmo período usado pelo Painel Geral — em vez de
   // ficar só na memória do navegador e voltar ao ciclo padrão a cada F5.
-  function updateCycleRange(next: PeriodRange) {
-    setCycleRange(next);
+  function updateCyclePeriod(nextYear: number, nextSemester: ReadingSemester) {
+    setCyclePeriod(nextYear, nextSemester);
     void fetch("/api/scorecard/panel-period", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(next),
+      body: JSON.stringify(cycleFromYearSemester(nextYear, nextSemester)),
     }).catch(() => {
       // Falha silenciosa: o filtro continua funcionando nesta sessão: só a
       // persistência entre sessões é que não é garantida nesse caso.
@@ -449,13 +411,8 @@ export function ScorecardView({
       if (!response.ok) throw new Error("Não foi possível salvar o snapshot.");
 
       const saved = (await response.json()) as Computation;
-      const savedInputs = inputsFromValues(saved.values);
+      notifyIndicatorDataChanged();
       setData(saved);
-      setInputs(savedInputs);
-      // O próximo ciclo de sincronização em tempo real substitui esse valor
-      // pelo publicado ao vivo assim que houver um — daí marcar o override
-      // recém-salvo como o baseline "ao vivo" atual (ver o efeito acima).
-      lastLiveInputsRef.current = savedInputs;
       setSemesterPreview((current) =>
         current.filter((computation) => computation.year !== year || computation.month !== month),
       );
@@ -500,6 +457,7 @@ export function ScorecardView({
         throw new Error(body.error ?? "Não foi possível limpar o histórico do ciclo.");
       }
 
+      notifyIndicatorDataChanged();
       await loadHistory();
       const deleted = body.deleted ?? 0;
       setStatus(
@@ -515,90 +473,6 @@ export function ScorecardView({
     }
   }
 
-  async function editHistoryCell(indicatorKey: string, cellYear: number, cellMonth: number) {
-    const indicator = SC_INDICATORS.find((item) => item.key === indicatorKey);
-    if (!indicator || busy) return;
-
-    const currentComputation = effectiveByPeriod.get(periodKey(cellYear, cellMonth));
-    const currentValue = currentComputation?.values[indicatorKey] ?? null;
-    const input = window.prompt(
-      `${indicator.label} — ${monthName(cellMonth)}/${cellYear}\nMeta: ${indicator.direction === "lower" ? "≤" : "≥"} ${indicator.meta}${indicator.unit}\n\nDigite o novo resultado. Deixe em branco para restaurar o valor publicado do módulo:`,
-      currentValue === null ? "" : String(currentValue).replace(".", ","),
-    );
-
-    if (input === null) return;
-
-    const trimmed = input.trim();
-    const parsed = trimmed === "" ? null : Number(trimmed.replace(",", "."));
-    if (parsed !== null && !Number.isFinite(parsed)) {
-      setStatus("Digite um valor numérico válido.");
-      setStatusError(true);
-      return;
-    }
-
-    const baseValues = currentComputation?.values ?? {};
-    const overrides: Record<string, number | null> = {};
-
-    for (const item of SC_INDICATORS) {
-      if (item.key === indicatorKey) continue;
-      const value = baseValues[item.key];
-      if (typeof value === "number" && Number.isFinite(value)) {
-        overrides[item.key] = value;
-      }
-    }
-
-    if (parsed !== null) overrides[indicatorKey] = parsed;
-
-    setBusy(true);
-    setStatus(null);
-    setStatusError(false);
-
-    try {
-      const response = await fetch("/api/scorecard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year: cellYear,
-          month: cellMonth,
-          overrides,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Não foi possível atualizar o valor do histórico.");
-
-      const saved = (await response.json()) as Computation;
-      setHistory((current) =>
-        [
-          ...current.filter(
-            (computation) => computation.year !== cellYear || computation.month !== cellMonth,
-          ),
-          saved,
-        ].sort((a, b) => toMonthIndex(a.year, a.month) - toMonthIndex(b.year, b.month)),
-      );
-      setSemesterPreview((current) =>
-        current.filter(
-          (computation) => computation.year !== cellYear || computation.month !== cellMonth,
-        ),
-      );
-
-      if (cellYear === year && cellMonth === month) {
-        const savedInputs = inputsFromValues(saved.values);
-        setData(saved);
-        setInputs(savedInputs);
-        lastLiveInputsRef.current = savedInputs;
-      }
-
-      setStatus(
-        `${indicator.label} de ${monthName(cellMonth)}/${cellYear} atualizado sem trocar o mês selecionado.`,
-      );
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Falha ao atualizar o histórico.");
-      setStatusError(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const selectedRows = displayedResult.rows;
 
   return (
@@ -607,19 +481,15 @@ export function ScorecardView({
         <Card className="p-4">
           <div className="flex flex-col gap-3">
             <Label>Período</Label>
-            <PeriodRangeFilter
-              value={cycleRange}
-              onChange={(next) => {
-                if (!next) return;
-                updateCycleRange(next);
-              }}
-              yearsInData={[cycleRange.startYear, cycleRange.endYear]}
-              allowClear={false}
+            <SemesterYearFilter
+              year={cycleYear}
+              semester={cycleSemester}
+              onChange={updateCyclePeriod}
               label=""
             />
             <p className="text-xs text-neutralbrand">
-              &quot;Indicadores do mês&quot; e &quot;Salvar snapshot&quot; sempre usam o mês final
-              deste período ({monthName(month)}/{year}).
+              &quot;Salvar snapshot&quot; sempre usa o mês final deste período (
+              {monthName(month)}/{year}).
             </p>
           </div>
         </Card>
@@ -727,132 +597,12 @@ export function ScorecardView({
       <section className="rounded-2xl border border-neutralbrand/25 bg-white p-4 shadow-sm sm:p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="text-base font-extrabold text-brand-dark">Indicadores do mês</h3>
-            <p className="mt-1 text-xs text-neutralbrand">
-              O valor é atualizado automaticamente a partir do módulo de origem. O campo pode ser
-              editado para um ajuste manual antes de salvar; sem edição, ele acompanha o valor
-              publicado em tempo real.
-            </p>
-          </div>
-          <ExportButtons
-            fileName={`scorecard-${year}-${String(month).padStart(2, "0")}`}
-            title="Scorecard — Resultado mensal"
-            subtitle={`${monthName(month)}/${year} · ${formatPoints(displayedResult.totalPontos)} de ${formatPoints(SCORECARD_MONTHLY_POOL)} pontos`}
-            orientation="landscape"
-            rows={selectedRows}
-            columns={[
-              { header: "Indicador", value: (row) => row.label },
-              { header: "Peso (%)", value: (row) => row.peso.toFixed(2) },
-              { header: "Meta", value: (row) => targetLabel(row) },
-              { header: "Resultado", value: (row) => formatValue(row.value, row.unit) },
-              { header: "Pontos possíveis", value: (row) => formatPoints(row.pontosPossiveis) },
-              { header: "Pontos realizados", value: (row) => formatPoints(row.pontos) },
-              {
-                header: "Situação",
-                value: (row) =>
-                  !row.hasValue ? "Sem dados" : row.pass ? "Dentro da meta" : "Fora da meta",
-              },
-            ]}
-          />
-        </div>
-
-        <div className="overflow-x-auto rounded-xl border border-neutralbrand/20">
-          <table className="min-w-[1050px] w-full text-sm">
-            <thead className="bg-[#EEF1F6] text-left text-[11px] font-bold uppercase tracking-wide text-brand-dark">
-              <tr>
-                <th className="px-3 py-3">Indicador</th>
-                <th className="px-3 py-3 text-right">Peso</th>
-                <th className="px-3 py-3 text-right">Meta</th>
-                <th className="px-3 py-3 text-right">Origem publicada</th>
-                <th className="px-3 py-3">Resultado / ajuste</th>
-                <th className="px-3 py-3 text-right">Pontos possíveis</th>
-                <th className="px-3 py-3 text-right">Pontos realizados</th>
-                <th className="px-3 py-3">Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedRows.map((row) => (
-                <tr
-                  key={row.key}
-                  className="border-t border-neutralbrand/15 align-middle hover:bg-canvas/60"
-                >
-                  <td className="px-3 py-3">
-                    <div className="font-bold text-brand-dark">{row.label}</div>
-                    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-neutralbrand">
-                      {SC_INDICATORS.find((indicator) => indicator.key === row.key)?.source
-                        ?.module ?? "Manual"}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-right font-semibold">{row.peso.toFixed(2)}%</td>
-                  <td className="px-3 py-3 text-right font-semibold">{targetLabel(row)}</td>
-                  <td className="px-3 py-3 text-right text-neutralbrand">
-                    {formatValue(
-                      data?.sourceValues?.[row.key] ?? data?.values[row.key] ?? null,
-                      row.unit,
-                    )}
-                  </td>
-                  <td className="px-3 py-3">
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Sem resultado"
-                      value={inputs[row.key] ?? ""}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        setInputs((current) => ({
-                          ...current,
-                          [row.key]: event.target.value,
-                        }))
-                      }
-                      className="w-32 rounded-lg border border-neutralbrand/40 px-3 py-2 text-sm font-semibold outline-none focus:border-brand"
-                    />
-                  </td>
-                  <td className="px-3 py-3 text-right tabular-nums">
-                    {formatPoints(row.pontosPossiveis)}
-                  </td>
-                  <td
-                    className={`px-3 py-3 text-right font-extrabold tabular-nums ${row.pass ? "text-success" : "text-neutralbrand"}`}
-                  >
-                    {formatPoints(row.pontos)}
-                  </td>
-                  <td className="px-3 py-3">
-                    {row.hasValue ? (
-                      <StatusBadge ok={row.pass}>
-                        {row.pass ? "Dentro da meta" : "Fora da meta"}
-                      </StatusBadge>
-                    ) : (
-                      <span className="rounded-full bg-neutralbrand/10 px-2.5 py-1 text-xs font-bold text-neutralbrand">
-                        Sem dados
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="border-t-2 border-brand/20 bg-canvas font-extrabold text-brand-dark">
-              <tr>
-                <td className="px-3 py-3" colSpan={5}>
-                  Total do mês
-                </td>
-                <td className="px-3 py-3 text-right">{formatPoints(SCORECARD_MONTHLY_POOL)}</td>
-                <td className="px-3 py-3 text-right text-accent">
-                  {formatPoints(displayedResult.totalPontos)}
-                </td>
-                <td className="px-3 py-3">{displayedResult.atendimentoMes.toFixed(2)}%</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-neutralbrand/25 bg-white p-4 shadow-sm sm:p-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
             <h3 className="text-base font-extrabold text-brand-dark">
               Histórico do ciclo — indicador por mês
             </h3>
             <p className="mt-1 text-xs text-neutralbrand">
-              O farol usa a meta de cada indicador. Clique nele para editar somente aquele indicador
-              e mês, sem trocar o snapshot aberto acima.
+              O farol usa a meta de cada indicador. Os valores vêm apenas do banco de dados: o
+              publicado ao vivo pelo módulo de origem ou o último snapshot salvo.
             </p>
           </div>
           <ExportButtons
@@ -929,24 +679,21 @@ export function ScorecardView({
                       if (!cm) return null;
                       return (
                         <td key={periodKey(cm.year, cm.month)} className="px-2 py-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => void editHistoryCell(indicator.key, cm.year, cm.month)}
-                            disabled={busy}
-                            className={`inline-flex min-w-20 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-bold transition hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-60 ${
+                          <span
+                            className={`inline-flex min-w-20 items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-bold ${
                               !row?.hasValue
                                 ? "border-neutralbrand/20 bg-neutralbrand/5 text-neutralbrand"
                                 : row.pass
                                   ? "border-green-200 bg-green-50 text-green-700"
                                   : "border-red-200 bg-red-50 text-red-700"
                             }`}
-                            title={`Editar ${indicator.label} de ${monthName(cm.month)}/${cm.year}`}
+                            title={`${indicator.label} — ${monthName(cm.month)}/${cm.year}`}
                           >
                             <span
                               className={`h-2.5 w-2.5 rounded-full ${!row?.hasValue ? "bg-neutralbrand/40" : row.pass ? "bg-success" : "bg-red-600"}`}
                             />
                             {row?.hasValue ? formatValue(row.value, row.unit) : "—"}
-                          </button>
+                          </span>
                         </td>
                       );
                     })}

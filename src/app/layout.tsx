@@ -19,6 +19,9 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   title: "Central de Indicadores",
   description: "Indicadores corporativos consolidados",
+  icons: {
+    icon: "/brand/favicon.png",
+  },
 };
 
 export default function RootLayout({

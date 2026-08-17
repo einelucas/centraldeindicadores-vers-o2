@@ -144,29 +144,3 @@ export async function PATCH(req: NextRequest) {
     return handleApiError(error);
   }
 }
-
-/** DELETE /api/cinco-s — limpa a base administrativa (somente ADMIN). */
-export async function DELETE() {
-  try {
-    const user = await requirePermission("indicators:edit");
-    const count = await prisma.fiveSRecord.count();
-    if (!count) return NextResponse.json({ ok: true, deleted: 0 });
-
-    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.fiveSRecord.deleteMany();
-      await tx.indicatorResult.deleteMany({ where: { module: "cinco-s" } });
-    });
-
-    await recordAudit({
-      userId: user.id,
-      action: "RECORDS_CLEARED",
-      entity: "FiveSRecord",
-      previousData: { quantidade: count },
-      metadata: { module: "cinco-s", escopo: "todos" },
-    });
-
-    return NextResponse.json({ ok: true, deleted: count });
-  } catch (error) {
-    return handleApiError(error);
-  }
-}

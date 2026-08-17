@@ -123,7 +123,26 @@ Indica que o servidor foi alcançado, mas a operação excedeu o tempo limite. E
 
 ### Histórico do Scorecard com valor inesperado
 
-- confirme o mês e o indicador da célula;
-- verifique se existe ajuste manual;
-- campo vazio deve restaurar o valor proveniente da publicação;
-- clicar no farol não deve alterar o mês selecionado da tabela superior.
+O painel de Administração do Scorecard não permite mais edição manual —
+nenhum campo de "Indicadores do mês" e nenhum clique em célula do "Histórico
+do ciclo" altera valores. Todo valor exibido vem do módulo de origem (ao
+vivo) ou do último snapshot salvo via "Salvar snapshot" (que persiste os
+valores ao vivo do momento, nunca um ajuste digitado).
+
+- confirme o mês/indicador e o período selecionado (Ano + Semestre, travado
+  como nos demais painéis administrativos — não há mais filtro livre de
+  "De/Até" no Scorecard);
+- confira se o módulo de origem (RDO/IDP/RNC/5S/Taxa de Acidentes) já
+  publicou aquele mês; sem publicação, o valor fica "Sem dados";
+- um valor "congelado" e desatualizado geralmente indica um snapshot salvo
+  antigo sem republicação recente do módulo de origem — use "Recalcular" para
+  puxar os valores ao vivo novamente.
+
+### Limpar registros administrativos (RDO/IDP/RNC/5S/Taxa de Acidentes)
+
+O botão "Limpar tudo" é padronizado em todos os painéis de Administração:
+abre um diálogo (`ClearRecordsDialog`) que exige escolher um período (ou
+deixar "Tudo"), mostra a contagem real de registros afetados buscada no
+servidor e só libera a exclusão depois de digitar a frase de confirmação.
+Nenhum módulo usa mais `window.confirm` para essa ação. A publicação vigente
+nunca é apagada por esse botão — ela é um snapshot histórico imutável.

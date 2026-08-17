@@ -27,10 +27,19 @@ export function periodQueryString(period: PeriodRange): string {
   return params.toString();
 }
 
-export function useReadingContextCycle() {
+/**
+ * @param initialPeriod Período salvo a usar como valor inicial em vez do
+ * ciclo vigente na data real — usado apenas pelo Scorecard, cujo período de
+ * Administração é persistido no servidor e compartilhado com o Painel Geral.
+ * Os demais módulos não passam esse argumento e sempre partem do ciclo atual.
+ */
+export function useReadingContextCycle(initialPeriod?: PeriodRange | null) {
   const [current] = useState(() => yearSemesterFromCycle(getCurrentCycle()));
-  const [year, setYear] = useState(current.year);
-  const [semester, setSemester] = useState<ReadingSemester>(current.semester);
+  const [initial] = useState(() =>
+    initialPeriod ? yearSemesterFromCycle(initialPeriod) : current,
+  );
+  const [year, setYear] = useState(initial.year);
+  const [semester, setSemester] = useState<ReadingSemester>(initial.semester);
   const cycle = useMemo(() => cycleFromYearSemester(year, semester), [semester, year]);
 
   return {
