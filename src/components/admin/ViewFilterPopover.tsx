@@ -18,12 +18,15 @@ export function ViewFilterPopover({
   onChange,
   yearsInData,
   publishedLabel,
+  label = "Consulta",
 }: {
   value: PeriodRange | null | undefined;
   onChange: (next: PeriodRange | null | undefined) => void;
   yearsInData?: readonly number[];
   /** Rótulo do período de publicação, mostrado como referência dentro do popover. */
   publishedLabel: string;
+  /** Texto do botão/gatilho. Default "Consulta" — outros módulos não precisam passar isto. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -47,7 +50,7 @@ export function ViewFilterPopover({
         onClick={() => setOpen((current) => !current)}
       >
         <Search className="size-3.5" />
-        {active ? `Consulta · ${formatPeriodRangeLabel(value)}` : "Consulta"}
+        {active ? `${label} · ${formatPeriodRangeLabel(value)}` : label}
       </Button>
 
       {open ? (

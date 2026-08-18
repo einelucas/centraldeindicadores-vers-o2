@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Ban,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -21,7 +22,6 @@ import {
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
-import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
 import {
@@ -45,9 +45,19 @@ import {
 import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
 import { fmtPct } from "@/lib/currency";
-import { MONTH_NAMES_FULL } from "@/lib/dates";
-import { notifyIndicatorDataChanged } from "@/lib/browser-events";
-import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { MONTH_NAMES, MONTH_NAMES_FULL } from "@/lib/dates";
+import { INDICATOR_DATA_CHANGED_EVENT, notifyIndicatorDataChanged } from "@/lib/browser-events";
+import {
+  enumeratePeriodMonths,
+  formatPeriodOptionLabel,
+  getOperationalPeriod,
+  nextPeriod as nextOperationalPeriod,
+  periodToOptionalFields,
+  toMonthIndex,
+  yearSemesterFromCycle,
+  type PeriodRange,
+  type Semester,
+} from "@/lib/period";
 import { importFiveSFiles } from "@/features/cinco-s/importers";
 import { exportFiveSPdf } from "@/features/cinco-s/exports/pdf";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
@@ -131,6 +141,16 @@ function numberText(value: number): string {
     : value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 }
 
+/** "Jun, Jul e Ago" — usado na linha de cobertura mensal do card de contexto. */
+function joinWithAnd(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} e ${items[items.length - 1]}`;
+}
+
+function periodOptionKey(year: number, semester: Semester): string {
+  return `${year}:${semester}`;
+}
+
 export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canClear: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [target, setTarget] = useState(FIVES_DEFAULT_TARGET * 100);
@@ -161,6 +181,37 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   const [message, setMessage] = useState<string | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
+  /** Ciclos com pelo menos um mês real importado — fonte do seletor único de
+      período de trabalho. Vem do mesmo endpoint que o painel publicado usa. */
+  const [availablePeriods, setAvailablePeriods] = useState<
+    Array<{ year: number; semester: Semester }>
+  >([]);
+  /** Meses do ciclo de PUBLICAÇÃO com dado real — sempre relativo a
+      `publishPeriod`, nunca ao filtro de "Detalhar meses", para a cobertura e
+      o botão "Publicar" nunca refletirem um período diferente do que será
+      publicado. */
+  const [narrowedCoverageMonths, setNarrowedCoverageMonths] = useState<Set<string> | null>(null);
+
+  const loadAvailablePeriods = useCallback(async () => {
+    try {
+      const response = await fetch("/api/available-periods?source=cinco-s", {
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+      const body = (await response.json()) as { periods?: PeriodRange[] };
+      const next = (body.periods ?? []).map(yearSemesterFromCycle);
+      setAvailablePeriods(next);
+      return next;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAvailablePeriods();
+    window.addEventListener(INDICATOR_DATA_CHANGED_EVENT, loadAvailablePeriods);
+    return () => window.removeEventListener(INDICATOR_DATA_CHANGED_EVENT, loadAvailablePeriods);
+  }, [loadAvailablePeriods]);
 
   const load = useCallback(
     async (nextPeriod = effectivePeriod) => {
@@ -198,6 +249,21 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
     setPublication(body.publication);
   }, [publishPeriod]);
 
+  const loadCoverage = useCallback(async () => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(publishPeriod)).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ),
+    );
+    const response = await fetch(`/api/cinco-s?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = (await response.json()) as FiveSApiResponse;
+    setNarrowedCoverageMonths(new Set(body.result.months.map((m) => periodKey(m.year, m.month))));
+  }, [publishPeriod]);
+
   useEffect(() => {
     void load().catch((err: Error) => setError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -206,6 +272,63 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   useEffect(() => {
     void loadPublication();
   }, [loadPublication]);
+
+  // "Detalhar meses" pode restringir a tabela a um recorte diferente do
+  // período de publicação — nesse caso a cobertura/o botão "Publicar" não
+  // podem usar `data` (que segue o filtro), então buscamos separadamente,
+  // sempre escopado em `publishPeriod`. Sem filtro ativo, `data` já reflete
+  // exatamente o período de publicação e essa busca extra é dispensada.
+  useEffect(() => {
+    if (viewFilter === undefined) {
+      setNarrowedCoverageMonths(null);
+      return;
+    }
+    void loadCoverage();
+  }, [viewFilter, loadCoverage]);
+
+  const coverageMonthSet = useMemo(() => {
+    if (viewFilter === undefined && data) {
+      return new Set(data.result.months.map((m) => periodKey(m.year, m.month)));
+    }
+    return narrowedCoverageMonths;
+  }, [viewFilter, data, narrowedCoverageMonths]);
+
+  const workingMonths = useMemo(() => enumeratePeriodMonths(publishPeriod), [publishPeriod]);
+  const presentWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => coverageMonthSet?.has(periodKey(m.year, m.month))),
+    [workingMonths, coverageMonthSet],
+  );
+  const missingWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => !coverageMonthSet?.has(periodKey(m.year, m.month))),
+    [workingMonths, coverageMonthSet],
+  );
+  const coverageKnown = coverageMonthSet !== null;
+  const canPublishPeriod = coverageKnown && presentWorkingMonths.length > 0;
+
+  const viewFilterOutsideWorkingPeriod =
+    !!viewFilter &&
+    (viewFilter.startYear !== publishPeriod.startYear ||
+      viewFilter.startMonth !== publishPeriod.startMonth ||
+      viewFilter.endYear !== publishPeriod.endYear ||
+      viewFilter.endMonth !== publishPeriod.endMonth);
+
+  const currentPeriodHasData = availablePeriods.some(
+    (item) => item.year === year && item.semester === semester,
+  );
+
+  const periodOptions = useMemo(() => {
+    const merged = currentPeriodHasData
+      ? availablePeriods
+      : [...availablePeriods, { year, semester }];
+    // Ordem cronológica decrescente pela data real de início do ciclo — S1
+    // do "ano do período" começa em dezembro do ano ANTERIOR, então não dá
+    // pra comparar direto pelo `year` do rótulo (ver cycleFromYearSemester).
+    return [...merged].sort((a, b) => {
+      const startA = a.semester === "S2" ? toMonthIndex(a.year, 6) : toMonthIndex(a.year - 1, 12);
+      const startB = b.semester === "S2" ? toMonthIndex(b.year, 6) : toMonthIndex(b.year - 1, 12);
+      return startB - startA;
+    });
+  }, [availablePeriods, currentPeriodHasData, year, semester]);
 
   const units = useMemo(() => {
     if (!data) return [];
@@ -400,12 +523,14 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       setError("Nenhum registro válido foi preparado para importação.");
       return;
     }
+    const importedRecords = prepared.records;
+    const periodsBeforeImport = availablePeriods;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
       await saveSettings();
-      const batches = chunk(prepared.records, DEFAULT_IMPORT_BATCH_SIZE);
+      const batches = chunk(importedRecords, DEFAULT_IMPORT_BATCH_SIZE);
       const start = await fetch("/api/importacoes/iniciar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -461,16 +586,52 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       }
       notifyIndicatorDataChanged();
 
-      setMessage(
-        `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s) e ${totals.rejected} rejeitado(s).`,
+      let importMessage = `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s) e ${totals.rejected} rejeitado(s).`;
+
+      // Se os arquivos importados pertencem a um único período e esse
+      // período não tinha dado nenhum antes desta importação, é um semestre
+      // novo — avisa e segue para lá automaticamente. Se o período já tinha
+      // dados (o usuário está corrigindo um período histórico), a seleção
+      // atual não é alterada.
+      const importedPeriodKeys = new Set(
+        importedRecords.map((record) => {
+          const period = getOperationalPeriod(record.year, record.month);
+          return periodOptionKey(period.periodYear, period.semester);
+        }),
       );
+      if (importedPeriodKeys.size === 1) {
+        const [key] = importedPeriodKeys;
+        const [periodYearText, periodSemester] = (key ?? "").split(":");
+        const periodYear = Number(periodYearText);
+        const isNewPeriod = !periodsBeforeImport.some(
+          (item) => periodOptionKey(item.year, item.semester) === key,
+        );
+        if (isNewPeriod && periodSemester) {
+          const semesterValue = periodSemester as Semester;
+          importMessage += ` Novo período detectado: ${formatPeriodOptionLabel(periodYear, semesterValue)}.`;
+          setPeriod(periodYear, semesterValue);
+        }
+      }
+
+      setMessage(importMessage);
       setPrepared(null);
       await load();
+      void loadAvailablePeriods();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao importar o 5S.");
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Só muda o período de trabalho na tela — nunca cria registro nenhum.
+      Assim que o primeiro arquivo válido do novo semestre for importado, ele
+      passa a aparecer normalmente em `availablePeriods` e substitui esta
+      opção "preparada". */
+  function prepareNextSemester() {
+    const next = nextOperationalPeriod(year, semester);
+    setPeriod(next.year, next.semester);
+    setMessage(`Período de trabalho preparado: ${formatPeriodOptionLabel(next.year, next.semester)} · Sem dados.`);
   }
 
   async function recalculate() {
@@ -693,118 +854,174 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Filtros</Label>
-            <div className="flex flex-wrap gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="fiveSTarget">Meta global (%)</Label>
-                <Input
-                  id="fiveSTarget"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.1}
-                  value={target}
-                  onChange={(event) => setTarget(Number(event.target.value))}
-                  className="w-24"
+      <Card className="p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Contexto de publicação</CardTitle>
+              <CardDescription>
+                Defina o período de trabalho, a meta e as ações aplicadas ao cálculo e à
+                publicação do 5S.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline">
+                {year} {semester}
+              </Badge>
+              <Badge variant={coverageKnown && presentWorkingMonths.length === 6 ? "success" : "outline"}>
+                {coverageKnown ? presentWorkingMonths.length : "…"}/6 meses
+              </Badge>
+              <Badge variant={publication ? "success" : "secondary"}>
+                {publication ? "Publicado" : "Rascunho"}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="fiveSPeriodSelect">Período de trabalho</Label>
+              <Select
+                id="fiveSPeriodSelect"
+                value={periodOptionKey(year, semester)}
+                onChange={(event) => {
+                  const [nextYearText, nextSemesterText] = event.target.value.split(":");
+                  if (!nextYearText || !nextSemesterText) return;
+                  setPeriod(Number(nextYearText), nextSemesterText as Semester);
+                }}
+              >
+                {periodOptions.map((option) => {
+                  const hasData = availablePeriods.some(
+                    (item) => item.year === option.year && item.semester === option.semester,
+                  );
+                  return (
+                    <option
+                      key={periodOptionKey(option.year, option.semester)}
+                      value={periodOptionKey(option.year, option.semester)}
+                    >
+                      {formatPeriodOptionLabel(option.year, option.semester)}
+                      {hasData ? "" : " · Sem dados"}
+                    </option>
+                  );
+                })}
+              </Select>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto px-1.5 py-1 text-xs text-muted-foreground"
+                  onClick={prepareNextSemester}
+                >
+                  <CalendarPlus className="size-3.5" />
+                  Preparar próximo semestre
+                </Button>
+                <ViewFilterPopover
+                  value={viewFilter}
+                  onChange={setViewFilter}
+                  yearsInData={availableYears}
+                  publishedLabel={formatPeriodOptionLabel(year, semester)}
+                  label="Detalhar meses"
                 />
               </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="mb-0">Período de publicação</Label>
-              <ViewFilterPopover
-                value={viewFilter}
-                onChange={setViewFilter}
-                yearsInData={availableYears}
-                publishedLabel={formatPeriodRangeLabel(publishPeriod)}
-              />
-            </div>
-            <SemesterYearFilter year={year} semester={semester} onChange={setPeriod} label="" />
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Ações</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={busy}
-                onClick={() => void recalculate()}
-              >
-                <RotateCw className="size-3.5" />
-                Recalcular
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => setUnitDialogOpen(true)}
-              >
-                <Ban className="size-3.5" />
-                Ignorar unidades
-                {excludedUnits.length ? (
-                  <Badge variant="outline" className="ml-0.5">
-                    {excludedUnits.length}
-                  </Badge>
-                ) : null}
-              </Button>
-              <IndicatorAnalysisDialog
-                module="cinco-s"
-                moduleLabel="5S"
-                target={target}
-                years={availableYears}
-                defaultYear={result?.latestYear ?? undefined}
-                defaultMonth={result?.latestMonth ?? undefined}
-                triggerClassName="w-full"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={!result?.unitMonths.length || busy}
-                onClick={() => result && exportFiveSPdf(result)}
-              >
-                <Download className="size-3.5" />
-                Baixar PDF
-              </Button>
-              {canClear ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  disabled={!data?.total || busy}
-                  onClick={openClearDialog}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar tudo
-                </Button>
+              {viewFilterOutsideWorkingPeriod ? (
+                <p className="text-xs font-medium text-accent-foreground">
+                  “Detalhar meses” está fora do período de trabalho (
+                  {formatPeriodOptionLabel(year, semester)}) — isso só restringe a tabela abaixo; a
+                  publicação sempre usa o período de trabalho.
+                </p>
               ) : null}
-              {canPublish ? (
-                <Button
-                  variant="success"
-                  size="sm"
-                  className="w-full"
-                  disabled={!result || result.geral === null || busy}
-                  onClick={() => void publish()}
-                >
-                  <Send className="size-3.5" />
-                  Publicar no Painel
-                </Button>
-              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {!coverageKnown
+                  ? "Carregando cobertura…"
+                  : presentWorkingMonths.length
+                    ? `${presentWorkingMonths.length} de 6 meses com dados · Meses disponíveis: ${joinWithAnd(
+                        presentWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                      )}${
+                        missingWorkingMonths.length
+                          ? ` · Faltam: ${joinWithAnd(
+                              missingWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                            )}`
+                          : ""
+                      }`
+                    : "0 de 6 meses com dados — importe arquivos deste período para habilitar a publicação."}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="fiveSTarget">Meta de aderência (%)</Label>
+              <Input
+                id="fiveSTarget"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={target}
+                onChange={(event) => setTarget(Number(event.target.value))}
+                className="w-28"
+              />
+              <p className="text-xs text-muted-foreground">
+                Usada no cálculo e na publicação de {formatPeriodOptionLabel(year, semester)}.
+              </p>
             </div>
           </div>
-        </Card>
-      </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void recalculate()}>
+              <RotateCw className="size-3.5" />
+              Recalcular
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+              <Ban className="size-3.5" />
+              Ignorar unidades
+              {excludedUnits.length ? (
+                <Badge variant="outline" className="ml-0.5">
+                  {excludedUnits.length}
+                </Badge>
+              ) : null}
+            </Button>
+            <IndicatorAnalysisDialog
+              module="cinco-s"
+              moduleLabel="5S"
+              target={target}
+              years={availableYears}
+              defaultYear={result?.latestYear ?? undefined}
+              defaultMonth={result?.latestMonth ?? undefined}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!result?.unitMonths.length || busy}
+              onClick={() => result && exportFiveSPdf(result)}
+            >
+              <Download className="size-3.5" />
+              Baixar PDF
+            </Button>
+            {canClear ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={!data?.total || busy}
+                onClick={openClearDialog}
+              >
+                <Trash2 className="size-3.5" />
+                Limpar tudo
+              </Button>
+            ) : null}
+            {canPublish ? (
+              <Button
+                variant="success"
+                size="sm"
+                className="ml-auto"
+                disabled={!canPublishPeriod || busy}
+                onClick={() => void publish()}
+              >
+                <Send className="size-3.5" />
+                Publicar {year} {semester}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       {publication ? (
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">

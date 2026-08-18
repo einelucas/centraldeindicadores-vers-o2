@@ -7,17 +7,14 @@ import {
   BarChart,
   CartesianGrid,
   LabelList,
-  Legend,
   Line,
   LineChart,
-  Rectangle,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import type { BarShapeProps } from "recharts";
 import { ReadingContextCard } from "@/components/layout/ReadingContextCard";
 import {
   periodQueryString,
@@ -54,48 +51,6 @@ function decimal(value: number): string {
 
 function periodKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
-}
-
-// Uma barra de valor 0 renderiza com altura 0 — visualmente idêntica a "sem
-// dado". Sem essa marca, uma unidade com zero acidentes no período (uma boa
-// notícia) parece que nem foi lida. Desenha um traço fino na base em vez de
-// nada quando o valor é zero.
-const ZERO_STUB_PX = 3;
-
-function ZeroAwareBar(props: BarShapeProps) {
-  const { height, y } = props;
-  if (typeof height === "number" && height < 1 && typeof y === "number") {
-    return <Rectangle {...props} height={ZERO_STUB_PX} y={y - ZERO_STUB_PX} fillOpacity={0.45} />;
-  }
-  return <Rectangle {...props} />;
-}
-
-interface ZeroAwareLabelProps {
-  x?: unknown;
-  y?: unknown;
-  width?: unknown;
-  value?: unknown;
-}
-
-function ZeroAwareLabel({ x, y, width, value }: ZeroAwareLabelProps) {
-  const nx = Number(x);
-  const ny = Number(y);
-  const nw = Number(width);
-  if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nw)) return null;
-  const isZero = Number(value) === 0;
-  return (
-    <text
-      x={nx + nw / 2}
-      y={isZero ? ny - ZERO_STUB_PX - 5 : ny - 6}
-      textAnchor="middle"
-      fontFamily="Montserrat"
-      fontSize={10}
-      fontWeight={700}
-      fill="#475569"
-    >
-      {String(value)}
-    </text>
-  );
 }
 
 export function AccidentRatePublishedPanel() {
@@ -533,7 +488,7 @@ export function AccidentRatePublishedPanel() {
             >
               <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                 <div className="ct">Correlação CAF e SAF por unidade</div>
-                <div className="cs">Barras agrupadas por unidade.</div>
+                <div className="cs">Comparativo visual de acidentes por unidade.</div>
               </div>
 
               {unitPeriods.length > 1 ? (
@@ -579,107 +534,9 @@ export function AccidentRatePublishedPanel() {
               ) : null}
             </div>
 
-            <div className="cw" style={{ height: 160, marginTop: 8 }}>
+            <div style={{ marginTop: 4 }}>
               {unitChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={unitChartData}
-                    margin={{
-                      top: 8,
-                      right: 12,
-                      bottom: 8,
-                      left: 0,
-                    }}
-                    barCategoryGap="28%"
-                    barGap={6}
-                  >
-                    <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
-
-                    <XAxis
-                      dataKey="unidade"
-                      axisLine={false}
-                      tickLine={false}
-                      interval={0}
-                      height={30}
-                      tickMargin={6}
-                      tick={{
-                        fontFamily: "Montserrat",
-                        fontSize: 9,
-                        fontWeight: 600,
-                        fill: "#475569",
-                      }}
-                    />
-
-                    <YAxis
-                      allowDecimals={false}
-                      axisLine={false}
-                      tickLine={false}
-                      width={24}
-                      tickMargin={6}
-                      tick={{
-                        fontFamily: "Montserrat",
-                        fontSize: 9,
-                        fill: "#64748b",
-                      }}
-                    />
-
-                    <Tooltip
-                      cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
-                      contentStyle={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 12,
-                        backgroundColor: "#ffffff",
-                        boxShadow: "0 10px 30px rgba(15, 23, 42, 0.12)",
-                        padding: "10px 14px",
-                        fontFamily: "Montserrat",
-                        fontSize: 12,
-                      }}
-                      labelStyle={{
-                        color: "#0f172a",
-                        fontWeight: 700,
-                        marginBottom: 6,
-                      }}
-                      itemStyle={{
-                        fontWeight: 600,
-                      }}
-                    />
-
-                    <Legend
-                      verticalAlign="top"
-                      align="center"
-                      iconType="circle"
-                      iconSize={8}
-                      height={24}
-                      wrapperStyle={{
-                        fontFamily: "Montserrat",
-                        fontSize: 10,
-                        fontWeight: 600,
-                      }}
-                    />
-
-                    <Bar
-                      dataKey="caf"
-                      name="Acidentes CAF"
-                      fill={GOLD}
-                      radius={[6, 6, 0, 0]}
-                      maxBarSize={32}
-                      shape={ZeroAwareBar}
-                    >
-                      <LabelList dataKey="caf" content={ZeroAwareLabel} />
-                    </Bar>
-
-                    <Bar
-                      dataKey="saf"
-                      name="Acidentes SAF"
-                      fill={BLUE}
-                      radius={[6, 6, 0, 0]}
-                      maxBarSize={32}
-                      shape={ZeroAwareBar}
-                    >
-                      <LabelList dataKey="saf" content={ZeroAwareLabel} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <UnitAccidentBars data={unitChartData} />
               ) : (
                 <p className="ps" style={{ margin: 0, textAlign: "center" }}>
                   Nenhuma unidade foi publicada para esta competência.
@@ -689,6 +546,82 @@ export function AccidentRatePublishedPanel() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Leitura visual pura de CAF/SAF por unidade — sem meta, sem status, sem
+ * comparação com a taxa de acidentes. A largura de cada barra é só relativa
+ * ao maior valor do conjunto exibido (não a uma escala fixa), recalculada
+ * sempre que o período filtrado muda.
+ */
+function UnitAccidentBars({
+  data,
+}: {
+  data: Array<{ unidade: string; caf: number; saf: number }>;
+}) {
+  const maxValue = data.reduce((max, item) => Math.max(max, item.caf, item.saf), 0);
+
+  function widthPercent(value: number): number {
+    if (maxValue <= 0) return 0;
+    return Math.min(100, Math.max(0, (value / maxValue) * 100));
+  }
+
+  return (
+    <div>
+      {data.map((item, index) => (
+        <div
+          key={item.unidade}
+          style={
+            index < data.length - 1
+              ? { marginBottom: 8, paddingBottom: 8, borderBottom: "1px solid #eef1f6" }
+              : undefined
+          }
+        >
+          <div
+            style={{
+              fontFamily: "Montserrat",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#20324a",
+              marginBottom: 4,
+            }}
+          >
+            {item.unidade}
+          </div>
+
+          <div className="urow" style={{ marginBottom: 5 }}>
+            <div className="uname" style={{ width: 40, color: GOLD }}>
+              CAF
+            </div>
+            <div className="utrack" style={{ height: 8 }}>
+              <div
+                className="ufill"
+                style={{ width: `${widthPercent(item.caf)}%`, background: GOLD }}
+              />
+            </div>
+            <div className="uval" style={{ color: GOLD }}>
+              {item.caf}
+            </div>
+          </div>
+
+          <div className="urow" style={{ marginBottom: 0 }}>
+            <div className="uname" style={{ width: 40, color: BLUE }}>
+              SAF
+            </div>
+            <div className="utrack" style={{ height: 8 }}>
+              <div
+                className="ufill"
+                style={{ width: `${widthPercent(item.saf)}%`, background: BLUE }}
+              />
+            </div>
+            <div className="uval" style={{ color: BLUE }}>
+              {item.saf}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

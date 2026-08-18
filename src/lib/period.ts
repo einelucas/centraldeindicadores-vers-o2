@@ -73,67 +73,96 @@ export function enumeratePeriodMonths(range: PeriodRange): Array<{ year: number;
   return months;
 }
 
-/**
- * Ciclo semestral ativo na data de referência: junho–novembro ou
- * dezembro–maio (escolhendo o ano certo de cada lado). Usado apenas como
- * atalho de conveniência ("Ciclo atual") e como padrão do Painel Geral —
- * nunca como valor inicial dos filtros dos painéis administrativos, que
- * começam sempre sem restrição.
- */
-export function getCurrentCycle(reference: Date = new Date()): PeriodRange {
-  const year = reference.getFullYear();
-  const month = reference.getMonth() + 1;
-
-  if (month >= 6 && month <= 11) {
-    return { startYear: year, startMonth: 6, endYear: year, endMonth: 11 };
-  }
-  if (month === 12) {
-    return { startYear: year, startMonth: 12, endYear: year + 1, endMonth: 5 };
-  }
-  // Janeiro-maio pertencem ao ciclo iniciado em dezembro do ano anterior.
-  return { startYear: year - 1, startMonth: 12, endYear: year, endMonth: 5 };
-}
-
 /** S1 (dezembro–maio, atravessa o ano civil) ou S2 (junho–novembro). */
 export type Semester = "S1" | "S2";
 
 /**
- * Converte Ano + Semestre no intervalo de meses correspondente. Para S1, o
- * ano informado é sempre o ano de INÍCIO (dezembro) — nunca o de término
- * (maio do ano seguinte). Ex.: `cycleFromYearSemester(2027, "S1")` =
- * Dez/2027 – Mai/2028, não Dez/2026 – Mai/2027.
+ * Classifica uma competência mensal (ano-calendário + mês) no período
+ * operacional (Ano do período + Semestre) a que ela pertence. Regra oficial,
+ * única fonte de verdade para essa classificação — nunca reimplementar em
+ * outro lugar:
+ *
+ * - dezembro pertence ao S1 do ano SEGUINTE (ex.: Dez/2026 → 2027 S1);
+ * - janeiro a maio pertencem ao S1 do próprio ano (ex.: Mar/2027 → 2027 S1);
+ * - junho a novembro pertencem ao S2 do próprio ano (ex.: Ago/2027 → 2027 S2).
+ *
+ * `periodYear` é só um rótulo — nunca sobrescreve nem substitui o
+ * ano-calendário real do dado (`year`), que continua vindo de onde sempre
+ * veio (coluna `year`/`month` de cada tabela).
  */
-export function cycleFromYearSemester(year: number, semester: Semester): PeriodRange {
-  return semester === "S2"
-    ? { startYear: year, startMonth: 6, endYear: year, endMonth: 11 }
-    : { startYear: year, startMonth: 12, endYear: year + 1, endMonth: 5 };
+export function getOperationalPeriod(
+  year: number,
+  month: number,
+): { periodYear: number; semester: Semester } {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError("Competência mensal inválida.");
+  }
+  if (month === 12) return { periodYear: year + 1, semester: "S1" };
+  if (month <= 5) return { periodYear: year, semester: "S1" };
+  return { periodYear: year, semester: "S2" };
 }
 
-/** Inverso de `cycleFromYearSemester` — extrai Ano + Semestre de um ciclo. */
+/**
+ * Converte Ano do período + Semestre no intervalo de meses correspondente.
+ * Para S1, o ano informado é sempre o ano de TÉRMINO (maio) — nunca o de
+ * início (dezembro do ano anterior). Ex.: `cycleFromYearSemester(2027, "S1")`
+ * = Dez/2026 – Mai/2027, não Dez/2027 – Mai/2028.
+ */
+export function cycleFromYearSemester(periodYear: number, semester: Semester): PeriodRange {
+  return semester === "S2"
+    ? { startYear: periodYear, startMonth: 6, endYear: periodYear, endMonth: 11 }
+    : { startYear: periodYear - 1, startMonth: 12, endYear: periodYear, endMonth: 5 };
+}
+
+/** Inverso de `cycleFromYearSemester` — extrai Ano do período + Semestre de um ciclo. */
 export function yearSemesterFromCycle(cycle: PeriodRange): {
   year: number;
   semester: Semester;
 } {
-  return cycle.startMonth === 12
-    ? { year: cycle.startYear, semester: "S1" }
-    : { year: cycle.startYear, semester: "S2" };
+  return { year: cycle.endYear, semester: cycle.startMonth === 12 ? "S1" : "S2" };
 }
 
 /**
- * Converte uma competência mensal no ciclo operacional que a contém.
- * Junho–novembro formam S2; dezembro–maio formam o S1 iniciado em dezembro.
+ * Converte uma competência mensal no ciclo operacional (intervalo de meses)
+ * que a contém. Composição direta de `getOperationalPeriod` +
+ * `cycleFromYearSemester` — nunca reimplementa a regra de classificação.
  */
 export function cycleForMonth(year: number, month: number): PeriodRange {
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
-    throw new RangeError("Competência mensal inválida.");
-  }
+  const { periodYear, semester } = getOperationalPeriod(year, month);
+  return cycleFromYearSemester(periodYear, semester);
+}
 
-  if (month >= 6 && month <= 11) {
-    return { startYear: year, startMonth: 6, endYear: year, endMonth: 11 };
-  }
+/**
+ * Ciclo semestral ativo na data de referência. Usado apenas como atalho de
+ * conveniência ("Ciclo atual") e como padrão do Painel Geral — nunca como
+ * valor inicial dos filtros dos painéis administrativos, que começam sempre
+ * sem restrição.
+ */
+export function getCurrentCycle(reference: Date = new Date()): PeriodRange {
+  return cycleForMonth(reference.getFullYear(), reference.getMonth() + 1);
+}
 
-  const startYear = month === 12 ? year : year - 1;
-  return { startYear, startMonth: 12, endYear: startYear + 1, endMonth: 5 };
+/**
+ * Próximo semestre cronológico após Ano do período + Semestre informados.
+ * Ex.: `nextPeriod(2027, "S1")` = `{ year: 2027, semester: "S2" }`;
+ * `nextPeriod(2027, "S2")` = `{ year: 2028, semester: "S1" }`.
+ */
+export function nextPeriod(periodYear: number, semester: Semester): { year: number; semester: Semester } {
+  return semester === "S1"
+    ? { year: periodYear, semester: "S2" }
+    : { year: periodYear + 1, semester: "S1" };
+}
+
+/**
+ * Ex.: "2027 S1 · Dez/26 - Mai/27" — usado no seletor de período dos painéis
+ * publicados, onde o intervalo precisa ficar sempre explícito (evita a
+ * ambiguidade de mostrar só "Dez - Mai" sem os anos resolvidos).
+ */
+export function formatPeriodOptionLabel(periodYear: number, semester: Semester): string {
+  const cycle = cycleFromYearSemester(periodYear, semester);
+  const start = `${MONTH_NAMES[cycle.startMonth - 1]}/${String(cycle.startYear).slice(-2)}`;
+  const end = `${MONTH_NAMES[cycle.endMonth - 1]}/${String(cycle.endYear).slice(-2)}`;
+  return `${periodYear} ${semester} · ${start} - ${end}`;
 }
 
 /**

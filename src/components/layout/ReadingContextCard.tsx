@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { INDICATOR_DATA_CHANGED_EVENT } from "@/lib/browser-events";
-import type { PeriodRange, Semester } from "@/lib/period";
+import { formatPeriodOptionLabel, yearSemesterFromCycle, type PeriodRange, type Semester } from "@/lib/period";
 import { TABS } from "./TabsNav";
 
 export type { Semester as ReadingSemester } from "@/lib/period";
@@ -22,12 +22,6 @@ const PERIOD_SOURCE_BY_HREF: Record<string, string> = {
   "/dashboard/cinco-s": "cinco-s",
   "/dashboard/taxa-acidentes": "taxa-acidentes",
 };
-
-function toAvailablePeriod(period: PeriodRange): AvailablePeriod | null {
-  if (period.startMonth === 6) return { year: period.startYear, semester: "S2" };
-  if (period.startMonth === 12) return { year: period.startYear, semester: "S1" };
-  return null;
-}
 
 /**
  * Contexto compartilhado pelos painéis publicados. O primeiro campo navega
@@ -88,9 +82,7 @@ export function ReadingContextCard({
         );
         if (!response.ok) throw new Error("Falha ao carregar períodos disponíveis.");
         const body = (await response.json()) as { periods?: PeriodRange[] };
-        const periods = (body.periods ?? [])
-          .map(toAvailablePeriod)
-          .filter((item): item is AvailablePeriod => item !== null);
+        const periods = (body.periods ?? []).map(yearSemesterFromCycle);
         if (disposed || currentRequest !== requestId) return;
         setAvailablePeriods(periods);
         setPeriodsError(false);
@@ -226,10 +218,8 @@ export function ReadingContextCard({
                     return (
                       <option key={optionSemester} value={`${optionYear}:${optionSemester}`}>
                         {currentOption
-                          ? `Período atual · ${optionYear} ${optionSemester}`
-                          : optionSemester === "S2"
-                            ? `${optionYear} S2 · Jun – Nov`
-                            : `${optionYear} S1 · Dez – Mai`}
+                          ? `Período atual · ${formatPeriodOptionLabel(optionYear, optionSemester)}`
+                          : formatPeriodOptionLabel(optionYear, optionSemester)}
                       </option>
                     );
                   })}

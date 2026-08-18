@@ -2,17 +2,114 @@ import { describe, it, expect } from "vitest";
 import {
   availableCyclesFromMonths,
   cycleForMonth,
+  cycleFromYearSemester,
   enumeratePeriodMonths,
+  formatPeriodOptionLabel,
   formatPeriodRangeLabel,
   getCurrentCycle,
+  getOperationalPeriod,
   isWithinPeriodRange,
+  nextPeriod,
   normalizePeriodRange,
   periodFromOptionalFields,
   periodToOptionalFields,
   parsePeriodRangeParams,
   toMonthIndex,
+  yearSemesterFromCycle,
   type PeriodRange,
 } from "@/lib/period";
+
+describe("nextPeriod", () => {
+  it("avança S1 para S2 do mesmo ano do período", () => {
+    expect(nextPeriod(2027, "S1")).toEqual({ year: 2027, semester: "S2" });
+  });
+
+  it("avança S2 para S1 do ano do período seguinte", () => {
+    expect(nextPeriod(2027, "S2")).toEqual({ year: 2028, semester: "S1" });
+  });
+});
+
+describe("getOperationalPeriod", () => {
+  it.each([
+    // [ano-calendário, mês, ano do período esperado, semestre esperado]
+    [2024, 12, 2025, "S1"],
+    [2025, 1, 2025, "S1"],
+    [2025, 5, 2025, "S1"],
+    [2025, 6, 2025, "S2"],
+    [2025, 11, 2025, "S2"],
+    [2025, 12, 2026, "S1"],
+    [2026, 1, 2026, "S1"],
+    [2026, 5, 2026, "S1"],
+    [2026, 6, 2026, "S2"],
+    [2026, 11, 2026, "S2"],
+    [2026, 12, 2027, "S1"],
+    [2027, 1, 2027, "S1"],
+    [2027, 5, 2027, "S1"],
+    [2027, 6, 2027, "S2"],
+    [2027, 11, 2027, "S2"],
+    [2027, 12, 2028, "S1"],
+  ] as const)("classifica %i/%i como %i %s", (year, month, expectedPeriodYear, expectedSemester) => {
+    expect(getOperationalPeriod(year, month)).toEqual({
+      periodYear: expectedPeriodYear,
+      semester: expectedSemester,
+    });
+  });
+
+  it("trata a fronteira novembro/dezembro corretamente", () => {
+    expect(getOperationalPeriod(2026, 11)).toEqual({ periodYear: 2026, semester: "S2" });
+    expect(getOperationalPeriod(2026, 12)).toEqual({ periodYear: 2027, semester: "S1" });
+  });
+
+  it("trata a fronteira maio/junho corretamente", () => {
+    expect(getOperationalPeriod(2027, 5)).toEqual({ periodYear: 2027, semester: "S1" });
+    expect(getOperationalPeriod(2027, 6)).toEqual({ periodYear: 2027, semester: "S2" });
+  });
+
+  it("rejeita mês fora de 1-12", () => {
+    expect(() => getOperationalPeriod(2027, 0)).toThrow(RangeError);
+    expect(() => getOperationalPeriod(2027, 13)).toThrow(RangeError);
+  });
+});
+
+describe("cycleFromYearSemester", () => {
+  it("S1: o ano informado é o ano de término (maio)", () => {
+    expect(cycleFromYearSemester(2027, "S1")).toEqual({
+      startYear: 2026,
+      startMonth: 12,
+      endYear: 2027,
+      endMonth: 5,
+    });
+  });
+
+  it("S2: início e término no mesmo ano informado", () => {
+    expect(cycleFromYearSemester(2027, "S2")).toEqual({
+      startYear: 2027,
+      startMonth: 6,
+      endYear: 2027,
+      endMonth: 11,
+    });
+  });
+});
+
+describe("yearSemesterFromCycle", () => {
+  it("é o inverso exato de cycleFromYearSemester para S1 e S2", () => {
+    expect(yearSemesterFromCycle(cycleFromYearSemester(2027, "S1"))).toEqual({
+      year: 2027,
+      semester: "S1",
+    });
+    expect(yearSemesterFromCycle(cycleFromYearSemester(2027, "S2"))).toEqual({
+      year: 2027,
+      semester: "S2",
+    });
+  });
+});
+
+describe("formatPeriodOptionLabel", () => {
+  it("mostra o intervalo resolvido com anos de 2 dígitos, sem ambiguidade", () => {
+    expect(formatPeriodOptionLabel(2027, "S1")).toBe("2027 S1 · Dez/26 - Mai/27");
+    expect(formatPeriodOptionLabel(2027, "S2")).toBe("2027 S2 · Jun/27 - Nov/27");
+  });
+});
 
 describe("toMonthIndex", () => {
   it("is monotonic across a year boundary", () => {

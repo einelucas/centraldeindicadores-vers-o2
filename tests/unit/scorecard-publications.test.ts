@@ -322,6 +322,47 @@ describe("Painel Geral por publicações", () => {
     expect(percentOfTarget(rdo, 84)).toBeCloseTo(105);
   });
 
+  it("usa a publicação mais recente DO PERÍODO pedido, não a mais recente entre todos os semestres", () => {
+    // Publicação real de 2026 S2 (Jun-Nov/2026), mais antiga.
+    const s2Publication = {
+      ...rdoPublication,
+      active: false,
+    };
+    // Alguém publicou 2027 S1 (Dez/2026-Mai/2027) depois — mais recente em
+    // tempo real, mas de outro semestre. Sem filtrar por período, essa vira
+    // "a mais recente" e o Painel Geral de 2026 S2 aparecia vazio mesmo com
+    // dado real publicado para 2026 S2.
+    const s1NextYearPublication = {
+      ...rdoPublication,
+      active: true,
+      id: "pub-rdo-s1-2027",
+      version: 2,
+      payload: {
+        ...rdoPublication.payload,
+        resultado: 91,
+        mensal: [{ label: "Dez/2026", v: 91 }],
+      },
+      publishedAt: new Date("2026-12-05T12:00:00.000Z"),
+    };
+    const publications = [s2Publication, s1NextYearPublication];
+
+    // Sem período: comportamento antigo, pega a mais recente de qualquer semestre.
+    const withoutPeriod = buildGeneralPanelData(publications);
+    expect(withoutPeriod.monthKeys).toEqual(["2026-12"]);
+
+    // Com o período de 2026 S2 selecionado no admin: tem que achar a
+    // publicação de 2026 S2, não a de 2027 S1 que é mais recente em tempo real.
+    const withS2Period = buildGeneralPanelData(publications, undefined, {
+      startYear: 2026,
+      startMonth: 6,
+      endYear: 2026,
+      endMonth: 11,
+    });
+    expect(withS2Period.monthKeys).toEqual(["2026-06", "2026-07"]);
+    const rdo = withS2Period.indicators.find((indicator) => indicator.key === "rdo");
+    expect(rdo?.result).toBe(82);
+  });
+
   it("não mostra dados administrativos quando não há publicação", () => {
     const data = buildGeneralPanelData([]);
     expect(data.hasData).toBe(false);

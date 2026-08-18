@@ -30,15 +30,16 @@ export function SemesterYearFilter({
   label?: string;
 }) {
   const currentYear = new Date().getFullYear();
-  const startYears = Array.from({ length: 6 }, (_, index) => currentYear + 1 - index);
-  // Cobre todo ano final alcançável a partir de qualquer combinação de
-  // startYears + semestre (inclusive startYears[0] + 1, o caso S1 mais alto).
-  const endYears = Array.from({ length: 7 }, (_, index) => currentYear + 2 - index);
+  // Mesma janela para os dois seletores: qualquer um dos dois pode ser o
+  // "ano do período" (ver cycleFromYearSemester — para S1, `year` é o ano de
+  // término, então "Ano inicial" mostra sempre year-1 e "Ano final" mostra
+  // sempre year), então cobrir a mesma faixa nos dois evita buracos.
+  const yearOptions = Array.from({ length: 8 }, (_, index) => currentYear + 2 - index);
   const cycle = cycleFromYearSemester(year, semester);
 
-  function handleEndYearChange(nextEndYear: number) {
-    const nextStartYear = semester === "S1" ? nextEndYear - 1 : nextEndYear;
-    onChange(nextStartYear, semester);
+  function handleStartYearChange(nextStartYear: number) {
+    const nextYear = semester === "S1" ? nextStartYear + 1 : nextStartYear;
+    onChange(nextYear, semester);
   }
 
   return (
@@ -50,12 +51,12 @@ export function SemesterYearFilter({
             Ano inicial
           </span>
           <Select
-            value={year}
-            onChange={(event) => onChange(Number(event.target.value), semester)}
+            value={cycle.startYear}
+            onChange={(event) => handleStartYearChange(Number(event.target.value))}
             className="w-24"
             aria-label="Ano inicial"
           >
-            {startYears.map((y) => (
+            {yearOptions.map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>
@@ -84,11 +85,11 @@ export function SemesterYearFilter({
           </span>
           <Select
             value={cycle.endYear}
-            onChange={(event) => handleEndYearChange(Number(event.target.value))}
+            onChange={(event) => onChange(Number(event.target.value), semester)}
             className="w-24"
             aria-label="Ano final"
           >
-            {endYears.map((y) => (
+            {yearOptions.map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>

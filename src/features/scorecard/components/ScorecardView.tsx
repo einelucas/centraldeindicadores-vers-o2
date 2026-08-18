@@ -4,12 +4,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RotateCw, Save, Trash2 } from "lucide-react";
 
 import { ExportButtons } from "@/components/exports/ExportButtons";
-import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
+import { PublicationPeriodField } from "@/components/admin/PublicationPeriodField";
+import {
+  joinWithAnd,
+  nextWorkingPeriod,
+  usePublicationPeriodOptions,
+} from "@/components/admin/usePublicationPeriodOptions";
 import { MetricCard } from "@/components/indicators/MetricCard";
 import { StatusBadge } from "@/components/indicators/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
   cycleFromYearSemester,
   useReadingContextCycle,
@@ -27,6 +32,7 @@ import { MONTH_NAMES } from "@/lib/dates";
 import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import {
   enumeratePeriodMonths,
+  formatPeriodOptionLabel,
   formatPeriodRangeLabel,
   periodToOptionalFields,
   type PeriodRange,
@@ -121,6 +127,11 @@ export function ScorecardView({
   // dois controles de período divergentes.
   const { year, month } = useMemo(() => endOfRange(cycleRange), [cycleRange]);
   const cycleMonths = useMemo(() => enumeratePeriodMonths(cycleRange), [cycleRange]);
+  const { availablePeriods, periodOptions } = usePublicationPeriodOptions(
+    "scorecard",
+    cycleYear,
+    cycleSemester,
+  );
   const [data, setData] = useState<Computation | null>(null);
   const [history, setHistory] = useState<Computation[]>([]);
   const [semesterPreview, setSemesterPreview] = useState<Computation[]>([]);
@@ -393,6 +404,15 @@ export function ScorecardView({
     });
   }
 
+  function prepareNextSemester() {
+    const next = nextWorkingPeriod(cycleYear, cycleSemester);
+    updateCyclePeriod(next.year, next.semester);
+    setStatus(
+      `Período de trabalho preparado: ${formatPeriodOptionLabel(next.year, next.semester)} · Sem dados.`,
+    );
+    setStatusError(false);
+  }
+
   async function save() {
     setBusy(true);
     setStatus(null);
@@ -474,66 +494,92 @@ export function ScorecardView({
     }
   }
 
+  const presentWorkingMonths = useMemo(
+    () => cycleMonths.filter((cm) => effectiveByPeriod.has(periodKey(cm.year, cm.month))),
+    [cycleMonths, effectiveByPeriod],
+  );
+  const missingWorkingMonths = useMemo(
+    () => cycleMonths.filter((cm) => !effectiveByPeriod.has(periodKey(cm.year, cm.month))),
+    [cycleMonths, effectiveByPeriod],
+  );
+
   const selectedRows = displayedResult.rows;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[2fr_1fr]">
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Período</Label>
-            <SemesterYearFilter
-              year={cycleYear}
-              semester={cycleSemester}
-              onChange={updateCyclePeriod}
-              label=""
-            />
-            <p className="text-xs text-neutralbrand">
-              &quot;Salvar snapshot&quot; sempre usa o mês final deste período (
-              {monthName(month)}/{year}).
-            </p>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Ações</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={busy}
-                onClick={() => void refreshLive()}
+      <Card className="p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Contexto de publicação</CardTitle>
+              <CardDescription>
+                Defina o período de trabalho e as ações aplicadas ao cálculo e ao snapshot do
+                Scorecard.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline">
+                {cycleYear} {cycleSemester}
+              </Badge>
+              <Badge
+                variant={presentWorkingMonths.length === cycleMonths.length ? "success" : "outline"}
               >
-                <RotateCw className="size-3.5" />
-                Recalcular
-              </Button>
-              <Button
-                size="sm"
-                className="w-full"
-                disabled={busy}
-                onClick={() => void save()}
-              >
-                <Save className="size-3.5" />
-                Salvar snapshot
-              </Button>
-              {canClearHistory ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="col-span-2 w-full"
-                  disabled={busy}
-                  onClick={() => void clearCycleHistory()}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar histórico do ciclo
-                </Button>
-              ) : null}
+                {presentWorkingMonths.length}/{cycleMonths.length} meses
+              </Badge>
             </div>
           </div>
-        </Card>
-      </div>
+
+          <PublicationPeriodField
+            fieldId="scorecardPeriodSelect"
+            year={cycleYear}
+            semester={cycleSemester}
+            onChange={updateCyclePeriod}
+            periodOptions={periodOptions}
+            availablePeriods={availablePeriods}
+            publishPeriod={cycleRange}
+            onPrepareNextSemester={prepareNextSemester}
+          >
+            <p className="text-xs text-neutralbrand">
+              &quot;Salvar snapshot&quot; sempre usa o mês final deste período (
+              {monthName(month)}/{year}).{" "}
+              {presentWorkingMonths.length
+                ? `${presentWorkingMonths.length} de ${cycleMonths.length} meses com dados · Meses disponíveis: ${joinWithAnd(
+                    presentWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                  )}${
+                    missingWorkingMonths.length
+                      ? ` · Faltam: ${joinWithAnd(
+                          missingWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                        )}`
+                      : ""
+                  }`
+                : "0 meses com dados neste período."}
+            </p>
+          </PublicationPeriodField>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-neutralbrand/15 pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void refreshLive()}>
+              <RotateCw className="size-3.5" />
+              Recalcular
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void save()}>
+              <Save className="size-3.5" />
+              Salvar snapshot
+            </Button>
+            {canClearHistory ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="ml-auto"
+                disabled={busy}
+                onClick={() => void clearCycleHistory()}
+              >
+                <Trash2 className="size-3.5" />
+                Limpar histórico do ciclo
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       <div className="flex items-center gap-1.5 text-xs font-semibold text-neutralbrand">
         <span

@@ -10,6 +10,7 @@ import {
   type ScorecardIndicator,
 } from "@/features/scorecard/types";
 import { MONTH_NAMES, MONTH_NAMES_FULL } from "@/lib/dates";
+import { enumeratePeriodMonths, type PeriodRange } from "@/lib/period";
 
 /** 11.582 pontos do ciclo divididos igualmente pelos seis meses. */
 export const SCORECARD_MONTHLY_POOL = MONTHLY_POOL;
@@ -355,16 +356,29 @@ export function percentOfTarget(
 export function buildGeneralPanelData(
   publications: readonly GeneralPanelPublicationInput[],
   indicators: readonly ScorecardIndicator[] = SC_INDICATORS,
+  /** Período selecionado no Painel Geral (ex.: 2026 S2). Quando informado,
+      só entra como "a publicação mais recente" de um indicador uma versão
+      que realmente tem algum mês dentro desse período — senão um módulo
+      republicado depois para OUTRO semestre (ex.: 2027 S1) passava a ser
+      escolhido para todo mundo, mesmo quem está olhando 2026 S2, e a tabela
+      aparecia vazia apesar de existir uma publicação real do período. */
+  period?: PeriodRange | null,
 ): GeneralPanelData {
   const adaptedByKey = new Map<
     string,
     { publication: GeneralPanelPublicationInput; data: AdaptedPublication }
   >();
   const monthKeySet = new Set<string>();
+  const allowedMonthKeys = period
+    ? new Set(
+        enumeratePeriodMonths(period).map(
+          ({ year, month }) => `${year}-${String(month).padStart(2, "0")}`,
+        ),
+      )
+    : null;
 
   for (const indicator of indicators) {
-    const latest = publicationsForIndicator(indicator, publications)[0];
-    if (!latest) continue;
+    const candidates = publicationsForIndicator(indicator, publications);
 
     // Só a publicação mais recente conta. Uma versão anterior é
     // deliberadamente aposentada quando uma nova é publicada — inclusive
@@ -373,6 +387,20 @@ export function buildGeneralPanelData(
     // trouxe de volta dados de teste/obsoletos de publicações antigas do IDP
     // para meses que a versão atual nunca preencheu (Set/Out/Nov apareciam
     // com números repetidos de uma publicação de meses atrás).
+    //
+    // "Mais recente" agora é sempre relativo ao período pedido: entre as
+    // publicações deste indicador, pega a mais nova que tem pelo menos um
+    // mês dentro do período solicitado. Se nenhuma tiver, cai no
+    // comportamento antigo (a mais nova de todas) — não regride nenhum caso
+    // que já funcionava sem período selecionado.
+    const latest = period
+      ? (candidates.find((candidate) => {
+          const adapted = adaptPublication(indicator.key, candidate);
+          return Object.keys(adapted.monthly).some((key) => allowedMonthKeys!.has(key));
+        }) ?? candidates[0])
+      : candidates[0];
+    if (!latest) continue;
+
     const adapted = adaptPublication(indicator.key, latest);
     adaptedByKey.set(indicator.key, { publication: latest, data: adapted });
     Object.keys(adapted.monthly).forEach((key) => monthKeySet.add(key));

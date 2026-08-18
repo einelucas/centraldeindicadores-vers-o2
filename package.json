@@ -29,6 +29,8 @@
     "db:upgrade:idp-rso": "prisma db execute --file prisma/manual/005_idp_rso_versions.sql --schema prisma/schema.prisma",
     "db:upgrade:justifications": "prisma db execute --file prisma/manual/006_indicator_justifications.sql --schema prisma/schema.prisma",
     "db:upgrade:publication-cycle": "prisma db execute --file prisma/manual/007_indicator_publication_cycle.sql --schema prisma/schema.prisma",
+    "db:upgrade:publication-cycle-year-fix": "prisma db execute --file prisma/manual/008_fix_publication_cycle_year_convention.sql --schema prisma/schema.prisma",
+    "db:validate:publication-cycle-year-fix": "prisma db execute --file prisma/manual/009_validate_publication_cycle_constraint.sql --schema prisma/schema.prisma",
     "db:backfill:publication-cycle": "tsx scripts/backfill-publication-cycle.ts"
   },
   "prisma": {

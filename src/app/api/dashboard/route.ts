@@ -167,7 +167,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ...applySpreadsheetScore(buildGeneralPanelData(publications), period),
+      ...applySpreadsheetScore(buildGeneralPanelData(publications, undefined, period), period),
       historyCount: historyPeriods.size,
     });
   } catch (error) {

@@ -18,9 +18,13 @@ import {
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
-import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
+import { PublicationPeriodField } from "@/components/admin/PublicationPeriodField";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
-import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import {
+  joinWithAnd,
+  nextWorkingPeriod,
+  usePublicationPeriodOptions,
+} from "@/components/admin/usePublicationPeriodOptions";
 import {
   periodQueryString,
   useReadingContextCycle,
@@ -44,7 +48,12 @@ import { ExportButtons } from "@/components/exports/ExportButtons";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { MONTH_NAMES } from "@/lib/dates";
 import { notifyIndicatorDataChanged } from "@/lib/browser-events";
-import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import {
+  enumeratePeriodMonths,
+  formatPeriodOptionLabel,
+  periodToOptionalFields,
+  type PeriodRange,
+} from "@/lib/period";
 import {
   ACCIDENT_RATE_DEFAULT_TARGET,
   type AccidentMonthlyRecord,
@@ -139,6 +148,37 @@ export function AccidentRateView({
   const effectivePeriodKey = effectivePeriod
     ? `${effectivePeriod.startYear}-${effectivePeriod.startMonth}:${effectivePeriod.endYear}-${effectivePeriod.endMonth}`
     : "all";
+  const { availablePeriods, periodOptions, loadAvailablePeriods, detectNewPeriod } =
+    usePublicationPeriodOptions("taxa-acidentes", publishYear, publishSemester);
+  /** Meses do ciclo de PUBLICAÇÃO com dado real — sempre relativo a
+      `publishPeriod`, nunca ao filtro de "Detalhar meses", para a cobertura e
+      o botão "Publicar" nunca refletirem um período diferente do publicado. */
+  const [narrowedCoverageMonths, setNarrowedCoverageMonths] = useState<Set<string> | null>(null);
+
+  const loadCoverage = useCallback(async () => {
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(periodToOptionalFields(publishPeriod)).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ),
+    );
+    const response = await fetch(`/api/taxa-acidentes?${params.toString()}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const body = (await response.json()) as AccidentRateApiResponse;
+    setNarrowedCoverageMonths(new Set(body.monthly.map((m) => `${m.year}-${m.month}`)));
+  }, [publishPeriod]);
+
+  function prepareNextSemester() {
+    const next = nextWorkingPeriod(publishYear, publishSemester);
+    setPeriod(next.year, next.semester);
+    setMessage(
+      `Período de trabalho preparado: ${formatPeriodOptionLabel(next.year, next.semester)} · Sem dados.`,
+    );
+  }
 
   const load = useCallback(
     async (nextPeriod = effectivePeriod) => {
@@ -185,6 +225,38 @@ export function AccidentRateView({
   useEffect(() => {
     void loadPublication();
   }, [loadPublication]);
+
+  // "Detalhar meses" pode restringir a tabela a um recorte diferente do
+  // período de publicação — nesse caso a cobertura/o botão "Publicar" não
+  // podem usar `data` (que segue o filtro), então buscamos separadamente,
+  // sempre escopado em `publishPeriod`. Sem filtro ativo, `data` já reflete
+  // exatamente o período de publicação e essa busca extra é dispensada.
+  useEffect(() => {
+    if (viewFilter === undefined) {
+      setNarrowedCoverageMonths(null);
+      return;
+    }
+    void loadCoverage();
+  }, [viewFilter, loadCoverage]);
+
+  const coverageMonthSet = useMemo(() => {
+    if (viewFilter === undefined && data) {
+      return new Set(data.monthly.map((m) => `${m.year}-${m.month}`));
+    }
+    return narrowedCoverageMonths;
+  }, [viewFilter, data, narrowedCoverageMonths]);
+
+  const workingMonths = useMemo(() => enumeratePeriodMonths(publishPeriod), [publishPeriod]);
+  const presentWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => coverageMonthSet?.has(`${m.year}-${m.month}`)),
+    [workingMonths, coverageMonthSet],
+  );
+  const missingWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => !coverageMonthSet?.has(`${m.year}-${m.month}`)),
+    [workingMonths, coverageMonthSet],
+  );
+  const coverageKnown = coverageMonthSet !== null;
+  const canPublishPeriod = coverageKnown && presentWorkingMonths.length > 0;
 
   const monthlyFilterYears = useMemo(() => {
     const years = new Set((data?.monthly ?? []).map((row) => row.year));
@@ -429,11 +501,17 @@ export function AccidentRateView({
           ? "Falha ao atualizar o lançamento mensal."
           : "Falha ao salvar o lançamento mensal.",
       );
-      await load();
-      notifyIndicatorDataChanged();
       const edited = Boolean(editingMonthId);
+      let saveMessage = edited ? "Lançamento mensal atualizado." : "Lançamento mensal salvo no Neon.";
+      if (!edited) {
+        const newPeriodMessage = detectNewPeriod([{ year, month }], setPeriod);
+        if (newPeriodMessage) saveMessage += ` ${newPeriodMessage}`;
+      }
       resetMonthForm();
-      setMessage(edited ? "Lançamento mensal atualizado." : "Lançamento mensal salvo no Neon.");
+      setMessage(saveMessage);
+      await load();
+      void loadAvailablePeriods();
+      notifyIndicatorDataChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao salvar o mês.");
     } finally {
@@ -613,127 +691,130 @@ export function AccidentRateView({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Filtros</Label>
-            <div className="flex flex-wrap gap-3">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="accidentRateTarget">Meta de frequência (≤)</Label>
-                <Input
-                  id="accidentRateTarget"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={target}
-                  onChange={(event) => setTarget(event.target.value)}
-                  className="w-24"
-                />
-              </div>
+      <Card className="p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Contexto de publicação</CardTitle>
+              <CardDescription>
+                Defina o período de trabalho, a meta e as ações aplicadas ao cálculo e à
+                publicação da Taxa de Acidentes.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline">
+                {publishYear} {publishSemester}
+              </Badge>
+              <Badge variant={coverageKnown && presentWorkingMonths.length === 6 ? "success" : "outline"}>
+                {coverageKnown ? presentWorkingMonths.length : "…"}/6 meses
+              </Badge>
+              <Badge variant={publication ? "success" : "secondary"}>
+                {publication ? "Publicado" : "Rascunho"}
+              </Badge>
             </div>
           </div>
-        </Card>
 
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="mb-0">Período de publicação</Label>
-              <ViewFilterPopover
-                value={viewFilter}
-                onChange={setViewFilter}
-                yearsInData={periodFilterYears}
-                publishedLabel={formatPeriodRangeLabel(publishPeriod)}
-              />
-            </div>
-            <SemesterYearFilter
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PublicationPeriodField
+              fieldId="accidentRatePeriodSelect"
               year={publishYear}
               semester={publishSemester}
               onChange={setPeriod}
-              label=""
-            />
-          </div>
-        </Card>
+              periodOptions={periodOptions}
+              availablePeriods={availablePeriods}
+              publishPeriod={publishPeriod}
+              viewFilter={viewFilter}
+              onViewFilterChange={setViewFilter}
+              yearsInData={periodFilterYears}
+              onPrepareNextSemester={prepareNextSemester}
+            >
+              <p className="text-xs text-muted-foreground">
+                {!coverageKnown
+                  ? "Carregando cobertura…"
+                  : presentWorkingMonths.length
+                    ? `${presentWorkingMonths.length} de 6 meses com dados · Meses disponíveis: ${joinWithAnd(
+                        presentWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                      )}${
+                        missingWorkingMonths.length
+                          ? ` · Faltam: ${joinWithAnd(
+                              missingWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                            )}`
+                          : ""
+                      }`
+                    : "0 de 6 meses com dados — lance ao menos um mês deste período para habilitar a publicação."}
+              </p>
+            </PublicationPeriodField>
 
-        <Card className="p-4">
-          <div className="flex flex-col gap-3">
-            <Label>Ações</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={busy}
-                onClick={() => void saveTarget()}
-              >
-                <Save className="size-3.5" />
-                Salvar meta
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                disabled={busy}
-                onClick={() => void load()}
-              >
-                <RotateCw className="size-3.5" />
-                Recalcular
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => setUnitDialogOpen(true)}
-              >
-                <Ban className="size-3.5" />
-                Ignorar unidades
-                {excludedUnits.length ? (
-                  <Badge variant="outline" className="ml-0.5">
-                    {excludedUnits.length}
-                  </Badge>
-                ) : null}
-              </Button>
-              <IndicatorAnalysisDialog
-                module="taxa-acidentes"
-                moduleLabel="Taxa de Acidentes"
-                target={
-                  Number.isFinite(Number(target)) && Number(target) >= 0
-                    ? Number(target)
-                    : ACCIDENT_RATE_DEFAULT_TARGET
-                }
-                targetUnit="absolute"
-                years={periodFilterYears}
-                defaultYear={data?.result?.latestYear ?? undefined}
-                defaultMonth={data?.result?.latestMonth ?? undefined}
-                triggerClassName="w-full"
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="accidentRateTarget">Meta de frequência (≤)</Label>
+              <Input
+                id="accidentRateTarget"
+                type="number"
+                min="0"
+                step="0.1"
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+                className="w-28"
               />
-              {canClear ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  disabled={busy}
-                  onClick={openClearDialog}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar tudo
-                </Button>
-              ) : null}
-              {canPublish ? (
-                <Button
-                  variant="success"
-                  size="sm"
-                  className="w-full"
-                  disabled={busy || !data?.monthly.length}
-                  onClick={() => void publish()}
-                >
-                  <Send className="size-3.5" />
-                  Publicar no Painel
-                </Button>
-              ) : null}
+              <p className="text-xs text-muted-foreground">
+                Usada no cálculo e na publicação de{" "}
+                {formatPeriodOptionLabel(publishYear, publishSemester)}.
+              </p>
             </div>
           </div>
-        </Card>
-      </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void saveTarget()}>
+              <Save className="size-3.5" />
+              Salvar meta
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+              <RotateCw className="size-3.5" />
+              Recalcular
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+              <Ban className="size-3.5" />
+              Ignorar unidades
+              {excludedUnits.length ? (
+                <Badge variant="outline" className="ml-0.5">
+                  {excludedUnits.length}
+                </Badge>
+              ) : null}
+            </Button>
+            <IndicatorAnalysisDialog
+              module="taxa-acidentes"
+              moduleLabel="Taxa de Acidentes"
+              target={
+                Number.isFinite(Number(target)) && Number(target) >= 0
+                  ? Number(target)
+                  : ACCIDENT_RATE_DEFAULT_TARGET
+              }
+              targetUnit="absolute"
+              years={periodFilterYears}
+              defaultYear={data?.result?.latestYear ?? undefined}
+              defaultMonth={data?.result?.latestMonth ?? undefined}
+            />
+            {canClear ? (
+              <Button variant="destructive" size="sm" disabled={busy} onClick={openClearDialog}>
+                <Trash2 className="size-3.5" />
+                Limpar tudo
+              </Button>
+            ) : null}
+            {canPublish ? (
+              <Button
+                variant="success"
+                size="sm"
+                className="ml-auto"
+                disabled={!canPublishPeriod || busy}
+                onClick={() => void publish()}
+              >
+                <Send className="size-3.5" />
+                Publicar {publishYear} {publishSemester}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <CheckCircle2

@@ -20,9 +20,12 @@ import {
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
-import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
+import { PublicationPeriodField } from "@/components/admin/PublicationPeriodField";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
-import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import {
+  nextWorkingPeriod,
+  usePublicationPeriodOptions,
+} from "@/components/admin/usePublicationPeriodOptions";
 import {
   periodQueryString,
   useReadingContextCycle,
@@ -52,7 +55,7 @@ import { parseIdpFile } from "@/features/idp/importers";
 import { formatIdpUnitLabel, normalizeIdpUnitCode } from "@/features/idp/utils/units";
 import { exportIdpPdf } from "@/features/idp/exports/pdf";
 import type { IdpDetailedResult, IdpNormalizedRecord } from "@/features/idp/types";
-import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import { formatPeriodOptionLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
 
 interface DocumentRow {
   id: string;
@@ -214,6 +217,16 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   const [message, setMessage] = useState<string | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
+  const { availablePeriods, periodOptions, loadAvailablePeriods, detectNewPeriod } =
+    usePublicationPeriodOptions("idp", publishYear, publishSemester);
+
+  function prepareNextSemester() {
+    const next = nextWorkingPeriod(publishYear, publishSemester);
+    setPeriod(next.year, next.semester);
+    setMessage(
+      `Período de trabalho preparado: ${formatPeriodOptionLabel(next.year, next.semester)} · Sem dados.`,
+    );
+  }
 
   async function load(period: PeriodRange | null = effectivePeriod, nextThreshold = threshold) {
     setError(null);
@@ -407,11 +420,16 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
       if (!finish.ok) throw await responseError(finish, "Falha ao finalizar a importação.");
       notifyIndicatorDataChanged();
 
-      setMessage(
-        `Importação concluída: ${totals.inserted} nova(s) versão(ões), ${totals.updated} corrigida(s), ${totals.ignored} idêntica(s) e ${totals.rejected} rejeitada(s).`,
+      let importMessage = `Importação concluída: ${totals.inserted} nova(s) versão(ões), ${totals.updated} corrigida(s), ${totals.ignored} idêntica(s) e ${totals.rejected} rejeitada(s).`;
+      const newPeriodMessage = detectNewPeriod(
+        records.map((record) => ({ year: record.referenceYear!, month: record.referenceMonth! })),
+        setPeriod,
       );
+      if (newPeriodMessage) importMessage += ` ${newPeriodMessage}`;
+      setMessage(importMessage);
       setPendingFiles([]);
       await load();
+      void loadAvailablePeriods();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na importação.");
     } finally {
@@ -839,38 +857,44 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
       <Card>
         <CardHeader>
-          <CardTitle>Período de publicação e ajustes de cálculo</CardTitle>
-          <CardDescription>
-            O semestre travado define quais RSOs entram na conta e vão para o Painel — a competência
-            efetiva é sempre a mais recente com RSO dentro dele. Use &ldquo;Consulta&rdquo; pra
-            olhar outro recorte sem mudar o que será publicado.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>Contexto de publicação</CardTitle>
+              <CardDescription>
+                Defina o período de trabalho, a meta e as ações aplicadas ao cálculo e à
+                publicação do IDP. A competência efetiva é sempre o RSO mais recente dentro do
+                semestre — &ldquo;Detalhar meses&rdquo; só restringe a visualização.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline">
+                {publishYear} {publishSemester}
+              </Badge>
+              <Badge variant={result?.activeDocuments ? "success" : "outline"}>
+                {result?.activeDocuments ?? 0} RSO(s) ativo(s)
+              </Badge>
+              <Badge variant={publication ? "success" : "secondary"}>
+                {publication ? "Publicado" : "Rascunho"}
+              </Badge>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-0">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-lg border border-border bg-muted/20 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-foreground">Período de publicação</h4>
-                <ViewFilterPopover
-                  value={viewFilter}
-                  onChange={setViewFilter}
-                  yearsInData={data?.years ?? []}
-                  publishedLabel={formatPeriodRangeLabel(publishPeriod)}
-                />
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                São os RSOs da competência mais recente dentro deste semestre que alimentam todas as
-                tabelas abaixo e vão para o Painel quando você clicar em &ldquo;Publicar&rdquo;.
-              </p>
-              <div className="mt-3">
-                <SemesterYearFilter
-                  year={publishYear}
-                  semester={publishSemester}
-                  onChange={setPeriod}
-                  label=""
-                />
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-4 border-primary bg-primary/5 px-3 py-2.5 text-xs">
+            <PublicationPeriodField
+              fieldId="idpPeriodSelect"
+              year={publishYear}
+              semester={publishSemester}
+              onChange={setPeriod}
+              periodOptions={periodOptions}
+              availablePeriods={availablePeriods}
+              publishPeriod={publishPeriod}
+              viewFilter={viewFilter}
+              onViewFilterChange={setViewFilter}
+              yearsInData={data?.years ?? []}
+              onPrepareNextSemester={prepareNextSemester}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border-l-4 border-primary bg-primary/5 px-3 py-2.5 text-xs">
                 <strong className="font-bold text-foreground">
                   Competência efetiva:{" "}
                   {competenceLabel(data?.selectedYear ?? publishYear, data?.selectedMonth ?? 1)}
@@ -880,82 +904,77 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
                   reutilizada.
                 </span>
               </div>
-            </div>
+            </PublicationPeriodField>
 
-            <div className="rounded-lg border border-border bg-muted/20 p-4">
-              <h4 className="text-sm font-semibold text-foreground">Meta</h4>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Não muda quais RSOs são usados. Define a aderência mínima para marcar &ldquo;Dentro
-                da meta&rdquo; aqui e no Painel.
+            <div className="flex flex-col gap-1.5">
+              <Label>Meta (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={200}
+                value={threshold}
+                onChange={(event) => setThreshold(Number(event.target.value))}
+                className="w-28"
+              />
+              <p className="text-xs text-muted-foreground">
+                Não muda quais RSOs são usados. Define a aderência mínima para marcar
+                &ldquo;Dentro da meta&rdquo; aqui e no Painel de{" "}
+                {formatPeriodOptionLabel(publishYear, publishSemester)}.
               </p>
-              <div className="mt-3 flex flex-col gap-1.5">
-                <Label>Meta (%)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={200}
-                  value={threshold}
-                  onChange={(event) => setThreshold(Number(event.target.value))}
-                  className="w-24"
-                />
-              </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
-                <RotateCw className="size-3.5" />
-                Recalcular
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+              <RotateCw className="size-3.5" />
+              Recalcular
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+              <Ban className="size-3.5" />
+              Ignorar unidades
+              {excludedUnits.length ? (
+                <Badge variant="outline" className="ml-0.5">
+                  {excludedUnits.length}
+                </Badge>
+              ) : null}
+            </Button>
+            <IndicatorAnalysisDialog
+              module="idp"
+              moduleLabel="IDP — Cronograma"
+              target={threshold}
+              years={data?.years ?? []}
+              defaultYear={data?.selectedYear ?? publishYear}
+              defaultMonth={data?.selectedMonth ?? 1}
+            />
+            {result?.activeDocuments ? (
+              <Button variant="outline" size="sm" onClick={() => exportIdpPdf(result)}>
+                <Download className="size-3.5" />
+                Baixar PDF
               </Button>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {result?.activeDocuments ? (
-                <Button variant="outline" size="sm" onClick={() => exportIdpPdf(result)}>
-                  <Download className="size-3.5" />
-                  Baixar PDF
-                </Button>
-              ) : null}
-              {canClear ? (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={busy || !data?.total}
-                  onClick={openClearDialog}
-                >
-                  <Trash2 className="size-3.5" />
-                  Limpar tudo
-                </Button>
-              ) : null}
-              <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
-                <Ban className="size-3.5" />
-                Ignorar unidades
-                {excludedUnits.length ? (
-                  <Badge variant="outline" className="ml-0.5">
-                    {excludedUnits.length}
-                  </Badge>
-                ) : null}
+            ) : null}
+            {canClear ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={busy || !data?.total}
+                onClick={openClearDialog}
+              >
+                <Trash2 className="size-3.5" />
+                Limpar tudo
               </Button>
-              <IndicatorAnalysisDialog
-                module="idp"
-                moduleLabel="IDP — Cronograma"
-                target={threshold}
-                years={data?.years ?? []}
-                defaultYear={data?.selectedYear ?? publishYear}
-                defaultMonth={data?.selectedMonth ?? 1}
-              />
-              {canPublish ? (
-                <Button
-                  variant="success"
-                  size="sm"
-                  disabled={busy || !result?.activeDocuments}
-                  onClick={() => void publish()}
-                >
-                  <Send className="size-3.5" />
-                  Publicar
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
+            {canPublish ? (
+              <Button
+                variant="success"
+                size="sm"
+                className="ml-auto"
+                disabled={busy || !result?.activeDocuments}
+                onClick={() => void publish()}
+              >
+                <Send className="size-3.5" />
+                Publicar {publishYear} {publishSemester}
+              </Button>
+            ) : null}
           </div>
           {publication ? (
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">

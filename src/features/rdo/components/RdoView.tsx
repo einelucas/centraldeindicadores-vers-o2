@@ -16,9 +16,13 @@ import {
 } from "lucide-react";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
-import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
+import { PublicationPeriodField } from "@/components/admin/PublicationPeriodField";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
-import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
+import {
+  joinWithAnd,
+  nextWorkingPeriod,
+  usePublicationPeriodOptions,
+} from "@/components/admin/usePublicationPeriodOptions";
 import {
   periodQueryString,
   useReadingContextCycle,
@@ -39,9 +43,14 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { chunk, DEFAULT_IMPORT_BATCH_SIZE } from "@/lib/batching";
-import { MONTH_NAMES_FULL } from "@/lib/dates";
+import { MONTH_NAMES, MONTH_NAMES_FULL } from "@/lib/dates";
 import { notifyIndicatorDataChanged } from "@/lib/browser-events";
-import { formatPeriodRangeLabel, periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import {
+  enumeratePeriodMonths,
+  formatPeriodOptionLabel,
+  periodToOptionalFields,
+  type PeriodRange,
+} from "@/lib/period";
 import { importRdoFiles, type RdoFileParseResult } from "@/features/rdo/importers";
 import { formatRdoUnitLabel } from "@/features/rdo/utils/units";
 import { exportRdoPdf } from "@/features/rdo/exports/pdf";
@@ -107,6 +116,30 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   const effectivePeriod = viewFilter === undefined ? publishPeriod : viewFilter;
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearPeriod, setClearPeriod] = useState<PeriodRange | null>(null);
+  const { availablePeriods, periodOptions, loadAvailablePeriods, detectNewPeriod } =
+    usePublicationPeriodOptions("rdo", year, semester);
+  /** Meses do ciclo de PUBLICAÇÃO com dado real — sempre relativo a
+      `publishPeriod`, nunca ao filtro de "Detalhar meses", para a cobertura e
+      o botão "Publicar" nunca refletirem um período diferente do publicado. */
+  const [narrowedCoverageMonths, setNarrowedCoverageMonths] = useState<Set<string> | null>(null);
+
+  const loadCoverage = useCallback(async () => {
+    const params = new URLSearchParams({
+      threshold: String(threshold),
+      ...Object.fromEntries(
+        Object.entries(periodToOptionalFields(publishPeriod)).map(([key, value]) => [
+          key,
+          String(value),
+        ]),
+      ),
+    });
+    const response = await fetch(`/api/rdo?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) return;
+    const body = (await response.json()) as ApiResponse;
+    setNarrowedCoverageMonths(
+      new Set(body.result.months.map((m) => `${m.year}-${m.month}`)),
+    );
+  }, [publishPeriod, threshold]);
 
   const load = useCallback(
     async (nextThreshold = threshold, nextPeriod = effectivePeriod) => {
@@ -152,6 +185,44 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
   useEffect(() => {
     void loadPublication();
   }, [loadPublication]);
+
+  // "Detalhar meses" pode restringir a tabela a um recorte diferente do
+  // período de publicação — nesse caso a cobertura/o botão "Publicar" não
+  // podem usar `data` (que segue o filtro), então buscamos separadamente,
+  // sempre escopado em `publishPeriod`. Sem filtro ativo, `data` já reflete
+  // exatamente o período de publicação e essa busca extra é dispensada.
+  useEffect(() => {
+    if (viewFilter === undefined) {
+      setNarrowedCoverageMonths(null);
+      return;
+    }
+    void loadCoverage();
+  }, [viewFilter, loadCoverage]);
+
+  const coverageMonthSet = useMemo(() => {
+    if (viewFilter === undefined && data) {
+      return new Set(data.result.months.map((m) => `${m.year}-${m.month}`));
+    }
+    return narrowedCoverageMonths;
+  }, [viewFilter, data, narrowedCoverageMonths]);
+
+  const workingMonths = useMemo(() => enumeratePeriodMonths(publishPeriod), [publishPeriod]);
+  const presentWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => coverageMonthSet?.has(`${m.year}-${m.month}`)),
+    [workingMonths, coverageMonthSet],
+  );
+  const missingWorkingMonths = useMemo(
+    () => workingMonths.filter((m) => !coverageMonthSet?.has(`${m.year}-${m.month}`)),
+    [workingMonths, coverageMonthSet],
+  );
+  const coverageKnown = coverageMonthSet !== null;
+  const canPublishPeriod = coverageKnown && presentWorkingMonths.length > 0;
+
+  function prepareNextSemester() {
+    const next = nextWorkingPeriod(year, semester);
+    setPeriod(next.year, next.semester);
+    setMessage(`Período de trabalho preparado: ${formatPeriodOptionLabel(next.year, next.semester)} · Sem dados.`);
+  }
 
   const unitOptions = useMemo(() => {
     const codes = new Set<string>([
@@ -270,10 +341,12 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
       if (!finish.ok) throw new Error("Os lotes foram enviados, mas a finalização falhou.");
       notifyIndicatorDataChanged();
 
-      setMessage(
-        `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s).`,
-      );
+      let importMessage = `Importação concluída: ${totals.inserted} inserido(s), ${totals.updated} atualizado(s), ${totals.ignored} ignorado(s).`;
+      const newPeriodMessage = detectNewPeriod(valid, setPeriod);
+      if (newPeriodMessage) importMessage += ` ${newPeriodMessage}`;
+      setMessage(importMessage);
       await load();
+      void loadAvailablePeriods();
       if (hasNewUnit) setUnitDialogOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha na importação.");
@@ -502,128 +575,152 @@ export function RdoView({ canPublish, canClear }: { canPublish: boolean; canClea
         </div>
       ) : null}
 
-      {result && data.total > 0 ? (
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[1fr_1.5fr_1fr]">
-            <Card className="p-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="rdoThreshold">Meta de aderência (%)</Label>
-                <Input
-                  id="rdoThreshold"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={threshold}
-                  onChange={(event) => setThreshold(Number(event.target.value))}
-                  className="w-24"
-                />
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="mb-0">Período de publicação</Label>
-                  <ViewFilterPopover
-                    value={viewFilter}
-                    onChange={setViewFilter}
-                    yearsInData={availableYears}
-                    publishedLabel={formatPeriodRangeLabel(publishPeriod)}
-                  />
-                </div>
-                <SemesterYearFilter year={year} semester={semester} onChange={setPeriod} label="" />
-              </div>
-            </Card>
-
-            <Card className="p-4">
-              <div className="flex flex-col gap-3">
-                <Label>Ações</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    disabled={busy}
-                    onClick={() =>
-                      void load(threshold).catch((err: Error) => setError(err.message))
-                    }
-                  >
-                    <RotateCw className="size-3.5" />
-                    Recalcular
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setUnitDialogOpen(true)}
-                  >
-                    <Ban className="size-3.5" />
-                    Ignorar unidades
-                    {excludedUnits.length ? (
-                      <Badge variant="outline" className="ml-0.5">
-                        {excludedUnits.length}
-                      </Badge>
-                    ) : null}
-                  </Button>
-                  <IndicatorAnalysisDialog
-                    module="rdo"
-                    moduleLabel="RDO"
-                    target={threshold}
-                    years={availableYears}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => exportRdoPdf(result, threshold)}
-                  >
-                    <Download className="size-3.5" />
-                    Baixar PDF
-                  </Button>
-                  {canClear ? (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="w-full"
-                      disabled={busy}
-                      onClick={openClearDialog}
-                    >
-                      <Trash2 className="size-3.5" />
-                      Limpar tudo
-                    </Button>
-                  ) : null}
-                  {canPublish ? (
-                    <Button
-                      variant="success"
-                      size="sm"
-                      className="w-full"
-                      disabled={busy}
-                      onClick={() => void publish()}
-                    >
-                      <Send className="size-3.5" />
-                      Publicar no Painel
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            </Card>
+      <Card className="p-4">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Contexto de publicação</CardTitle>
+              <CardDescription>
+                Defina o período de trabalho, a meta e as ações aplicadas ao cálculo e à
+                publicação do RDO.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline">
+                {year} {semester}
+              </Badge>
+              <Badge variant={coverageKnown && presentWorkingMonths.length === 6 ? "success" : "outline"}>
+                {coverageKnown ? presentWorkingMonths.length : "…"}/6 meses
+              </Badge>
+              <Badge variant={publication ? "success" : "secondary"}>
+                {publication ? "Publicado" : "Rascunho"}
+              </Badge>
+            </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <PublicationPeriodField
+              fieldId="rdoPeriodSelect"
+              year={year}
+              semester={semester}
+              onChange={setPeriod}
+              periodOptions={periodOptions}
+              availablePeriods={availablePeriods}
+              publishPeriod={publishPeriod}
+              viewFilter={viewFilter}
+              onViewFilterChange={setViewFilter}
+              yearsInData={availableYears}
+              onPrepareNextSemester={prepareNextSemester}
+            >
+              <p className="text-xs text-muted-foreground">
+                {!coverageKnown
+                  ? "Carregando cobertura…"
+                  : presentWorkingMonths.length
+                    ? `${presentWorkingMonths.length} de 6 meses com dados · Meses disponíveis: ${joinWithAnd(
+                        presentWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                      )}${
+                        missingWorkingMonths.length
+                          ? ` · Faltam: ${joinWithAnd(
+                              missingWorkingMonths.map((m) => MONTH_NAMES[m.month - 1] ?? String(m.month)),
+                            )}`
+                          : ""
+                      }`
+                    : "0 de 6 meses com dados — importe arquivos deste período para habilitar a publicação."}
+              </p>
+            </PublicationPeriodField>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="rdoThreshold">Meta de aderência (%)</Label>
+              <Input
+                id="rdoThreshold"
+                type="number"
+                min={0}
+                max={100}
+                value={threshold}
+                onChange={(event) => setThreshold(Number(event.target.value))}
+                className="w-28"
+              />
+              <p className="text-xs text-muted-foreground">
+                Usada no cálculo e na publicação de {formatPeriodOptionLabel(year, semester)}.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void load(threshold).catch((err: Error) => setError(err.message))}
+            >
+              <RotateCw className="size-3.5" />
+              Recalcular
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setUnitDialogOpen(true)}>
+              <Ban className="size-3.5" />
+              Ignorar unidades
+              {excludedUnits.length ? (
+                <Badge variant="outline" className="ml-0.5">
+                  {excludedUnits.length}
+                </Badge>
+              ) : null}
+            </Button>
+            <IndicatorAnalysisDialog
+              module="rdo"
+              moduleLabel="RDO"
+              target={threshold}
+              years={availableYears}
+            />
+            {result ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportRdoPdf(result, threshold)}
+              >
+                <Download className="size-3.5" />
+                Baixar PDF
+              </Button>
+            ) : null}
+            {canClear ? (
+              <Button variant="destructive" size="sm" disabled={busy} onClick={openClearDialog}>
+                <Trash2 className="size-3.5" />
+                Limpar tudo
+              </Button>
+            ) : null}
+            {canPublish ? (
+              <Button
+                variant="success"
+                size="sm"
+                className="ml-auto"
+                disabled={!canPublishPeriod || busy}
+                onClick={() => void publish()}
+              >
+                <Send className="size-3.5" />
+                Publicar {year} {semester}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Card>
+
+      {publication ? (
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <CheckCircle2 className="size-3.5 shrink-0 text-success" />
+          Já existe uma publicação ativa para <strong>{semester} {year}</strong> — versão{" "}
+          {publication.version}, publicada em{" "}
+          {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
+          {publication.publishedBy.name}. Publicar novamente cria uma nova versão para este
+          ciclo.
+        </div>
+      ) : null}
+
+      {result && data.total > 0 ? (
+        <div className="flex flex-col gap-5">
           {duplicates > 0 ? (
             <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-xs font-semibold text-accent-foreground">
               <Info className="size-3.5 shrink-0 text-accent" />
               {duplicates.toLocaleString("pt-BR")} linha(s) idêntica(s) repetida(s) entre os
               arquivos — contadas uma única vez.
-            </div>
-          ) : null}
-          {publication ? (
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-              Já existe uma publicação ativa para <strong>{semester} {year}</strong> — versão{" "}
-              {publication.version}, publicada em{" "}
-              {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
-              {publication.publishedBy.name}. Publicar novamente cria uma nova versão para este
-              ciclo.
             </div>
           ) : null}
 

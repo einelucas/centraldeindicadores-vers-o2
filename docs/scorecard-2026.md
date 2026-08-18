@@ -7,12 +7,13 @@ mesmo padrão travado usado pelos demais painéis administrativos — RDO, IDP,
 RNC, 5S e Taxa de Acidentes):
 
 - **S2**: junho a novembro do ano selecionado;
-- **S1**: dezembro do ano selecionado a maio do ano seguinte.
+- **S1**: dezembro do ano ANTERIOR a maio do ano selecionado (ex.: S1 2027 =
+  Dez/2026 – Mai/2027 — o "ano do período" é sempre o ano de término).
 
 Não existe mais um filtro livre de "De/Até" para o Scorecard: o período do
 ciclo (usado tanto pela leitura administrativa quanto pelo Painel Geral) é
 sempre um desses dois semestres inteiros. Ver `cycleFromYearSemester` em
-`src/components/layout/useReadingContextCycle.ts`.
+`src/lib/period.ts`.
 
 ## Pontuação
 
