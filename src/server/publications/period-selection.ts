@@ -56,18 +56,55 @@ export function periodsMatch(a: PeriodRange, b: PeriodRange): boolean {
   );
 }
 
-export function selectPublicationForPeriod<T extends PublicationLike>(
+/** Publicação com as colunas de ciclo (podem ser nulas em linhas antigas). */
+export type PublicationWithCycle = PublicationLike & {
+  cycleYear: number | null;
+  cycleSemester: string | null;
+  periodStartYear: number | null;
+  periodStartMonth: number | null;
+  periodEndYear: number | null;
+  periodEndMonth: number | null;
+};
+
+/**
+ * Resolve o período de uma publicação priorizando as colunas dedicadas
+ * (`periodStartYear`/`periodStartMonth`/`periodEndYear`/`periodEndMonth`) e
+ * caindo para o parser de `payload` (`publicationPeriod`) só em linhas
+ * gravadas antes da coluna existir — nunca as duas fontes ao mesmo tempo.
+ */
+export function publicationCyclePeriod(
+  module: PublishedModule,
+  publication: PublicationWithCycle,
+): PeriodRange | null {
+  const { periodStartYear, periodStartMonth, periodEndYear, periodEndMonth } = publication;
+  if (
+    periodStartYear !== null &&
+    periodStartMonth !== null &&
+    periodEndYear !== null &&
+    periodEndMonth !== null
+  ) {
+    return normalizePeriodRange({
+      startYear: periodStartYear,
+      startMonth: periodStartMonth,
+      endYear: periodEndYear,
+      endMonth: periodEndMonth,
+    });
+  }
+  return publicationPeriod(module, publication.payload);
+}
+
+export function selectPublicationForPeriod<T extends PublicationWithCycle>(
   module: PublishedModule,
   publications: T[],
   requestedPeriod: PeriodRange | null,
 ): { publication: T | null; historyCount: number } {
   const historyCount = publications.filter(
-    (publication) => publicationPeriod(module, publication.payload) !== null,
+    (publication) => publicationCyclePeriod(module, publication) !== null,
   ).length;
 
   const publication = requestedPeriod
     ? (publications.find((item) => {
-        const period = publicationPeriod(module, item.payload);
+        const period = publicationCyclePeriod(module, item);
         return period ? periodsMatch(period, requestedPeriod) : false;
       }) ?? null)
     : (publications.find((item) => item.active) ?? null);

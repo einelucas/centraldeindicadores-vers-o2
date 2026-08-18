@@ -23,7 +23,10 @@ import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
-import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -238,7 +241,9 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
   }
 
   async function loadPublication() {
-    const response = await fetch("/api/publicacoes/idp", { cache: "no-store" });
+    const response = await fetch(`/api/publicacoes/idp?${periodQueryString(publishPeriod)}`, {
+      cache: "no-store",
+    });
     if (!response.ok) return;
     const body = (await response.json()) as { publication: PublicationSummary | null };
     setPublication(body.publication);
@@ -251,7 +256,8 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
 
   useEffect(() => {
     void loadPublication();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishPeriod]);
 
   function updatePending(
     id: string,
@@ -954,9 +960,14 @@ export function IdpView({ canPublish, canClear }: { canPublish: boolean; canClea
           {publication ? (
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-              Última publicação: versão {publication.version} ·{" "}
-              {new Date(publication.publishedAt).toLocaleString("pt-BR")} ·{" "}
-              {publication.publishedBy.name}
+              Já existe uma publicação ativa para{" "}
+              <strong>
+                {publishSemester} {publishYear}
+              </strong>{" "}
+              — versão {publication.version}, publicada em{" "}
+              {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
+              {publication.publishedBy.name}. Publicar novamente cria uma nova versão para este
+              ciclo.
             </div>
           ) : null}
         </CardContent>

@@ -94,6 +94,31 @@ export function getCurrentCycle(reference: Date = new Date()): PeriodRange {
   return { startYear: year - 1, startMonth: 12, endYear: year, endMonth: 5 };
 }
 
+/** S1 (dezembro–maio, atravessa o ano civil) ou S2 (junho–novembro). */
+export type Semester = "S1" | "S2";
+
+/**
+ * Converte Ano + Semestre no intervalo de meses correspondente. Para S1, o
+ * ano informado é sempre o ano de INÍCIO (dezembro) — nunca o de término
+ * (maio do ano seguinte). Ex.: `cycleFromYearSemester(2027, "S1")` =
+ * Dez/2027 – Mai/2028, não Dez/2026 – Mai/2027.
+ */
+export function cycleFromYearSemester(year: number, semester: Semester): PeriodRange {
+  return semester === "S2"
+    ? { startYear: year, startMonth: 6, endYear: year, endMonth: 11 }
+    : { startYear: year, startMonth: 12, endYear: year + 1, endMonth: 5 };
+}
+
+/** Inverso de `cycleFromYearSemester` — extrai Ano + Semestre de um ciclo. */
+export function yearSemesterFromCycle(cycle: PeriodRange): {
+  year: number;
+  semester: Semester;
+} {
+  return cycle.startMonth === 12
+    ? { year: cycle.startYear, semester: "S1" }
+    : { year: cycle.startYear, semester: "S2" };
+}
+
 /**
  * Converte uma competência mensal no ciclo operacional que a contém.
  * Junho–novembro formam S2; dezembro–maio formam o S1 iniciado em dezembro.

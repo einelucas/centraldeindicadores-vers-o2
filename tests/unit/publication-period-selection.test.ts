@@ -11,16 +11,29 @@ const cycle2026S2 = {
   endMonth: 11,
 };
 
+/** Colunas de ciclo nulas — simula uma publicação legada, gravada antes da
+    migração que adicionou cycleYear/cycleSemester/periodStart.../periodEnd...,
+    cujo período só existe dentro de `payload`. */
+const noCycleColumns = {
+  cycleYear: null,
+  cycleSemester: null,
+  periodStartYear: null,
+  periodStartMonth: null,
+  periodEndYear: null,
+  periodEndMonth: null,
+};
+
 describe("publication period selection", () => {
   it("selects the snapshot whose published period matches the requested cycle", () => {
     const publications = [
-      { active: true, payload: { periodo: cycle2026S2 }, name: "current" },
+      { active: true, payload: { periodo: cycle2026S2 }, name: "current", ...noCycleColumns },
       {
         active: false,
         payload: {
           periodo: { startYear: 2025, startMonth: 12, endYear: 2026, endMonth: 5 },
         },
         name: "history",
+        ...noCycleColumns,
       },
     ];
 
@@ -44,7 +57,9 @@ describe("publication period selection", () => {
   });
 
   it("returns no publication when the selected cycle has no matching snapshot", () => {
-    const publications = [{ active: true, payload: { periodo: cycle2026S2 } }];
+    const publications = [
+      { active: true, payload: { periodo: cycle2026S2 }, ...noCycleColumns },
+    ];
 
     expect(
       selectPublicationForPeriod("cinco-s", publications, {
@@ -54,5 +69,24 @@ describe("publication period selection", () => {
         endMonth: 11,
       }).publication,
     ).toBeNull();
+  });
+
+  it("prefers the dedicated cycle columns over payload.periodo when both exist", () => {
+    const publications = [
+      {
+        active: true,
+        payload: { periodo: { startYear: 2025, startMonth: 6, endYear: 2025, endMonth: 11 } },
+        cycleYear: 2026,
+        cycleSemester: "S2",
+        periodStartYear: 2026,
+        periodStartMonth: 6,
+        periodEndYear: 2026,
+        periodEndMonth: 11,
+      },
+    ];
+
+    expect(selectPublicationForPeriod("rdo", publications, cycle2026S2).publication).toBe(
+      publications[0],
+    );
   });
 });

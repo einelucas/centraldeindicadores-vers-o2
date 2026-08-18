@@ -23,7 +23,10 @@ import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
-import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -171,7 +174,9 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
   );
 
   async function loadPublication() {
-    const response = await fetch("/api/publicacoes/rnc", { cache: "no-store" });
+    const response = await fetch(`/api/publicacoes/rnc?${periodQueryString(publishPeriod)}`, {
+      cache: "no-store",
+    });
     if (!response.ok) return;
     const body = (await response.json()) as {
       publication: PublicationSummary | null;
@@ -187,7 +192,8 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
 
   useEffect(() => {
     void loadPublication();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishPeriod]);
 
   const unitOptions = useMemo(() => {
     const codes = new Set<string>([
@@ -725,8 +731,11 @@ export function RncView({ canPublish, canClear }: { canPublish: boolean; canClea
           {publication ? (
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-              Publicado em {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
-              {publication.publishedBy.name} · versão {publication.version}
+              Já existe uma publicação ativa para <strong>{semester} {year}</strong> — versão{" "}
+              {publication.version}, publicada em{" "}
+              {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
+              {publication.publishedBy.name}. Publicar novamente cria uma nova versão para este
+              ciclo.
             </div>
           ) : null}
 

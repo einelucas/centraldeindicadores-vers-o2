@@ -24,7 +24,10 @@ import { ClearRecordsDialog } from "@/components/admin/ClearRecordsDialog";
 import { SemesterYearFilter } from "@/components/admin/SemesterYearFilter";
 import { UnitExclusionDialog } from "@/components/admin/UnitExclusionDialog";
 import { ViewFilterPopover } from "@/components/admin/ViewFilterPopover";
-import { useReadingContextCycle } from "@/components/layout/useReadingContextCycle";
+import {
+  periodQueryString,
+  useReadingContextCycle,
+} from "@/components/layout/useReadingContextCycle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -185,7 +188,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
   );
 
   const loadPublication = useCallback(async () => {
-    const response = await fetch("/api/publicacoes/cinco-s", {
+    const response = await fetch(`/api/publicacoes/cinco-s?${periodQueryString(publishPeriod)}`, {
       cache: "no-store",
     });
     if (!response.ok) return;
@@ -193,7 +196,7 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       publication: PublicationSummary | null;
     };
     setPublication(body.publication);
-  }, []);
+  }, [publishPeriod]);
 
   useEffect(() => {
     void load().catch((err: Error) => setError(err.message));
@@ -806,9 +809,10 @@ export function FiveSView({ canPublish, canClear }: { canPublish: boolean; canCl
       {publication ? (
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <CheckCircle2 className="size-3.5 shrink-0 text-success" />
-          Última publicação: versão {publication.version}, em{" "}
-          {new Date(publication.publishedAt).toLocaleString("pt-BR")}, por{" "}
-          {publication.publishedBy.name}.
+          Já existe uma publicação ativa para <strong>{semester} {year}</strong> — versão{" "}
+          {publication.version}, publicada em{" "}
+          {new Date(publication.publishedAt).toLocaleString("pt-BR")} por{" "}
+          {publication.publishedBy.name}. Publicar novamente cria uma nova versão para este ciclo.
         </div>
       ) : null}
 

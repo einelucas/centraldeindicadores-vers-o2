@@ -2,22 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { ReadingSemester } from "./ReadingContextCard";
-import { getCurrentCycle, periodToOptionalFields, type PeriodRange } from "@/lib/period";
+import {
+  cycleFromYearSemester,
+  getCurrentCycle,
+  periodToOptionalFields,
+  yearSemesterFromCycle,
+  type PeriodRange,
+} from "@/lib/period";
 
-export function cycleFromYearSemester(year: number, semester: ReadingSemester): PeriodRange {
-  return semester === "S2"
-    ? { startYear: year, startMonth: 6, endYear: year, endMonth: 11 }
-    : { startYear: year, startMonth: 12, endYear: year + 1, endMonth: 5 };
-}
-
-export function yearSemesterFromCycle(cycle: PeriodRange): {
-  year: number;
-  semester: ReadingSemester;
-} {
-  return cycle.startMonth === 12
-    ? { year: cycle.startYear, semester: "S1" }
-    : { year: cycle.startYear, semester: "S2" };
-}
+export { cycleFromYearSemester, yearSemesterFromCycle };
 
 export function periodQueryString(period: PeriodRange): string {
   const params = new URLSearchParams();

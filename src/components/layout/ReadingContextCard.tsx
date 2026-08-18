@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { INDICATOR_DATA_CHANGED_EVENT } from "@/lib/browser-events";
-import type { PeriodRange } from "@/lib/period";
+import type { PeriodRange, Semester } from "@/lib/period";
 import { TABS } from "./TabsNav";
 
-export type ReadingSemester = "S1" | "S2";
+export type { Semester as ReadingSemester } from "@/lib/period";
 
 interface AvailablePeriod {
   year: number;
-  semester: ReadingSemester;
+  semester: Semester;
 }
 
 const PERIOD_SOURCE_BY_HREF: Record<string, string> = {
@@ -44,8 +44,8 @@ export function ReadingContextCard({
   activeHref: string;
   historyCount: number;
   year: number;
-  semester: ReadingSemester;
-  onPeriodChange: (year: number, semester: ReadingSemester) => void;
+  semester: Semester;
+  onPeriodChange: (year: number, semester: Semester) => void;
   isCurrent: boolean;
 }) {
   const router = useRouter();
@@ -199,7 +199,7 @@ export function ReadingContextCard({
             value={selectedPeriodAvailable ? selectedPeriod : ""}
             onChange={(event) => {
               const [nextYear, nextSemester] = event.target.value.split(":");
-              onPeriodChange(Number(nextYear), nextSemester as ReadingSemester);
+              onPeriodChange(Number(nextYear), nextSemester as Semester);
             }}
             className="reading-context-select"
             disabled={!availablePeriods?.length}

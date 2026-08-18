@@ -13,6 +13,7 @@ import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 import { selectPublicationForPeriod } from "@/server/publications/period-selection";
+import { resolvePublicationCycle } from "@/server/publications/cycle";
 
 const MODULE = "taxa-acidentes";
 const INDICATOR = "taxa";
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const input = publishSchema.parse(rawBody ? JSON.parse(rawBody) : {});
     const period = periodFromOptionalFields(input);
+    const cycle = resolvePublicationCycle(period);
     const loaded = await prisma.$transaction((tx) => loadAccidentRateData(tx, period));
     if (!loaded.monthly.length || loaded.result.result === null) {
       return NextResponse.json(
@@ -98,7 +100,15 @@ export async function POST(req: NextRequest) {
       });
       const version = (latest?.version ?? 0) + 1;
       await tx.indicatorPublication.updateMany({
-        where: { module: MODULE, indicator: INDICATOR, active: true },
+        where: cycle
+          ? {
+              module: MODULE,
+              indicator: INDICATOR,
+              active: true,
+              cycleYear: cycle.year,
+              cycleSemester: cycle.semester,
+            }
+          : { module: MODULE, indicator: INDICATOR, active: true },
         data: { active: false },
       });
       return tx.indicatorPublication.create({
@@ -112,6 +122,12 @@ export async function POST(req: NextRequest) {
           payload: toJsonValue(payload),
           active: true,
           publishedById: user.id,
+          cycleYear: cycle?.year ?? null,
+          cycleSemester: cycle?.semester ?? null,
+          periodStartYear: period?.startYear ?? null,
+          periodStartMonth: period?.startMonth ?? null,
+          periodEndYear: period?.endYear ?? null,
+          periodEndMonth: period?.endMonth ?? null,
         },
         include: {
           publishedBy: { select: { id: true, name: true, email: true } },

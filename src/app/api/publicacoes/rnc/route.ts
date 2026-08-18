@@ -12,6 +12,7 @@ import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 import { selectPublicationForPeriod } from "@/server/publications/period-selection";
+import { resolvePublicationCycle } from "@/server/publications/cycle";
 
 const MODULE = "rnc";
 const INDICATOR = "dias_tratativa";
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     }));
     const configuration = await prisma.$transaction((tx) => loadRncConfiguration(tx));
     const period = periodFromOptionalFields(input);
+    const cycle = resolvePublicationCycle(period);
     const result = computeRncResult(records, input.metaDias, configuration.excludedUnits, period);
     if (result.resultadoDias === null) {
       return NextResponse.json(
@@ -121,7 +123,15 @@ export async function POST(req: NextRequest) {
       const version = (latest?.version ?? 0) + 1;
 
       await tx.indicatorPublication.updateMany({
-        where: { module: MODULE, indicator: INDICATOR, active: true },
+        where: cycle
+          ? {
+              module: MODULE,
+              indicator: INDICATOR,
+              active: true,
+              cycleYear: cycle.year,
+              cycleSemester: cycle.semester,
+            }
+          : { module: MODULE, indicator: INDICATOR, active: true },
         data: { active: false },
       });
 
@@ -136,6 +146,12 @@ export async function POST(req: NextRequest) {
           payload: toJsonValue(payload),
           active: true,
           publishedById: user.id,
+          cycleYear: cycle?.year ?? null,
+          cycleSemester: cycle?.semester ?? null,
+          periodStartYear: period?.startYear ?? null,
+          periodStartMonth: period?.startMonth ?? null,
+          periodEndYear: period?.endYear ?? null,
+          periodEndMonth: period?.endMonth ?? null,
         },
         include: {
           publishedBy: { select: { id: true, name: true, email: true } },

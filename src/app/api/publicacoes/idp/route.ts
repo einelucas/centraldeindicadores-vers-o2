@@ -13,6 +13,7 @@ import { toJsonValue } from "@/server/database/json";
 import { prisma } from "@/server/database/prisma";
 import { handleApiError } from "@/server/http";
 import { selectPublicationForPeriod } from "@/server/publications/period-selection";
+import { resolvePublicationCycle } from "@/server/publications/cycle";
 
 const MODULE = "idp";
 const INDICATOR = "aderencia";
@@ -87,6 +88,7 @@ export async function POST(req: NextRequest) {
     const referenceYears = Array.from(
       new Set(enumeratePeriodMonths(periodRange).map((item) => item.year)),
     );
+    const cycle = resolvePublicationCycle(periodRange);
 
     const [rows, excludedDisciplines, excludedUnits] = await Promise.all([
       prisma.idpRsoRecord.findMany({
@@ -137,7 +139,15 @@ export async function POST(req: NextRequest) {
       const version = (latest?.version ?? 0) + 1;
 
       await tx.indicatorPublication.updateMany({
-        where: { module: MODULE, indicator: INDICATOR, active: true },
+        where: cycle
+          ? {
+              module: MODULE,
+              indicator: INDICATOR,
+              active: true,
+              cycleYear: cycle.year,
+              cycleSemester: cycle.semester,
+            }
+          : { module: MODULE, indicator: INDICATOR, active: true },
         data: { active: false },
       });
 
@@ -152,6 +162,12 @@ export async function POST(req: NextRequest) {
           payload: toJsonValue(payload),
           active: true,
           publishedById: user.id,
+          cycleYear: cycle?.year ?? null,
+          cycleSemester: cycle?.semester ?? null,
+          periodStartYear: periodRange.startYear,
+          periodStartMonth: periodRange.startMonth,
+          periodEndYear: periodRange.endYear,
+          periodEndMonth: periodRange.endMonth,
         },
         include: { publishedBy: { select: { id: true, name: true, email: true } } },
       });

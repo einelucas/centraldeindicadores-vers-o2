@@ -205,9 +205,21 @@ model IndicatorPublication {
   publishedAt   DateTime @default(now())
   publishedBy   User     @relation(fields: [publishedById], references: [id])
 
+  // Ciclo de publicação (Ano + Semestre) e o intervalo de meses que ele
+  // resolve — nullable para conviver com publicações antigas, que só têm o
+  // período dentro de `payload` (em formatos diferentes por módulo). Ver
+  // docs/migration... e src/server/publications/cycle.ts.
+  cycleYear        Int?
+  cycleSemester    String? // "S1" | "S2"
+  periodStartYear  Int?
+  periodStartMonth Int?
+  periodEndYear    Int?
+  periodEndMonth   Int?
+
   @@unique([module, indicator, version])
   @@index([module, indicator, active, publishedAt])
   @@index([publishedById])
+  @@index([module, indicator, cycleYear, cycleSemester])
 }
 
 // ---------------------------------------------------------------------------

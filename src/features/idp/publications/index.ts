@@ -1,5 +1,6 @@
 import type { IdpDetailedResult } from "@/features/idp/types";
 import { IDP_SCORECARD_POINTS, IDP_SCORECARD_WEIGHT } from "@/features/idp/types";
+import { normalizePeriodRange, type PeriodRange } from "@/lib/period";
 
 export interface IdpPublishedUnit {
   n: string;
@@ -45,6 +46,8 @@ export interface IdpPublishedPayload {
   historyMonthStart: number;
   historyEndYear?: number;
   historyMonthEnd: number;
+  /** Mesmo formato usado por RDO/RNC/5S/Taxa de Acidentes — aditivo, não substitui os campos acima. */
+  periodo?: PeriodRange | null;
   /** Mantidos para compatibilidade com o Scorecard e snapshots antigos. */
   monthStart: number;
   monthEnd: number;
@@ -92,6 +95,12 @@ export function toIdpPublishedPayload(
     historyMonthStart: result.historyMonthStart,
     historyEndYear: result.historyEndYear,
     historyMonthEnd: result.historyMonthEnd,
+    periodo: normalizePeriodRange({
+      startYear: result.historyStartYear ?? result.selectedYear,
+      startMonth: result.historyMonthStart,
+      endYear: result.historyEndYear ?? result.selectedYear,
+      endMonth: result.historyMonthEnd,
+    }),
     monthStart: result.historyMonthStart,
     monthEnd: result.historyMonthEnd,
     totalLinhaBase: result.totalPrevistoMedio,
