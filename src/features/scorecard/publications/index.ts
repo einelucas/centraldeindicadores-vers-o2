@@ -107,10 +107,13 @@ export function monthLabelToKey(label: string): string | null {
   return `${year}-${String(month + 1).padStart(2, "0")}`;
 }
 
+/** Ex.: "2026-06" → "Jun/26" — ano com 2 dígitos, só para exibição no Resumo
+    Executivo (Painel Geral). `monthLabelToKey`, o inverso, continua lendo o
+    ano completo dos rótulos originais de cada módulo — não depende disto. */
 export function monthKeyToLabel(key: string): string {
   const [year, monthText] = key.split("-");
   const month = Number(monthText);
-  return `${MONTH_NAMES[month - 1] ?? "?"}/${year}`;
+  return `${MONTH_NAMES[month - 1] ?? "?"}/${String(year).slice(-2)}`;
 }
 
 function readRdoPayload(payload: unknown): RdoPublishedPayload | null {

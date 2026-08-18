@@ -145,7 +145,7 @@ export function RdoPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <p className="ps">Carregando painel publicado…</p>
           </div>
@@ -159,7 +159,7 @@ export function RdoPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Não foi possível carregar o painel</h2>
             <p className="ps">{error}</p>
@@ -174,7 +174,7 @@ export function RdoPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Nenhuma publicação para este período</h2>
             <p className="ps">Escolha outro ano ou semestre acima, ou clique em “Ciclo atual”.</p>
@@ -207,7 +207,7 @@ export function RdoPublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
-        {readingContext}
+        <div className="reading-context-row">{readingContext}</div>
         <div className="mgrid">
           <PanelMetric
             label="Resultado"

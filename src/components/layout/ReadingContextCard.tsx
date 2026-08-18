@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { INDICATOR_DATA_CHANGED_EVENT } from "@/lib/browser-events";
 import { formatPeriodOptionLabel, yearSemesterFromCycle, type PeriodRange, type Semester } from "@/lib/period";
-import { TABS } from "./TabsNav";
 
 export type { Semester as ReadingSemester } from "@/lib/period";
 
@@ -24,12 +22,15 @@ const PERIOD_SOURCE_BY_HREF: Record<string, string> = {
 };
 
 /**
- * Contexto compartilhado pelos painéis publicados. O primeiro campo navega
- * entre módulos; o segundo escolhe ano + semestre como um único contexto.
+ * Contexto compartilhado pelos painéis publicados — hoje reduzido a só o
+ * seletor de Ano + Semestre. `activeHref` continua sendo usado apenas para
+ * escolher a fonte de `/api/available-periods` (nunca navega mais entre
+ * módulos: isso já é feito pelos ícones do TabsNav). `historyCount` continua
+ * fazendo parte do contrato do componente — outras telas ainda o calculam e
+ * passam — mas não é mais exibido aqui.
  */
 export function ReadingContextCard({
   activeHref,
-  historyCount,
   year,
   semester,
   onPeriodChange,
@@ -42,14 +43,10 @@ export function ReadingContextCard({
   onPeriodChange: (year: number, semester: Semester) => void;
   isCurrent: boolean;
 }) {
-  const router = useRouter();
-  const activeTab = TABS.find((tab) => tab.href === activeHref) ?? TABS[0]!;
   const selectedPeriod = `${year}:${semester}`;
 
-  const [guideOpen, setGuideOpen] = useState(false);
   const [availablePeriods, setAvailablePeriods] = useState<AvailablePeriod[] | null>(null);
   const [periodsError, setPeriodsError] = useState(false);
-  const guideRef = useRef<HTMLFieldSetElement>(null);
   const onPeriodChangeRef = useRef(onPeriodChange);
   onPeriodChangeRef.current = onPeriodChange;
 
@@ -108,84 +105,11 @@ export function ReadingContextCard({
     onPeriodChangeRef.current(latest.year, latest.semester);
   }, [availablePeriods, selectedPeriodAvailable]);
 
-  useEffect(() => {
-    if (!guideOpen) return;
-
-    function onClickOutside(event: MouseEvent) {
-      if (guideRef.current && !guideRef.current.contains(event.target as Node)) {
-        setGuideOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [guideOpen]);
-
   return (
-    <section className="reading-context-card" aria-labelledby="reading-context-title">
-      <div className="reading-context-header">
-        <div>
-          <h2 id="reading-context-title" className="reading-context-title">
-            Contexto da leitura
-          </h2>
-          <p className="reading-context-description">
-            Selecione o contexto desejado para a leitura dos indicadores.
-          </p>
-        </div>
-
-        <div className="reading-context-chips" aria-label="Resumo do contexto selecionado">
-          <span className="reading-context-chip">
-            {year} {semester}
-          </span>
-          <span className="reading-context-chip">{activeTab.contextLabel}</span>
-          <span className="reading-context-chip">Histórico {historyCount}</span>
-        </div>
-      </div>
-
-      <div className="reading-context-controls">
-        <fieldset className="reading-context-field" ref={guideRef}>
-          <legend>Guia ativa</legend>
-          <button
-            type="button"
-            onClick={() => setGuideOpen((current) => !current)}
-            aria-expanded={guideOpen}
-            aria-haspopup="listbox"
-            className="reading-context-trigger"
-          >
-            {activeTab.contextLabel}
-            <ChevronDown aria-hidden className="reading-context-chevron" />
-          </button>
-
-          {guideOpen ? (
-            <div role="listbox" className="reading-context-menu">
-              {TABS.map((tab) => {
-                const selected = tab.href === activeHref;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    onClick={() => {
-                      setGuideOpen(false);
-                      if (!selected) router.push(tab.href);
-                    }}
-                    className={
-                      selected
-                        ? "reading-context-option reading-context-option-active"
-                        : "reading-context-option"
-                    }
-                  >
-                    {tab.contextLabel}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </fieldset>
-
-        <fieldset className="reading-context-field">
-          <legend>Período</legend>
+    <section className="reading-context-card" aria-label="Contexto de leitura">
+      <label className="reading-context-compact-field">
+        <span className="reading-context-compact-legend">Período</span>
+        <span className="reading-context-compact-select-box">
           <select
             aria-label="Período"
             value={selectedPeriodAvailable ? selectedPeriod : ""}
@@ -193,7 +117,7 @@ export function ReadingContextCard({
               const [nextYear, nextSemester] = event.target.value.split(":");
               onPeriodChange(Number(nextYear), nextSemester as Semester);
             }}
-            className="reading-context-select"
+            className="reading-context-compact-select"
             disabled={!availablePeriods?.length}
           >
             {!availablePeriods?.length ? (
@@ -227,8 +151,9 @@ export function ReadingContextCard({
               );
             })}
           </select>
-        </fieldset>
-      </div>
+          <ChevronDown aria-hidden className="reading-context-chevron" />
+        </span>
+      </label>
     </section>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RotateCw, Save, Trash2 } from "lucide-react";
+import { Download, RotateCw, Save, Trash2 } from "lucide-react";
 
 import { ExportButtons } from "@/components/exports/ExportButtons";
 import { PublicationPeriodField } from "@/components/admin/PublicationPeriodField";
@@ -20,6 +20,7 @@ import {
   useReadingContextCycle,
 } from "@/components/layout/useReadingContextCycle";
 import type { ReadingSemester } from "@/components/layout/ReadingContextCard";
+import { ToolbarSlotContent } from "@/components/layout/ToolbarSlot";
 import { computeScorecard } from "@/features/scorecard/calculations";
 import {
   SC_INDICATORS,
@@ -28,6 +29,15 @@ import {
   type ScorecardResult,
   type ScorecardRow,
 } from "@/features/scorecard/types";
+import {
+  exportScorecardConsolidatedPdf,
+  type ScorecardConsolidatedModules,
+} from "@/features/scorecard/exports/pdf";
+import type { RdoResult } from "@/features/rdo/types";
+import type { IdpDetailedResult } from "@/features/idp/types";
+import type { RncResult } from "@/features/rnc/types";
+import type { FiveSResult } from "@/features/cinco-s/types";
+import type { AccidentRateResult } from "@/features/taxa-acidentes/types";
 import { MONTH_NAMES } from "@/lib/dates";
 import { notifyIndicatorDataChanged } from "@/lib/browser-events";
 import {
@@ -37,6 +47,30 @@ import {
   periodToOptionalFields,
   type PeriodRange,
 } from "@/lib/period";
+
+/** Formas mínimas das respostas de cada módulo — só os campos usados para
+    montar o PDF consolidado do Scorecard. */
+interface RdoModuleResponse {
+  total: number;
+  threshold: number;
+  result: RdoResult;
+}
+interface IdpModuleResponse {
+  total: number;
+  result: IdpDetailedResult;
+}
+interface RncModuleResponse {
+  total: number;
+  result: RncResult;
+}
+interface FiveSModuleResponse {
+  total: number;
+  result: FiveSResult;
+}
+interface AccidentModuleResponse {
+  monthly: unknown[];
+  result: AccidentRateResult | null;
+}
 
 interface Computation {
   year: number;
@@ -136,6 +170,10 @@ export function ScorecardView({
   const [history, setHistory] = useState<Computation[]>([]);
   const [semesterPreview, setSemesterPreview] = useState<Computation[]>([]);
   const [busy, setBusy] = useState(false);
+  /** Estado próprio, separado de `busy` — igual ao `exporting` do PDF dos
+      painéis publicados — para o botão do toolbar não ficar preso a outras
+      ações administrativas (Recalcular/Salvar) nem exibir o rótulo errado. */
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [statusError, setStatusError] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
@@ -494,6 +532,84 @@ export function ScorecardView({
     }
   }
 
+  /** Diferente do "Baixar PDF" dos outros módulos (que exporta só a tabela do
+      próprio módulo): este junta o Scorecard e, logo abaixo, uma seção por
+      módulo de origem com dado neste período, tudo em um único arquivo PDF —
+      busca cada módulo pela própria API, escopada no mesmo período de
+      trabalho selecionado aqui, exatamente como cada aba faria sozinha. */
+  async function downloadConsolidatedPdf() {
+    setPdfBusy(true);
+    setStatus(null);
+    setStatusError(false);
+    try {
+      const params = new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(periodToOptionalFields(cycleRange)).map(([key, value]) => [
+            key,
+            String(value),
+          ]),
+        ),
+      );
+      const suffix = params.toString();
+
+      const [rdoRes, idpRes, rncRes, fiveSRes, accidentsRes] = await Promise.all([
+        fetch(`/api/rdo?${suffix}`, { cache: "no-store" }),
+        fetch(`/api/idp?${suffix}`, { cache: "no-store" }),
+        fetch(`/api/rnc?${suffix}`, { cache: "no-store" }),
+        fetch(`/api/cinco-s?${suffix}`, { cache: "no-store" }),
+        fetch(`/api/taxa-acidentes?${suffix}`, { cache: "no-store" }),
+      ]);
+
+      const [rdoBody, idpBody, rncBody, fiveSBody, accidentsBody] = await Promise.all([
+        rdoRes.ok ? ((await rdoRes.json()) as RdoModuleResponse) : null,
+        idpRes.ok ? ((await idpRes.json()) as IdpModuleResponse) : null,
+        rncRes.ok ? ((await rncRes.json()) as RncModuleResponse) : null,
+        fiveSRes.ok ? ((await fiveSRes.json()) as FiveSModuleResponse) : null,
+        accidentsRes.ok ? ((await accidentsRes.json()) as AccidentModuleResponse) : null,
+      ]);
+
+      const modules: ScorecardConsolidatedModules = {
+        rdo:
+          rdoBody && rdoBody.total > 0
+            ? { result: rdoBody.result, thresholdPercent: rdoBody.threshold * 100 }
+            : null,
+        idp: idpBody && idpBody.result.activeDocuments > 0 ? { result: idpBody.result } : null,
+        rnc: rncBody && rncBody.total > 0 ? { result: rncBody.result } : null,
+        fiveS:
+          fiveSBody && fiveSBody.result.unitMonths.length > 0 ? { result: fiveSBody.result } : null,
+        accidents:
+          accidentsBody?.result && accidentsBody.monthly.length > 0
+            ? { result: accidentsBody.result }
+            : null,
+      };
+
+      exportScorecardConsolidatedPdf(
+        {
+          cycleRange,
+          monthColumnLabels: cycleMonths.map((cm) => monthColumnLabel(cm.year, cm.month)),
+          rows: historyExportRows,
+          semesterPoints,
+          semesterPontuacaoPrevista,
+          semesterAttendance,
+          scorecardMaxPoints: SCORECARD_MAX_POINTS,
+        },
+        modules,
+      );
+
+      const includedCount = Object.values(modules).filter(Boolean).length;
+      setStatus(
+        includedCount
+          ? `PDF consolidado gerado: Scorecard + ${includedCount} módulo(s) com dado neste período.`
+          : "PDF consolidado gerado apenas com o Scorecard — nenhum módulo de origem tem dado publicado neste período.",
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Falha ao gerar o PDF consolidado.");
+      setStatusError(true);
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   const presentWorkingMonths = useMemo(
     () => cycleMonths.filter((cm) => effectiveByPeriod.has(periodKey(cm.year, cm.month))),
     [cycleMonths, effectiveByPeriod],
@@ -507,6 +623,25 @@ export function ScorecardView({
 
   return (
     <div className="space-y-6">
+      {/* Botão injetado na barra de navegação (ao lado do alternador
+          Painel/Administração), no mesmo lugar em que cada painel publicado
+          já coloca seu "Exportar PDF" — ver ToolbarSlot. Diferente dos
+          outros, este é acionado da própria Administração, porque o PDF
+          consolidado depende do período de trabalho e da meta configurados
+          aqui, não do que está publicado. */}
+      <ToolbarSlotContent>
+        <button
+          type="button"
+          disabled={pdfBusy}
+          onClick={() => void downloadConsolidatedPdf()}
+          className="flex h-[42px] items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-[15px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+          title="Gera um único PDF com o Scorecard e, abaixo, uma seção por módulo de origem com dado neste período."
+        >
+          <Download className="size-4" />
+          {pdfBusy ? "Gerando PDF…" : "Baixar PDF consolidado"}
+        </button>
+      </ToolbarSlotContent>
+
       <Card className="p-4">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">

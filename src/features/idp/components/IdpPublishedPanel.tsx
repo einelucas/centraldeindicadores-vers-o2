@@ -140,7 +140,7 @@ export function IdpPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content">
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <p className="ps">Carregando painel publicado…</p>
           </div>
@@ -153,7 +153,7 @@ export function IdpPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content">
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Não foi possível carregar o painel</h2>
             <p className="ps">{error}</p>
@@ -167,7 +167,7 @@ export function IdpPublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content">
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Nenhuma publicação neste período</h2>
             <p className="ps">
@@ -200,7 +200,7 @@ export function IdpPublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
-        {readingContext}
+        <div className="reading-context-row">{readingContext}</div>
         <div className="mgrid">
           <PanelMetric
             label="Execução geral"

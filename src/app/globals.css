@@ -911,202 +911,137 @@ footer.app {
   box-shadow: 0 8px 24px rgba(39, 69, 120, 0.06);
 }
 
-/* Contexto da leitura — reprodução do cartão de referência do painel. */
+/* Contexto da leitura — reduzido a só o seletor de período, compacto e
+   discreto. `.reading-context-row` usa o MESMO número de colunas do grid de
+   cards de pontuação logo abaixo (default 4; painéis com menos cards usam o
+   modificador `-cols-N` correspondente) e não `auto-fit`: com um único item,
+   `auto-fit` colapsa as faixas vazias e entrega o espaço inteiro liberado
+   pra esse item (o card ficava largo demais em vez de 1/4). Com
+   `repeat(N, 1fr)` explícito as N faixas sempre existem — só a última é
+   ocupada — então o card fica com exatamente 1/N da largura, igual a um
+   card de pontuação, sem precisar de nenhum elemento extra preenchendo o
+   resto da linha. */
+.reading-context-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.reading-context-row.reading-context-row-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.reading-context-row.reading-context-row-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reading-context-row.reading-context-row-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reading-context-row .reading-context-card {
+  grid-column: -1;
+  justify-self: stretch;
+}
+
 .painel-frontend .reading-context-card {
-  min-height: 180px;
-  margin: 0 0 14px;
-  padding: 22px 24px 21px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 7px 11px;
   background: #ffffff;
   border: 1px solid #e7ecf3;
-  border-radius: 22px;
-  box-shadow: 0 12px 34px rgba(39, 69, 120, 0.075);
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(39, 69, 120, 0.06);
 }
 
-.reading-context-header {
+.reading-context-compact-field {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.reading-context-title {
-  margin: 0;
-  color: #132d4f;
-  font-family: var(--font-manrope), system-ui, sans-serif;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.reading-context-description {
-  margin: 7px 0 0;
-  color: #6d7c92;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.reading-context-chips {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.reading-context-chip {
-  display: inline-flex;
-  min-width: 90px;
-  height: 43px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  border-radius: 999px;
-  background: #eef3fb;
-  color: #2e5aac;
-  font-size: 12.16px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.reading-context-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1fr);
-  gap: 12px;
-  margin-top: 25px;
-}
-
-.reading-context-field {
-  position: relative;
-  height: 60px;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
-  margin: 0;
-  padding: 0 18px;
-  border: 1px solid #cbd2dc;
-  border-radius: 7px;
-  background: #ffffff;
+}
+
+.reading-context-compact-legend {
+  color: #8a97a8;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Caixinha com borda ao redor do select — sinaliza visualmente que é um
+   controle interativo, não só texto. */
+.reading-context-compact-select-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 24px;
+  padding: 0 20px 0 6px;
+  border: 1px solid #dbe2ea;
+  border-radius: 6px;
+  background: #f8fafc;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.reading-context-field:hover {
-  border-color: #aab4c2;
+.reading-context-compact-select-box:hover {
+  border-color: #b9c3d1;
 }
 
-.reading-context-field:focus-within {
+.reading-context-compact-select-box:focus-within {
   border-color: #8091aa;
   box-shadow: 0 0 0 2px rgba(48, 79, 126, 0.08);
 }
 
-.reading-context-field legend {
-  width: auto;
-  margin-left: -4px;
-  padding: 0 4px;
-  background: #ffffff;
-  color: #66758a;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
+.reading-context-chevron {
+  position: absolute;
+  right: 5px;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: #5d6877;
+  stroke-width: 2.4;
+  pointer-events: none;
 }
 
-.reading-context-trigger,
-.reading-context-select {
+.reading-context-compact-select {
   width: 100%;
-  height: 42px;
+  min-width: 0;
+  height: 22px;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
-  background-color: #ffffff;
-  color: #5f6876;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 42px;
+  background: transparent;
+  color: #37465c;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
   outline: none;
-}
-
-.reading-context-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  text-align: left;
-}
-
-.reading-context-select {
   cursor: pointer;
-}
-
-.reading-context-chevron {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  color: #5d6877;
-  stroke-width: 2.2;
-}
-
-.reading-context-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
-  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  white-space: nowrap;
   overflow: hidden;
-  padding: 7px 0;
-  border: 1px solid #dfe5ed;
-  border-radius: 9px;
-  background: #ffffff;
-  box-shadow: 0 14px 30px rgba(31, 50, 74, 0.14);
+  text-overflow: ellipsis;
 }
 
-.reading-context-option {
-  display: flex;
-  width: 100%;
-  height: 39px;
-  align-items: center;
-  padding: 0 18px;
-  border: 0;
-  background: #ffffff;
-  color: #4f5b6c;
-  font-size: 14px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.reading-context-option:hover {
-  background: #f4f6f9;
-}
-
-.reading-context-option-active {
-  background: #edf3fb;
-  color: #2e5aac;
-  font-weight: 700;
+.reading-context-compact-select:disabled {
+  cursor: default;
+  color: #9aa6b6;
 }
 
 @media (max-width: 767px) {
-  .painel-frontend .reading-context-card {
-    min-height: 0;
-    padding: 18px;
-    border-radius: 18px;
-  }
-
-  .reading-context-header {
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .reading-context-chips {
-    width: 100%;
-    flex-wrap: wrap;
-    margin-top: 0;
-  }
-
-  .reading-context-chip {
-    height: 34px;
-    padding-inline: 12px;
-  }
-
-  .reading-context-controls {
+  .reading-context-row {
     grid-template-columns: minmax(0, 1fr);
-    margin-top: 20px;
+  }
+
+  .reading-context-row .reading-context-card {
+    grid-column: 1 / -1;
   }
 }
 .painel-frontend .ct {

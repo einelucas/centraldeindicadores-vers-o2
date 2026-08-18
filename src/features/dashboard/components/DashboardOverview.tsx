@@ -238,7 +238,7 @@ export function DashboardOverview() {
     return (
       <div className="painel-frontend">
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <p className="ps">Carregando Painel Geral…</p>
           </div>
@@ -251,7 +251,7 @@ export function DashboardOverview() {
     return (
       <div className="painel-frontend">
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Não foi possível carregar o Painel Geral</h2>
             <p className="ps">{error}</p>
@@ -265,7 +265,7 @@ export function DashboardOverview() {
     return (
       <div className="painel-frontend">
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">Nenhum indicador publicado neste período</h2>
             <p className="ps">
@@ -286,7 +286,7 @@ export function DashboardOverview() {
   return (
     <div className="painel-frontend">
       <div className="content" style={{ padding: "14px 0 0" }}>
-        {readingContext}
+        <div className="reading-context-row">{readingContext}</div>
         <div className="mgrid">
           <SummaryMetric
             label="Pontuação Prevista — Semestre"

@@ -18,25 +18,31 @@ function datePt(value: string | null): string {
   return `${day}/${month}/${year}`;
 }
 
-export function exportIdpPdf(result: IdpDetailedResult): void {
-  const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+/**
+ * `doc`: quando informado, desenha nessa página atual em vez de criar um PDF
+ * novo, e não salva o arquivo — usado pelo PDF consolidado do Scorecard para
+ * empilhar o IDP como mais uma seção do mesmo arquivo. Sem `doc`, comporta-se
+ * exatamente como antes (cria e salva o PDF isolado do IDP).
+ */
+export function exportIdpPdf(result: IdpDetailedResult, doc?: jsPDF): void {
+  const pdf = doc ?? new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
   const competence = `${MONTH_NAMES_FULL[result.selectedMonth - 1]}/${result.selectedYear}`;
   const today = new Date().toLocaleDateString("pt-BR");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(48, 79, 126);
-  doc.text("IDP — Aderência do Cronograma por RSO", 40, 42);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(105, 105, 105);
-  doc.text(
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(16);
+  pdf.setTextColor(48, 79, 126);
+  pdf.text("IDP — Aderência do Cronograma por RSO", 40, 42);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(105, 105, 105);
+  pdf.text(
     `Gerado em ${today} · competência: ${competence} · meta: ${(result.threshold * 100).toFixed(0)}% · ${result.activeDocuments} RSO(s) ativo(s)`,
     40,
     58,
   );
 
-  autoTable(doc, {
+  autoTable(pdf, {
     startY: 78,
     head: [["Unidade", "RSO", "Período", "Emissão", "Prev. acum.", "Real acum.", "Aderência"]],
     body: result.unitRows.map((unit) => [
@@ -53,13 +59,13 @@ export function exportIdpPdf(result: IdpDetailedResult): void {
     theme: "grid",
   });
 
-  const finalY = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 220;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(48, 79, 126);
-  doc.text("Aderência por disciplina", 40, finalY + 24);
+  const finalY = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 220;
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  pdf.setTextColor(48, 79, 126);
+  pdf.text("Aderência por disciplina", 40, finalY + 24);
 
-  autoTable(doc, {
+  autoTable(pdf, {
     startY: finalY + 34,
     head: [["Disciplina", "Áreas usadas", "Prev. médio", "Real médio", "Aderência"]],
     body: result.disciplineRows.map((row) => [
@@ -74,7 +80,9 @@ export function exportIdpPdf(result: IdpDetailedResult): void {
     theme: "grid",
   });
 
-  doc.save(
-    `IDP_RSO_${result.selectedYear}_${String(result.selectedMonth).padStart(2, "0")}_${new Date().toISOString().slice(0, 10)}.pdf`,
-  );
+  if (!doc) {
+    pdf.save(
+      `IDP_RSO_${result.selectedYear}_${String(result.selectedMonth).padStart(2, "0")}_${new Date().toISOString().slice(0, 10)}.pdf`,
+    );
+  }
 }

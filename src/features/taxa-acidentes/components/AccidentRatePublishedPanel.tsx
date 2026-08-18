@@ -181,7 +181,7 @@ export function AccidentRatePublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="error-box">{error}</div>
         </div>
       </div>
@@ -193,7 +193,7 @@ export function AccidentRatePublishedPanel() {
       <div className="painel-frontend">
         {exportButton}
         <div className="content" style={{ padding: "14px 0 0" }}>
-          {readingContext}
+          <div className="reading-context-row">{readingContext}</div>
           <div className="empty">
             <h2 className="ph">
               {response ? "Nenhuma publicação neste período" : "Carregando painel publicado…"}
@@ -227,7 +227,7 @@ export function AccidentRatePublishedPanel() {
       ) : null}
 
       <div className="content" style={{ padding: "14px 0 0" }}>
-        {readingContext}
+        <div className="reading-context-row">{readingContext}</div>
         <div className="mgrid">
           <PanelMetric
             label="Taxa Semestral"
@@ -394,41 +394,40 @@ export function AccidentRatePublishedPanel() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={data.mensal}
-                    layout="vertical"
                     margin={{
                       top: 18,
-                      right: 42,
-                      bottom: 12,
-                      left: 4,
+                      right: 8,
+                      bottom: 0,
+                      left: 0,
                     }}
                     barCategoryGap="28%"
                   >
-                    <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" horizontal={false} />
+                    <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" vertical={false} />
 
                     <XAxis
-                      type="number"
-                      allowDecimals={false}
+                      dataKey="label"
                       axisLine={false}
                       tickLine={false}
+                      interval={0}
+                      height={42}
                       tick={{
                         fontFamily: "Montserrat",
                         fontSize: 10,
-                        fill: "#64748b",
+                        fontWeight: 600,
+                        fill: "#475569",
                       }}
                     />
 
                     <YAxis
-                      type="category"
-                      dataKey="label"
+                      type="number"
+                      allowDecimals={false}
                       axisLine={false}
                       tickLine={false}
-                      width={104}
-                      tickMargin={8}
+                      width={28}
                       tick={{
                         fontFamily: "Montserrat",
-                        fontSize: 9,
-                        fontWeight: 600,
-                        fill: "#475569",
+                        fontSize: 10,
+                        fill: "#64748b",
                       }}
                     />
 
@@ -458,12 +457,12 @@ export function AccidentRatePublishedPanel() {
                       dataKey="caf"
                       name="Acidentes CAF"
                       fill={DARK_GRAY}
-                      radius={[0, 8, 8, 0]}
+                      radius={[8, 8, 0, 0]}
                       maxBarSize={34}
                     >
                       <LabelList
                         dataKey="caf"
-                        position="right"
+                        position="top"
                         fill="#475569"
                         fontFamily="Montserrat"
                         fontSize={10}
