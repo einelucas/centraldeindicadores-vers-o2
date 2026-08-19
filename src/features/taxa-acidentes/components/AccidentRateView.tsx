@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Ban,
   CheckCircle2,
+  Download,
   FilterX,
   Gauge,
   HardHat,
@@ -44,7 +45,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { ExportButtons } from "@/components/exports/ExportButtons";
 import { IndicatorAnalysisDialog } from "@/features/justifications/components/IndicatorAnalysisDialog";
 import { MONTH_NAMES } from "@/lib/dates";
 import { notifyIndicatorDataChanged } from "@/lib/browser-events";
@@ -60,6 +60,7 @@ import {
   type AccidentRateResult,
   type AccidentUnitRecord,
 } from "@/features/taxa-acidentes/types";
+import { exportAccidentRatePdf } from "@/features/taxa-acidentes/exports/pdf";
 import {
   ACCIDENT_UNITS,
   compareAccidentUnits,
@@ -271,16 +272,6 @@ export function AccidentRateView({
     });
   }, [data, monthlyFilterMonth, monthlyFilterYear]);
 
-  const monthlyExportRows = useMemo(
-    () =>
-      filteredMonthlyRows.map((row) => ({
-        periodo: periodLabel(row.year, row.month),
-        taxa: row.rate,
-        caf: row.caf,
-      })),
-    [filteredMonthlyRows],
-  );
-
   const unitFilterYears = useMemo(() => {
     const years = new Set((data?.units ?? []).map((row) => row.year));
     return Array.from(years).sort((a, b) => b - a);
@@ -351,17 +342,6 @@ export function AccidentRateView({
       return true;
     });
   }, [data, unitFilterMonth, unitFilterUnit, unitFilterYear]);
-
-  const unitExportRows = useMemo(
-    () =>
-      filteredUnitRows.map((row) => ({
-        periodo: periodLabel(row.year, row.month),
-        unidade: formatAccidentUnitLabel(row.unit),
-        caf: row.caf,
-        saf: row.saf,
-      })),
-    [filteredUnitRows],
-  );
 
   const hasMonthlyFilters = Boolean(monthlyFilterYear || monthlyFilterMonth);
   const hasUnitFilters = Boolean(unitFilterYear || unitFilterMonth || unitFilterUnit);
@@ -794,6 +774,16 @@ export function AccidentRateView({
               defaultYear={data?.result?.latestYear ?? undefined}
               defaultMonth={data?.result?.latestMonth ?? undefined}
             />
+            {data?.result ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => data.result && exportAccidentRatePdf(data.result)}
+              >
+                <Download className="size-3.5" />
+                Baixar PDF
+              </Button>
+            ) : null}
             {canClear ? (
               <Button variant="destructive" size="sm" disabled={busy} onClick={openClearDialog}>
                 <Trash2 className="size-3.5" />
@@ -984,19 +974,6 @@ export function AccidentRateView({
               {filteredMonthlyRows.length}{" "}
               {filteredMonthlyRows.length === 1 ? "registro" : "registros"}
             </span>
-            <ExportButtons
-              fileName="taxa-acidentes-por-mes"
-              title="Taxa de frequência mensal e acidentes CAF"
-              subtitle={
-                hasMonthlyFilters ? "Lançamentos mensais filtrados" : "Todos os lançamentos mensais"
-              }
-              rows={monthlyExportRows}
-              columns={[
-                { header: "Mês", value: (row) => row.periodo },
-                { header: "Taxa de Frequência", value: (row) => row.taxa },
-                { header: "Acidentes CAF", value: (row) => row.caf },
-              ]}
-            />
           </div>
 
           <Table>
@@ -1207,22 +1184,6 @@ export function AccidentRateView({
             <span className="ml-auto text-xs font-semibold text-muted-foreground">
               {filteredUnitRows.length} {filteredUnitRows.length === 1 ? "registro" : "registros"}
             </span>
-            <ExportButtons
-              fileName="taxa-acidentes-por-unidade"
-              title="Acidentes CAF e SAF por unidade"
-              subtitle={
-                hasUnitFilters
-                  ? "Lançamentos filtrados por competência e unidade"
-                  : "Todos os lançamentos por competência"
-              }
-              rows={unitExportRows}
-              columns={[
-                { header: "Mês", value: (row) => row.periodo },
-                { header: "Unidade", value: (row) => row.unidade },
-                { header: "Acidentes CAF", value: (row) => row.caf },
-                { header: "Acidentes SAF", value: (row) => row.saf },
-              ]}
-            />
           </div>
 
           <Table>
